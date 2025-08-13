@@ -1,0 +1,32 @@
+# This is the name of your workflow. It will appear in the "Actions" tab of your repository.
+name: Terraform Workflow
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  terraform:
+    # Change 'ubuntu-latest' to 'self-hosted' to use your own runner.
+    runs-on: self-hosted
+
+    steps:
+      # Step 1: Checkout the code from your repository.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: Initialize the Terraform project.
+      - name: Terraform Init
+        id: init
+        run: terraform init
+
+      # Step 3: Validate the Terraform code.
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate -no-color
+
+      # Step 4: Generate a plan.
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -no-color
