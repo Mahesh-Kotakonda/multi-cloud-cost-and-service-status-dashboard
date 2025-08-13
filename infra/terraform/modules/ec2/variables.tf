@@ -1,4 +1,9 @@
+variable "instance_count" {
+  description = "The number of EC2 instances to create."
+  type        = number
 
+  # default     = 1
+}
 
 variable "project_name" {
   description = "The name of the project"
@@ -34,3 +39,4 @@ variable "key_name" {
   description = "The key pair name for SSH access"
   type        = string
 }
+
