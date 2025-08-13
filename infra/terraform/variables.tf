@@ -1,34 +1,66 @@
 variable "aws_region" {
-  description = "AWS region to deploy resources"
+  description = "AWS region"
   type        = string
 }
 
-variable "name" {
-  description = "Name prefix for resources"
+variable "project_name" {
+  description = "Project name for tags"
   type        = string
 }
 
-variable "project" {
-  description = "Project name for tagging"
-  type        = string
-}
-
+# VPC
 variable "vpc_cidr" {
-  description = "VPC CIDR block"
   type        = string
+  description = "VPC CIDR block"
 }
 
 variable "public_subnet_cidrs" {
-  description = "List of public subnet CIDRs"
   type        = list(string)
+  description = "Public subnet CIDRs"
 }
 
 variable "private_subnet_cidrs" {
-  description = "List of private subnet CIDRs"
   type        = list(string)
+  description = "Private subnet CIDRs"
 }
 
 variable "azs" {
-  description = "List of availability zones"
   type        = list(string)
+  description = "Availability zones"
+}
+
+# EC2
+variable "ec2_ami" {
+  type        = string
+  description = "AMI ID for EC2"
+}
+
+variable "ec2_instance_type" {
+  type        = string
+  description = "EC2 instance type"
+}
+
+variable "ec2_key_name" {
+  type        = string
+  description = "Key pair name for EC2"
+}
+
+# Database
+variable "db_instance_class" {
+  type        = string
+  description = "RDS instance class"
+}
+
+variable "db_name" {
+  type        = string
+  description = "Database name"
+}
+
+variable "db_username" {
+  type        = string
+}
+
+variable "db_password" {
+  type        = string
+  sensitive   = true
 }
