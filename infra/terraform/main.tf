@@ -14,12 +14,13 @@ provider "aws" {
 
 # Call VPC module
 module "vpc" {
-  source              = "./modules/vpc"
-  project_name        = var.project_name
-  vpc_cidr            = var.vpc_cidr
-  public_subnet_cidrs = var.public_subnet_cidrs
+  source               = "./modules/vpc"
+  name                 = var.project_name 
+  project              = var.project_name 
+  vpc_cidr             = var.vpc_cidr
+  public_subnet_cidrs  = var.public_subnet_cidrs
   private_subnet_cidrs = var.private_subnet_cidrs
-  azs                 = var.azs
+  azs                  = var.azs
 }
 
 # Call Security module
