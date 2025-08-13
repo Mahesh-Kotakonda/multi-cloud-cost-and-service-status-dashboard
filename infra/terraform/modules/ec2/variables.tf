@@ -1,32 +1,36 @@
+
+
 variable "project_name" {
-  description = "Project name for tagging"
+  description = "The name of the project"
+  type        = string
+}
+
+variable "vpc_id" {
+  description = "The ID of the VPC to deploy the EC2 instances into"
+  type        = string
+}
+
+variable "public_subnet_ids" {
+  description = "A list of public subnet IDs"
+  type        = list(string)
+}
+
+variable "security_group_id" {
+  description = "The ID of the security group for the EC2 instances"
   type        = string
 }
 
 variable "ami_id" {
-  description = "AMI ID for EC2 instances"
+  description = "The AMI ID for the EC2 instances"
   type        = string
 }
 
 variable "instance_type" {
-  description = "EC2 instance type"
+  description = "The instance type for the EC2 instances"
   type        = string
-  default     = "t3.micro"
-}
-
-variable "public_subnet_ids" {
-  description = "List of subnet IDs to launch EC2 instances in"
-  type        = list(string)
-}
-
-variable "instance_count" {
-  description = "Number of EC2 instances to create"
-  type        = number
-  default     = 1
 }
 
 variable "key_name" {
-  description = "EC2 key pair name"
+  description = "The key pair name for SSH access"
   type        = string
 }
-
