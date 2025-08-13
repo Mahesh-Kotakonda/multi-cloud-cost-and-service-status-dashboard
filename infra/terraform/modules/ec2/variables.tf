@@ -14,7 +14,7 @@ variable "instance_type" {
   default     = "t3.micro"
 }
 
-variable "subnet_ids" {
+variable "public_subnet_ids" {
   description = "List of subnet IDs to launch EC2 instances in"
   type        = list(string)
 }
@@ -29,3 +29,4 @@ variable "key_name" {
   description = "EC2 key pair name"
   type        = string
 }
+
