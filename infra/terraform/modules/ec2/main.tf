@@ -2,7 +2,7 @@ resource "aws_instance" "app" {
   count         = var.instance_count
   ami           = var.ami_id
   instance_type = var.instance_type
-  subnet_id     = var.subnet_ids[count.index]
+  public_subnet_ids     = var.subnet_ids[count.index]
   key_name      = var.key_name
 
   tags = {
@@ -10,3 +10,4 @@ resource "aws_instance" "app" {
     Project = var.project_name
   }
 }
+
