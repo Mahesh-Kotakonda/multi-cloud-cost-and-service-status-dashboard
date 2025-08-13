@@ -3,6 +3,13 @@ variable "aws_region" {
   type        = string
 }
 
+variable "instance_count" {
+  description = "The number of EC2 instances to create."
+  type        = number
+
+  # default     = 1
+}
+
 variable "project_name" {
   description = "Project name for tags"
   type        = string
