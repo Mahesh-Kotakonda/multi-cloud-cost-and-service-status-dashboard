@@ -29,8 +29,8 @@ resource "aws_lb" "app_alb" {
   name               = "${var.project_name}-alb"
   internal           = false
   load_balancer_type = "application"
-  security_groups    = [aws_security_group.alb_sg.id]
-  subnets            = var.public_subnet_ids
+  security_group_id    = [aws_security_group.alb_sg.id]
+  public_subnet_ids            = var.public_subnet_ids
 
   tags = {
     Name    = "${var.project_name}-alb"
@@ -71,3 +71,4 @@ resource "aws_lb_listener" "app_listener" {
     target_group_arn = aws_lb_target_group.app_tg.arn
   }
 }
+
