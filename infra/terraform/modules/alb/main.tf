@@ -1,5 +1,3 @@
-# In ./modules/alb/main.tf
-
 # ALB
 resource "aws_lb" "app_alb" {
   name               = "${var.project_name}-alb"
@@ -56,3 +54,4 @@ resource "aws_lb_target_group_attachment" "app_attach" {
   target_id        = var.target_instance_ids[count.index]
   port             = 80
 }
+
