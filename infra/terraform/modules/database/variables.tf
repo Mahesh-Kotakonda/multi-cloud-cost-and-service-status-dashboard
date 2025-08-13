@@ -3,7 +3,7 @@ variable "project_name" {
   description = "Project name for tagging"
 }
 
-variable "private_subnet_ids" {
+variable "subnet_ids" {
   type        = list(string)
   description = "Private subnets for RDS instance"
 }
@@ -35,3 +35,4 @@ variable "db_password" {
   description = "Database password"
   sensitive   = true
 }
+
