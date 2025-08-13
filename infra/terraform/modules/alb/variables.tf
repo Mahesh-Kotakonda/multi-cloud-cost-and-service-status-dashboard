@@ -12,3 +12,6 @@ variable "public_subnet_ids" {
   type        = list(string)
   description = "Public subnet IDs for ALB"
 }
+
+
+
