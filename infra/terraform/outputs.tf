@@ -23,5 +23,5 @@ output "alb_dns" {
 
 # Database outputs
 output "db_endpoint" {
-  value = module.database.db_endpoint
+  value = module.database.db_instance_endpoint
 }
