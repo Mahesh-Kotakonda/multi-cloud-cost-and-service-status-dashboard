@@ -32,14 +32,16 @@ module "security" {
 
 # Call EC2 module
 module "ec2" {
-  source            = "./modules/ec2"
-  project_name      = var.project_name
-  vpc_id            = module.vpc.vpc_id
-  public_subnet_ids = module.vpc.public_subnet_ids
-  security_group_id = module.security.ec2_sg_id
-  ami_id            = var.ec2_ami
-  instance_type     = var.ec2_instance_type
-  key_name          = var.ec2_key_name
+  source              = "./modules/ec2"
+  project_name        = var.project_name
+  vpc_id              = module.vpc.vpc_id
+  public_subnet_ids   = module.vpc.public_subnet_ids
+  security_group_id   = module.security.ec2_sg_id
+  ami_id              = var.ec2_ami
+  instance_type       = var.ec2_instance_type
+  key_name            = var.ec2_key_name
+  # This line is required to fix the error
+  instance_count      = var.instance_count 
 }
 
 # Call ALB module
