@@ -6,7 +6,7 @@ variable "aws_region" {
 variable "instance_count" {
   description = "The number of EC2 instances to create."
   type        = number
-  default     = 1
+  default     = 2
 }
 
 variable "project_name" {
