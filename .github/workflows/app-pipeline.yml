@@ -30,9 +30,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Ensure Docker service is running
-        run: sudo service docker start
-
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -68,4 +65,5 @@ jobs:
             -f docker/frontend/Dockerfile .
           docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest
           docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-${VERSION}
+
 
