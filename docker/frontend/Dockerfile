@@ -3,8 +3,6 @@ WORKDIR /src
 COPY app/frontend/package*.json ./
 RUN npm install
 COPY app/frontend ./
-# Set API base at build time if needed:
-#   docker build --build-arg REACT_APP_API_BASE=http://backend:8000 ...
 ARG REACT_APP_API_BASE=""
 ENV REACT_APP_API_BASE=$REACT_APP_API_BASE
 RUN npm run build
