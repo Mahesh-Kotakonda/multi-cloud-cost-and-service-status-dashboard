@@ -3,12 +3,17 @@ name: Terraform Workflow
 
 on:
   # This section triggers the workflow on both pull requests and pushes to the main branch.
+  # The `paths` filter ensures the workflow only runs if files within infra/terraform change.
   pull_request:
     branches:
       - main
+    paths:
+      - 'infra/terraform/**'
   push:
     branches:
       - main
+    paths:
+      - 'infra/terraform/**'
   # This new section allows the workflow to be triggered manually from the GitHub Actions UI.
   workflow_dispatch:
 
