@@ -1,0 +1,53 @@
+# This workflow is responsible for safely destroying Terraform resources.
+name: Terraform Destroy Workflow
+
+on:
+  # This allows the workflow to be triggered manually from the GitHub Actions UI.
+  workflow_dispatch:
+
+  # This schedules the workflow to run twice a day.
+  # Note: The schedule runs on UTC time.
+  schedule:
+    # 12:30 PM IST every day -> 7:00 AM UTC
+    - cron: '0 7 * * *'
+    # 8:00 PM IST every day -> 2:30 PM UTC
+    - cron: '30 14 * * *'
+
+# Define a single job named 'terraform-destroy' to handle all steps.
+jobs:
+  terraform-destroy:
+    # Use a self-hosted runner, matching your other workflow.
+    runs-on: self-hosted
+
+    # Set environment variables for AWS credentials.
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: us-east-1 # Make sure this matches your resource region
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Terraform Init
+        id: init
+        working-directory: infra/terraform
+        run: terraform init
+
+      - name: Terraform Destroy
+        id: destroy
+        # This step has a very strict condition:
+        # It must be triggered either manually (workflow_dispatch) or by the schedule,
+        # AND the user who triggered it must be 'Mahesh-Kotakonda'.
+        if: (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && github.actor == 'Mahesh-Kotakonda'
+        working-directory: infra/terraform
+        # The -auto-approve flag is used for automation, but be very careful.
+        # This will destroy all resources defined in your Terraform state file.
+        run: terraform destroy -auto-approve
