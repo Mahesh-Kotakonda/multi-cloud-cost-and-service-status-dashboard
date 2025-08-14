@@ -1,18 +1,40 @@
+# This workflow manages the Terraform infrastructure for the project.
 name: Terraform Workflow
 
 on:
+  # This section triggers the workflow on both pull requests and pushes to the main branch.
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
 
+# Define a single job named 'terraform' to handle all steps.
 jobs:
   terraform:
+    # Use a self-hosted runner as specified.
     runs-on: self-hosted
+
+    # Set environment variables for AWS credentials to be used in all steps.
+    # The secrets must be configured in your GitHub repository settings.
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: us-east-1 # Replace with your desired AWS region
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # This step configures the AWS credentials from the environment variables.
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          
       # All subsequent steps will use this working directory
       - name: Terraform Init
         id: init
@@ -27,4 +49,13 @@ jobs:
       - name: Terraform Plan
         id: plan
         working-directory: infra/terraform
-        run: terraform plan -no-color
+        # Save the plan to a file to be used in the apply step.
+        run: terraform plan -no-color -out=tfplan
+
+      # This step only runs when a push is made to the main branch.
+      - name: Terraform Apply
+        id: apply
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: infra/terraform
+        # Apply the previously created plan. The -auto-approve flag is used for automation.
+        run: terraform apply -auto-approve tfplan
