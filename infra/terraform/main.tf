@@ -6,6 +6,13 @@ terraform {
     }
   }
   required_version = ">= 1.4.0"
+  backend "s3" {
+    bucket         = "multi-cloud-cost-and-service-status-dashboard "
+    key            = "terraform.tfstate"
+    region         = "us-east-1"
+    encrypt        = true
+    use_lockfile   = true
+  }
 }
 
 provider "aws" {
