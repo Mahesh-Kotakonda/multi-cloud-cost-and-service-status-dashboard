@@ -9,6 +9,8 @@ on:
   push:
     branches:
       - main
+  # This new section allows the workflow to be triggered manually from the GitHub Actions UI.
+  workflow_dispatch:
 
 # Define a single job named 'terraform' to handle all steps.
 jobs:
@@ -52,10 +54,11 @@ jobs:
         # Save the plan to a file to be used in the apply step.
         run: terraform plan -no-color -out=tfplan
 
-      # This step only runs when a push is made to the main branch.
+      # This step runs when a manual trigger (workflow_dispatch) is used or on a push to the main branch,
+      # but only if the user is the specified GitHub actor.
       - name: Terraform Apply
         id: apply
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && github.actor == 'Mahesh-Kotakonda'
         working-directory: infra/terraform
         # Apply the previously created plan. The -auto-approve flag is used for automation.
         run: terraform apply -auto-approve tfplan
