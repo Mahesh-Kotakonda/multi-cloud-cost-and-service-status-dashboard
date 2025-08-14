@@ -1,6 +1,7 @@
 FROM node:18-alpine AS build
 WORKDIR /src
-COPY app/frontend/package*.json ./
+COPY app/frontend/package.json ./
+COPY app/frontend/package-lock.json ./
 RUN npm ci
 COPY app/frontend ./
 # Set API base at build time if needed:
