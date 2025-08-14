@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from "react";
 
-const API_BASE = process.env.REACT_APP_API_BASE || ""; // e.g., http://localhost:8000
+const API_BASE = process.env.REACT_APP_API_BASE || "";
 
 export default function App() {
   const [metrics, setMetrics] = useState([]);
-  const [loading, setLoading] = true);
+  const [loading, setLoading] = useState(true);
 
   async function load() {
     try {
