@@ -23,7 +23,7 @@ jobs:
     env:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-      IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard
+      IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
       VERSION: v${{ github.run_number }}
 
     steps:
@@ -68,3 +68,4 @@ jobs:
             -f docker/frontend/Dockerfile .
           docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest
           docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-${VERSION}
+
