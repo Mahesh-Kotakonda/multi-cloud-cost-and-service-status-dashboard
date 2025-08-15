@@ -39,7 +39,7 @@ jobs:
     env:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-      DOCKER_REPO: maheshkotakonda/multi-cloud-cost-and-service-status-dashboard-repo
+      DOCKER_REPO: multi-cloud-cost-and-service-status-dashboard-repo
     steps:
       - name: Log in to Docker Hub
         run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login --username "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
