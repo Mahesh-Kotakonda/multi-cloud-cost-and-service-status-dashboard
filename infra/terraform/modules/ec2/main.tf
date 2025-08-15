@@ -1,4 +1,3 @@
-
 resource "aws_instance" "app" {
   count         = var.instance_count
   ami           = var.ami_id
@@ -6,9 +5,10 @@ resource "aws_instance" "app" {
   subnet_id     = var.public_subnet_ids[count.index]
   key_name      = var.key_name
 
-  # This is the key line. vpc_security_group_ids requires the VPC ID indirectly.
-  # The security group you create in the security module is already tied to the VPC.
   vpc_security_group_ids = [var.security_group_id]
+
+  # This is the key line to add the Docker installation script
+  user_data = file("${path.module}/install_docker.sh")
 
   tags = {
     Name    = "${var.project_name}-app-${count.index + 1}"
