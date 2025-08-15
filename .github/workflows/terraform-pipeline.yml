@@ -58,7 +58,12 @@ jobs:
         working-directory: infra/terraform
         # Save the plan to a file to be used in the apply step.
         run: terraform plan -no-color -out=tfplan
-
+        
+        # Delete old JSON file from S3 before apply
+      - name: Delete old outputs JSON from S3
+        run: |
+          aws s3 rm s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
+          
       # This step runs when a manual trigger (workflow_dispatch) is used or on a push to the main branch,
       # but only if the user is the specified GitHub actor.
       - name: Terraform Apply
@@ -67,3 +72,4 @@ jobs:
         working-directory: infra/terraform
         # Apply the previously created plan. The -auto-approve flag is used for automation.
         run: terraform apply -auto-approve tfplan
+
