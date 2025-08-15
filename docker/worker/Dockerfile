@@ -1,18 +1,39 @@
+# docker/worker/Dockerfile
 FROM python:3.11-slim
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
+# System deps (for SSL, timezone, tini)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates tzdata curl tini && \
+    rm -rf /var/lib/apt/lists/*
+
+# Workdir
+WORKDIR /app/worker
+
+# Copy requirements first (better layer caching)
+COPY app/worker/requirements.txt .
+
+# Install Python deps
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy worker code
+COPY app/worker/worker.py .
+COPY app/worker/README.md .
+
+# Create non-root user
+RUN useradd -m appuser
+USER appuser
+
+# Environment defaults (can be overridden at run time)
+ENV AWS_REGION=us-east-1 \
+    SSM_PARAM_NAME=myapp_database_credentials \
+    DB_NAME=appdb \
+    POLL_INTERVAL_SECONDS=600 \
     PYTHONUNBUFFERED=1
 
-WORKDIR /app
+# Use tini as init for proper signal handling
+ENTRYPOINT ["/usr/bin/tini", "--"]
 
-COPY app/worker/requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+# Healthcheck (simple ping to the process every 30s)
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD pgrep -f worker.py || exit 1
 
-# copy entire app so worker can import app.database
-COPY app /app/app
-
-# default envs (override in prod)
-ENV WORKER_INTERVAL=60 \
-    RESOURCE_NAME=demo-resource
-
-CMD ["python", "app/worker/worker.py"]
+CMD ["python", "worker.py"]
