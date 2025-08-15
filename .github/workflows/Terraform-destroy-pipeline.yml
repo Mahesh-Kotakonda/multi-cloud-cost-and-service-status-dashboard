@@ -48,19 +48,19 @@ jobs:
         run: |
           set -e
           
-          # Get JWT token
+          # 1️⃣ Get JWT token from Docker Hub
           JWT_TOKEN=$(docker run --rm curlimages/curl:latest -s -X POST \
             -H "Content-Type: application/json" \
             -d '{"username": "'${DOCKERHUB_USERNAME}'", "password": "'${DOCKERHUB_TOKEN}'"}' \
             https://hub.docker.com/v2/users/login/ | jq -r .token)
           
-          # Fetch all tags
+          # 2️⃣ Fetch all tags (increase page_size to avoid pagination issues)
           ALL_TAGS=$(docker run --rm curlimages/curl:latest -s \
             -H "Authorization: JWT ${JWT_TOKEN}" \
             "https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/${DOCKER_REPO}/tags/?page_size=100" \
             | jq -r '.results[].name' | sort -rV)
           
-          # Separate latest/non-latest
+          # 3️⃣ Filter & keep tags
           NON_LATEST_TAGS=$(echo "$ALL_TAGS" | grep -v '^latest$')
           TAGS_TO_KEEP=$(echo "$NON_LATEST_TAGS" | head -n 3)
           LATEST_TAGS=$(echo "$ALL_TAGS" | grep '^latest$')
@@ -69,7 +69,7 @@ jobs:
           echo "Images to keep: $TAGS_TO_KEEP"
           echo "---"
           
-          # Delete old tags
+          # 4️⃣ Delete old tags
           for TAG in $ALL_TAGS; do
               if ! grep -qw "$TAG" <<< "$TAGS_TO_KEEP"; then
                   echo "Deleting image: ${DOCKER_REPO}:${TAG}"
@@ -82,4 +82,5 @@ jobs:
           done
           
           echo "Cleanup complete."
+
 
