@@ -58,5 +58,5 @@ def create_metric(metric: MetricIn):
     conn.commit()
     conn.close()
     if not row:
-        raise HTTPException(status_code=500, detail="Insert failed")
+        raise HTTPException(status_code=500, detail="Insert Failed")
     return row
