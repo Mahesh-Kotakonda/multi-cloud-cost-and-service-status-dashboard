@@ -4,9 +4,9 @@ variable "aws_region" {
 }
 
 variable "instance_count" {
-  description = "The number of EC2 instances to create."
+  description = "Number of EC2 instances to create"
   type        = number
-  default     = 2
+  # default     = 2
 }
 
 variable "project_name" {
@@ -51,7 +51,7 @@ variable "ec2_key_name" {
   description = "Key pair name for EC2"
 }
 
-# Database
+# Database (non-sensitive only)
 variable "db_instance_class" {
   type        = string
   description = "RDS instance class"
@@ -60,13 +60,4 @@ variable "db_instance_class" {
 variable "db_name" {
   type        = string
   description = "Database name"
-}
-
-variable "db_username" {
-  type        = string
-}
-
-variable "db_password" {
-  type        = string
-  sensitive   = true
 }
