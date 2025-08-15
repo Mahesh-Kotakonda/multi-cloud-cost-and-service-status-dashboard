@@ -34,9 +34,6 @@ jobs:
         if: (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && github.actor == 'Mahesh-Kotakonda'
         working-directory: infra/terraform
         run: terraform destroy -auto-approve
-
----
-
   docker-cleanup:
     runs-on: self-hosted
     env:
