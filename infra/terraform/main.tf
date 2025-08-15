@@ -82,27 +82,4 @@ module "database" {
   subnet_ids        = module.vpc.private_subnet_ids
 }
 
-# ===== Outputs =====
-output "vpc_id" {
-  value = module.vpc.vpc_id
-}
 
-output "public_subnet_ids" {
-  value = module.vpc.public_subnet_ids
-}
-
-output "private_subnet_ids" {
-  value = module.vpc.private_subnet_ids
-}
-
-output "ec2_instance_ids" {
-  value = module.ec2.instance_ids
-}
-
-output "alb_dns" {
-  value = module.alb.alb_dns
-}
-
-output "db_endpoint" {
-  value = module.database.db_instance_endpoint
-}
