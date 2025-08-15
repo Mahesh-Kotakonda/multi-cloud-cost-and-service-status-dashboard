@@ -1,3 +1,8 @@
+# Project metadata
+output "project_name" {
+  value = var.project_name
+}
+
 # VPC outputs
 output "vpc_id" {
   value = module.vpc.vpc_id
@@ -24,4 +29,8 @@ output "alb_dns" {
 # Database outputs
 output "db_endpoint" {
   value = module.database.db_instance_endpoint
+}
+
+output "db_instance_id" {
+  value = module.database.db_instance_id
 }
