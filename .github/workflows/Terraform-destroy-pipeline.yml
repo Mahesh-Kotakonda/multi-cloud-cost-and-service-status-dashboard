@@ -1,4 +1,4 @@
-name: Terraform Destroy and Docker Cleanup
+name: Terraform Destroy
 
 on:
   workflow_dispatch:
@@ -25,89 +25,10 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Terraform Init
-        id: init
         working-directory: infra/terraform
         run: terraform init
 
       - name: Terraform Destroy
-        id: destroy
         if: (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && github.actor == 'Mahesh-Kotakonda'
         working-directory: infra/terraform
         run: terraform destroy -auto-approve
-  docker-cleanup:
-    runs-on: self-hosted
-    env:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-      DOCKER_REPO: multi-cloud-cost-and-service-status-dashboard-repo
-    steps:
-      - name: Clean up old Docker images
-        run: |
-          set -e
-
-          echo "🔑 Getting JWT token from Docker Hub..."
-          JWT_TOKEN=$(docker run --rm curlimages/curl:latest -s -X POST \
-            -H "Content-Type: application/json" \
-            -d '{"username": "'${DOCKERHUB_USERNAME}'", "password": "'${DOCKERHUB_TOKEN}'"}' \
-            https://hub.docker.com/v2/users/login/ | jq -r .token)
-
-          if [ -z "$JWT_TOKEN" ] || [ "$JWT_TOKEN" == "null" ]; then
-              echo "❌ Failed to authenticate to Docker Hub. Check username/token."
-              exit 1
-          fi
-          echo "✅ Authenticated successfully."
-
-          # Fetch all tags with pagination
-          echo "📦 Fetching all tags for ${DOCKERHUB_USERNAME}/${DOCKER_REPO}..."
-          ALL_TAGS=""
-          NEXT_URL="https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/${DOCKER_REPO}/tags/?page_size=100"
-
-          while [ -n "$NEXT_URL" ] && [ "$NEXT_URL" != "null" ]; do
-              RAW_RESPONSE=$(docker run --rm curlimages/curl:latest -s \
-                  -H "Authorization: JWT ${JWT_TOKEN}" \
-                  "$NEXT_URL")
-
-              # Append tags if any
-              TAGS=$(echo "$RAW_RESPONSE" | jq -r '.results[]?.name // empty')
-              if [ -n "$TAGS" ]; then
-                  ALL_TAGS="$ALL_TAGS"$'\n'"$TAGS"
-              fi
-
-              # Get next page
-              NEXT_URL=$(echo "$RAW_RESPONSE" | jq -r '.next // empty')
-          done
-
-          ALL_TAGS=$(echo "$ALL_TAGS" | sed '/^$/d' | sort -rV)
-
-          if [ -z "$ALL_TAGS" ]; then
-              echo "⚠️ No tags found for repository ${DOCKER_REPO}. Exiting cleanup."
-              exit 0
-          fi
-
-          # Keep latest + 3 most recent non-latest tags
-          NON_LATEST_TAGS=$(echo "$ALL_TAGS" | grep -v '^latest$')
-          TAGS_TO_KEEP=$(echo "$NON_LATEST_TAGS" | head -n 3)
-          LATEST_TAGS=$(echo "$ALL_TAGS" | grep '^latest$')
-          TAGS_TO_KEEP="$TAGS_TO_KEEP"$'\n'"$LATEST_TAGS"
-
-          echo "Images to keep:"
-          echo "$TAGS_TO_KEEP"
-          echo "---"
-
-          # Delete tags not in keep list
-          for TAG in $ALL_TAGS; do
-              if ! grep -qx "$TAG" <<< "$TAGS_TO_KEEP"; then
-                  echo "Deleting image: ${DOCKER_REPO}:${TAG}"
-                  docker run --rm curlimages/curl:latest -X DELETE \
-                      -H "Authorization: JWT ${JWT_TOKEN}" -s \
-                      "https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/${DOCKER_REPO}/tags/${TAG}/"
-              else
-                  echo "Keeping image: ${DOCKER_REPO}:${TAG}"
-              fi
-          done
-
-          echo "✅ Cleanup complete."
-
-
-
-
