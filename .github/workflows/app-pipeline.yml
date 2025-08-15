@@ -21,6 +21,7 @@ concurrency:
 
 jobs:
   build-and-push-dockerhub:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.actor == 'Mahesh-Kotakonda')
     runs-on: self-hosted
     env:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -31,8 +32,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 2   # fetch 2 commits to allow diff for changes
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
@@ -40,87 +39,32 @@ jobs:
           username: ${{ env.DOCKERHUB_USERNAME }}
           password: ${{ env.DOCKERHUB_TOKEN }}
 
-      - name: Detect changes
-        id: changes
-        run: |
-          echo "Detecting changed files..."
-
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "Manual trigger detected — all steps will run."
-            echo "backend=manual" >> $GITHUB_OUTPUT
-            echo "worker=manual" >> $GITHUB_OUTPUT
-            echo "frontend=manual" >> $GITHUB_OUTPUT
-          else
-            # Make sure previous commit exists
-            git fetch origin main --depth=2
-
-            CHANGED_FILES=$(git diff --name-only origin/main ${{ github.sha }})
-
-            echo "Changed files:"
-            echo "$CHANGED_FILES"
-
-            CHANGED_BACKEND=$(echo "$CHANGED_FILES" | grep -E '^app/backend/|^docker/backend/' || true)
-            CHANGED_WORKER=$(echo "$CHANGED_FILES" | grep -E '^app/worker/|^docker/worker/' || true)
-            CHANGED_FRONTEND=$(echo "$CHANGED_FILES" | grep -E '^app/frontend/|^docker/frontend/' || true)
-
-            [ -n "$CHANGED_BACKEND" ] && echo "backend=$CHANGED_BACKEND" >> $GITHUB_OUTPUT || echo "backend=" >> $GITHUB_OUTPUT
-            [ -n "$CHANGED_WORKER" ] && echo "worker=$CHANGED_WORKER" >> $GITHUB_OUTPUT || echo "worker=" >> $GITHUB_OUTPUT
-            [ -n "$CHANGED_FRONTEND" ] && echo "frontend=$CHANGED_FRONTEND" >> $GITHUB_OUTPUT || echo "frontend=" >> $GITHUB_OUTPUT
-          fi
-
       # ===== BACKEND =====
       - name: Build & Push Backend
-        if: steps.changes.outputs.backend != ''
         run: |
-          echo "=== BACKEND STEP RUNNING ==="
-          if [ "${{ steps.changes.outputs.backend }}" == "manual" ]; then
-            echo "Reason: Manual trigger"
-          else
-            echo "Reason: Files changed in backend:"
-            echo "${{ steps.changes.outputs.backend }}"
-          fi
-          docker build -t $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest -t $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-${VERSION} -f docker/backend/Dockerfile .
+          docker build \
+            -t $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest \
+            -t $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-${VERSION} \
+            -f docker/backend/Dockerfile .
           docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest
           docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-${VERSION}
 
-      - name: Skip Backend
-        if: steps.changes.outputs.backend == ''
-        run: echo "=== BACKEND STEP SKIPPED — No changes ==="
-
       # ===== WORKER =====
       - name: Build & Push Worker
-        if: steps.changes.outputs.worker != ''
         run: |
-          echo "=== WORKER STEP RUNNING ==="
-          if [ "${{ steps.changes.outputs.worker }}" == "manual" ]; then
-            echo "Reason: Manual trigger"
-          else
-            echo "Reason: Files changed in worker:"
-            echo "${{ steps.changes.outputs.worker }}"
-          fi
-          docker build -t $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest -t $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-${VERSION} -f docker/worker/Dockerfile .
+          docker build \
+            -t $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest \
+            -t $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-${VERSION} \
+            -f docker/worker/Dockerfile .
           docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest
           docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-${VERSION}
 
-      - name: Skip Worker
-        if: steps.changes.outputs.worker == ''
-        run: echo "=== WORKER STEP SKIPPED — No changes ==="
-
       # ===== FRONTEND =====
       - name: Build & Push Frontend
-        if: steps.changes.outputs.frontend != ''
         run: |
-          echo "=== FRONTEND STEP RUNNING ==="
-          if [ "${{ steps.changes.outputs.frontend }}" == "manual" ]; then
-            echo "Reason: Manual trigger"
-          else
-            echo "Reason: Files changed in frontend:"
-            echo "${{ steps.changes.outputs.frontend }}"
-          fi
-          docker build -t $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest -t $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-${VERSION} -f docker/frontend/Dockerfile .
+          docker build \
+            -t $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest \
+            -t $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-${VERSION} \
+            -f docker/frontend/Dockerfile .
           docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest
           docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-${VERSION}
-
-      - name: Skip Frontend
-        if: steps.changes.outputs.frontend == ''
-        run: echo "=== FRONTEND STEP SKIPPED — No changes ==="
