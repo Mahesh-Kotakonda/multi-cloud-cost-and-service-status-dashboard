@@ -48,39 +48,75 @@ jobs:
         run: |
           set -e
           
-          # 1️⃣ Get JWT token from Docker Hub
+          echo "🔑 Getting JWT token from Docker Hub..."
           JWT_TOKEN=$(docker run --rm curlimages/curl:latest -s -X POST \
             -H "Content-Type: application/json" \
             -d '{"username": "'${DOCKERHUB_USERNAME}'", "password": "'${DOCKERHUB_TOKEN}'"}' \
             https://hub.docker.com/v2/users/login/ | jq -r .token)
           
-          # 2️⃣ Fetch all tags (increase page_size to avoid pagination issues)
-          ALL_TAGS=$(docker run --rm curlimages/curl:latest -s \
-            -H "Authorization: JWT ${JWT_TOKEN}" \
-            "https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/${DOCKER_REPO}/tags/?page_size=100" \
-            | jq -r '.results[].name' | sort -rV)
+          if [[ -z "$JWT_TOKEN" || "$JWT_TOKEN" == "null" ]]; then
+              echo "❌ Failed to get JWT token. Check DOCKERHUB_USERNAME/DOCKERHUB_TOKEN."
+              exit 1
+          fi
           
-          # 3️⃣ Filter & keep tags
+          echo "✅ Authenticated successfully."
+          
+          # Pagination loop to fetch ALL tags
+          echo "📦 Fetching all tags for ${DOCKERHUB_USERNAME}/${DOCKER_REPO}..."
+          NEXT_URL="https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/${DOCKER_REPO}/tags/?page_size=100"
+          ALL_TAGS=""
+          
+          while [[ -n "$NEXT_URL" && "$NEXT_URL" != "null" ]]; do
+              RAW_RESPONSE=$(docker run --rm curlimages/curl:latest -s \
+                -H "Authorization: JWT ${JWT_TOKEN}" \
+                "$NEXT_URL")
+          
+              # Debug if .results is missing
+              if ! echo "$RAW_RESPONSE" | jq -e '.results' >/dev/null; then
+                  echo "❌ API did not return a 'results' array."
+                  echo "Response:"
+                  echo "$RAW_RESPONSE" | jq .
+                  exit 1
+              fi
+          
+              # Append tags to ALL_TAGS
+              TAGS_PAGE=$(echo "$RAW_RESPONSE" | jq -r '.results[]?.name')
+              ALL_TAGS=$(printf "%s\n%s" "$ALL_TAGS" "$TAGS_PAGE")
+          
+              # Get next page URL
+              NEXT_URL=$(echo "$RAW_RESPONSE" | jq -r '.next')
+          done
+          
+          # Sort tags
+          ALL_TAGS=$(echo "$ALL_TAGS" | grep -v '^$' | sort -rV)
+          
+          if [[ -z "$ALL_TAGS" ]]; then
+              echo "⚠️ No tags found for ${DOCKERHUB_USERNAME}/${DOCKER_REPO}."
+              exit 0
+          fi
+          
+          # Separate latest/non-latest
           NON_LATEST_TAGS=$(echo "$ALL_TAGS" | grep -v '^latest$')
           TAGS_TO_KEEP=$(echo "$NON_LATEST_TAGS" | head -n 3)
           LATEST_TAGS=$(echo "$ALL_TAGS" | grep '^latest$')
           TAGS_TO_KEEP="$TAGS_TO_KEEP $LATEST_TAGS"
           
-          echo "Images to keep: $TAGS_TO_KEEP"
+          echo "✅ Images to keep: $TAGS_TO_KEEP"
           echo "---"
           
-          # 4️⃣ Delete old tags
+          # Delete old tags
           for TAG in $ALL_TAGS; do
               if ! grep -qw "$TAG" <<< "$TAGS_TO_KEEP"; then
-                  echo "Deleting image: ${DOCKER_REPO}:${TAG}"
+                  echo "🗑️ Deleting image: ${DOCKER_REPO}:${TAG}"
                   docker run --rm curlimages/curl:latest -X DELETE \
                     -H "Authorization: JWT ${JWT_TOKEN}" -s \
                     "https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/${DOCKER_REPO}/tags/${TAG}/"
               else
-                  echo "Keeping image: ${DOCKER_REPO}:${TAG}"
+                  echo "✅ Keeping image: ${DOCKER_REPO}:${TAG}"
               fi
           done
           
-          echo "Cleanup complete."
+          echo "🎯 Cleanup complete."
+
 
 
