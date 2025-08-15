@@ -47,30 +47,39 @@ jobs:
       - name: Clean up old Docker images
         run: |
           set -e
-
-          # Fetch all tags. The "Authorization: JWT" header is crucial for private repos.
-          ALL_TAGS=$(docker run --rm curlimages/curl:latest -s -H "Authorization: JWT ${{ secrets.DOCKERHUB_TOKEN }}" "https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/${DOCKER_REPO}/tags/" | jq -r '.results[].name' | sort -rV)
           
-          # Filter out the 'latest' tags and get the 3 most recent non-latest ones.
-          NON_LATEST_TAGS=$(echo "$ALL_TAGS" | grep -v 'latest')
+          # Get JWT token
+          JWT_TOKEN=$(docker run --rm curlimages/curl:latest -s -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"username": "'${DOCKERHUB_USERNAME}'", "password": "'${DOCKERHUB_TOKEN}'"}' \
+            https://hub.docker.com/v2/users/login/ | jq -r .token)
+          
+          # Fetch all tags
+          ALL_TAGS=$(docker run --rm curlimages/curl:latest -s \
+            -H "Authorization: JWT ${JWT_TOKEN}" \
+            "https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/${DOCKER_REPO}/tags/?page_size=100" \
+            | jq -r '.results[].name' | sort -rV)
+          
+          # Separate latest/non-latest
+          NON_LATEST_TAGS=$(echo "$ALL_TAGS" | grep -v '^latest$')
           TAGS_TO_KEEP=$(echo "$NON_LATEST_TAGS" | head -n 3)
-          
-          # Add all 'latest' tags back to the list of tags to keep.
-          LATEST_TAGS=$(echo "$ALL_TAGS" | grep 'latest')
+          LATEST_TAGS=$(echo "$ALL_TAGS" | grep '^latest$')
           TAGS_TO_KEEP="$TAGS_TO_KEEP $LATEST_TAGS"
           
           echo "Images to keep: $TAGS_TO_KEEP"
           echo "---"
-
-          # Now, iterate and delete any tags not in the 'keep' list.
+          
+          # Delete old tags
           for TAG in $ALL_TAGS; do
-              # Check if the tag is NOT in the list of tags to keep.
-              if [[ ! " ${TAGS_TO_KEEP[@]} " =~ " ${TAG} " ]]; then
+              if ! grep -qw "$TAG" <<< "$TAGS_TO_KEEP"; then
                   echo "Deleting image: ${DOCKER_REPO}:${TAG}"
-                  docker run --rm curlimages/curl:latest -X DELETE -H "Authorization: JWT ${{ secrets.DOCKERHUB_TOKEN }}" -s "https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/${DOCKER_REPO}/tags/${TAG}/"
+                  docker run --rm curlimages/curl:latest -X DELETE \
+                    -H "Authorization: JWT ${JWT_TOKEN}" -s \
+                    "https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/${DOCKER_REPO}/tags/${TAG}/"
               else
                   echo "Keeping image: ${DOCKER_REPO}:${TAG}"
               fi
           done
           
           echo "Cleanup complete."
+
