@@ -8,11 +8,11 @@ terraform {
   required_version = ">= 1.4.0"
 
   backend "s3" {
-    bucket         = "multi-cloud-cost-and-service-status-dashboard"
-    key            = "terraform.tfstate"
-    region         = "us-east-1"
-    encrypt        = true
-    use_lockfile   = true
+    bucket       = "multi-cloud-cost-and-service-status-dashboard"
+    key          = "terraform.tfstate"
+    region       = "us-east-1"
+    encrypt      = true
+    use_lockfile = true
   }
 }
 
@@ -82,4 +82,30 @@ module "database" {
   subnet_ids        = module.vpc.private_subnet_ids
 }
 
+# ===== Publish Terraform outputs to JSON in S3 =====
+locals {
+  outputs_bucket = "multi-cloud-cost-and-service-status-dashboard" # Same as backend
+  outputs_key    = "infra/${var.project_name}-outputs.json"
 
+  app_outputs = {
+    project_name       = var.project_name
+    vpc_id             = module.vpc.vpc_id
+    public_subnet_ids  = module.vpc.public_subnet_ids
+    private_subnet_ids = module.vpc.private_subnet_ids
+    ec2_instance_ids   = module.ec2.instance_ids
+    alb_dns            = module.alb.alb_dns
+    db = {
+      endpoint = module.database.db_instance_endpoint
+      id       = module.database.db_instance_id
+      name     = var.db_name
+    }
+    generated_at_utc = timestamp()
+  }
+}
+
+resource "aws_s3_object" "infra_outputs_json" {
+  bucket       = local.outputs_bucket
+  key          = local.outputs_key
+  content      = jsonencode(local.app_outputs)
+  content_type = "application/json"
+}
