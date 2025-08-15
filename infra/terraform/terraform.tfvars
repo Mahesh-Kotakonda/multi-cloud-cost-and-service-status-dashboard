@@ -12,5 +12,4 @@ ec2_key_name = "terraform_key"
 
 db_instance_class = "db.t3.micro"
 db_name = "appdb"
-db_username = "admin"
-db_password = "SuperSecret123!"
+instance_count = 2
