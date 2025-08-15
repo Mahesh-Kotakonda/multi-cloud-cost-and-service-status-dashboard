@@ -1,30 +1,18 @@
-# This workflow is responsible for safely destroying Terraform resources.
-name: Terraform Destroy Workflow
+name: Terraform Destroy and Docker Cleanup
 
 on:
-  # This allows the workflow to be triggered manually from the GitHub Actions UI.
   workflow_dispatch:
-
-  # This schedules the workflow to run twice a day.
-  # Note: The schedule runs on UTC time.
   schedule:
-    # 12:30 PM IST every day -> 7:00 AM UTC
     - cron: '0 7 * * *'
-    # 8:00 PM IST every day -> 2:30 PM UTC
     - cron: '30 14 * * *'
 
-# Define a single job named 'terraform-destroy' to handle all steps.
 jobs:
   terraform-destroy:
-    # Use a self-hosted runner, matching your other workflow.
     runs-on: self-hosted
-
-    # Set environment variables for AWS credentials.
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_REGION: us-east-1 # Make sure this matches your resource region
-
+      AWS_REGION: us-east-1
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -35,7 +23,7 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-      
+
       - name: Terraform Init
         id: init
         working-directory: infra/terraform
@@ -43,11 +31,49 @@ jobs:
 
       - name: Terraform Destroy
         id: destroy
-        # This step has a very strict condition:
-        # It must be triggered either manually (workflow_dispatch) or by the schedule,
-        # AND the user who triggered it must be 'Mahesh-Kotakonda'.
         if: (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && github.actor == 'Mahesh-Kotakonda'
         working-directory: infra/terraform
-        # The -auto-approve flag is used for automation, but be very careful.
-        # This will destroy all resources defined in your Terraform state file.
         run: terraform destroy -auto-approve
+
+---
+
+  docker-cleanup:
+    runs-on: self-hosted
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      DOCKER_REPO: my-docker-repo # Replace with your Docker Hub repository name
+    steps:
+      - name: Log in to Docker Hub
+        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login --username "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
+      - name: Clean up old Docker images
+        run: |
+          set -e
+
+          # Fetch all tags.
+          ALL_TAGS=$(docker run --rm curlimages/curl:latest -s "https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/${DOCKER_REPO}/tags/" | jq -r '.results[].name' | sort -rV)
+          
+          # Filter out the 'latest' tags and get the 3 most recent non-latest ones.
+          NON_LATEST_TAGS=$(echo "$ALL_TAGS" | grep -v 'latest')
+          TAGS_TO_KEEP=$(echo "$NON_LATEST_TAGS" | head -n 3)
+          
+          # Add all 'latest' tags back to the list of tags to keep.
+          LATEST_TAGS=$(echo "$ALL_TAGS" | grep 'latest')
+          TAGS_TO_KEEP="$TAGS_TO_KEEP $LATEST_TAGS"
+          
+          echo "Images to keep: $TAGS_TO_KEEP"
+          echo "---"
+
+          # Now, iterate and delete any tags not in the 'keep' list.
+          for TAG in $ALL_TAGS; do
+              # Check if the tag is NOT in the list of tags to keep.
+              if [[ ! " ${TAGS_TO_KEEP[@]} " =~ " ${TAG} " ]]; then
+                  echo "Deleting image: ${DOCKER_REPO}:${TAG}"
+                  docker run --rm curlimages/curl:latest -X DELETE -H "Authorization: JWT ${{ secrets.DOCKERHUB_TOKEN }}" -s "https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/${DOCKER_REPO}/tags/${TAG}/"
+              else
+                  echo "Keeping image: ${DOCKER_REPO}:${TAG}"
+              fi
+          done
+          
+          echo "Cleanup complete."
