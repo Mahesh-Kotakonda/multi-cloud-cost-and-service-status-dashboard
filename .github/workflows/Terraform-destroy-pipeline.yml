@@ -34,6 +34,9 @@ jobs:
         if: (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && github.actor == 'Mahesh-Kotakonda'
         working-directory: infra/terraform
         run: terraform destroy -auto-approve
+
+---
+
   docker-cleanup:
     runs-on: self-hosted
     env:
@@ -48,8 +51,8 @@ jobs:
         run: |
           set -e
 
-          # Fetch all tags.
-          ALL_TAGS=$(docker run --rm curlimages/curl:latest -s "https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/${DOCKER_REPO}/tags/" | jq -r '.results[].name' | sort -rV)
+          # Fetch all tags. The "Authorization: JWT" header is crucial for private repos.
+          ALL_TAGS=$(docker run --rm curlimages/curl:latest -s -H "Authorization: JWT ${{ secrets.DOCKERHUB_TOKEN }}" "https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/${DOCKER_REPO}/tags/" | jq -r '.results[].name' | sort -rV)
           
           # Filter out the 'latest' tags and get the 3 most recent non-latest ones.
           NON_LATEST_TAGS=$(echo "$ALL_TAGS" | grep -v 'latest')
