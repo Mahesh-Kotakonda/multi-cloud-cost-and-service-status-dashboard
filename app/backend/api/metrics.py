@@ -2,14 +2,12 @@ from fastapi import FastAPI, HTTPException
 from core.database import get_db_connection
 from decimal import Decimal
 import datetime
-import logging
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+app = FastAPI(title="AWS Metrics API", version="1.0.0")
 
-app = FastAPI(title="AWS Metrics API")
-
+# -----------------------------
+# Helpers
+# -----------------------------
 def serialize_value(value):
     """Convert Decimal and datetime objects to JSON-serializable format."""
     if isinstance(value, Decimal):
@@ -18,26 +16,23 @@ def serialize_value(value):
         return value.isoformat()
     return value
 
+
+# -----------------------------
+# DB Queries
+# -----------------------------
 def fetch_aws_costs(limit: int = 10):
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-
-        query = """
+        cursor.execute("""
             SELECT cost_date, service, amount, unit, retrieved_at
             FROM aws_cost_daily
             ORDER BY cost_date DESC
             LIMIT %s
-        """
-        logger.info(f"Running query: {query.strip()} with limit={limit}")
-        cursor.execute(query, (limit,))
+        """, (limit,))
         rows = cursor.fetchall()
-
         cursor.close()
         conn.close()
-
-        if not rows:
-            raise HTTPException(status_code=404, detail="No AWS cost data found")
 
         return [
             {
@@ -45,34 +40,27 @@ def fetch_aws_costs(limit: int = 10):
                 "service": row[1],
                 "amount": serialize_value(row[2]),
                 "unit": row[3],
-                "retrieved_at": serialize_value(row[4]),
+                "retrieved_at": serialize_value(row[4])
             }
             for row in rows
         ]
     except Exception as e:
-        logger.exception("AWS cost query failed")
-        raise HTTPException(status_code=500, detail=f"AWS cost query failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"AWS cost query failed: {e}")
+
 
 def fetch_ec2_status(limit: int = 10):
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-
-        query = """
+        cursor.execute("""
             SELECT instance_id, az, state, system_status, instance_status, retrieved_bucket, retrieved_at
             FROM aws_ec2_instance_status
             ORDER BY retrieved_bucket DESC
             LIMIT %s
-        """
-        logger.info(f"Running query: {query.strip()} with limit={limit}")
-        cursor.execute(query, (limit,))
+        """, (limit,))
         rows = cursor.fetchall()
-
         cursor.close()
         conn.close()
-
-        if not rows:
-            raise HTTPException(status_code=404, detail="No EC2 status data found")
 
         return [
             {
@@ -82,18 +70,24 @@ def fetch_ec2_status(limit: int = 10):
                 "system_status": row[3],
                 "instance_status": row[4],
                 "retrieved_bucket": serialize_value(row[5]),
-                "retrieved_at": serialize_value(row[6]),
+                "retrieved_at": serialize_value(row[6])
             }
             for row in rows
         ]
     except Exception as e:
-        logger.exception("EC2 status query failed")
-        raise HTTPException(status_code=500, detail=f"EC2 status query failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"EC2 status query failed: {e}")
 
+
+# -----------------------------
+# API Endpoints
+# -----------------------------
 @app.get("/aws/costs")
 def get_aws_costs(limit: int = 10):
+    """Fetch recent AWS daily costs."""
     return fetch_aws_costs(limit)
+
 
 @app.get("/aws/ec2-status")
 def get_ec2_status(limit: int = 10):
+    """Fetch recent EC2 instance statuses."""
     return fetch_ec2_status(limit)
