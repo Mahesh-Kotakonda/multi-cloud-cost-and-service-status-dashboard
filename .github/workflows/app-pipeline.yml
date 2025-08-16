@@ -83,6 +83,8 @@ jobs:
             echo "JSON file not found in S3. Please check with infra team."
           else
             echo "JSON file exists."
+          fi
+
 
       - name: Pull Worker Docker Image
         run: |
@@ -96,3 +98,4 @@ jobs:
             -e DB_NAME=appdb \
             -e POLL_INTERVAL_SECONDS=600 \
             $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-${VERSION}
+
