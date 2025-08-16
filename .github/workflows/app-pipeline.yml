@@ -11,9 +11,9 @@ on:
   pull_request:
     branches:
       - main
-    paths:
-      - 'app/**'
-      - 'docker/**'
+      - paths:
+          - 'app/**'
+          - 'docker/**'
   workflow_dispatch:
 
 concurrency:
@@ -69,6 +69,7 @@ jobs:
       AWS_REGION: us-east-1
       S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
       IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
       VERSION: v${{ github.run_number }}
 
@@ -86,35 +87,23 @@ jobs:
             echo "JSON file exists."
           fi
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      
-      - name: Pull Worker Image
-        run: |
-          docker pull $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest
-        env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
       - name: Deploy Worker on EC2 instances via SSH
         run: |
           PEM_PATH=~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
-      
           aws s3 cp "$S3_JSON_PATH" worker-outputs.json
-      
+
           DB_HOST=$(jq -r '.db.endpoint | split(":")[0]' worker-outputs.json)
           DB_NAME=$(jq -r '.db.name' worker-outputs.json)
           INSTANCE_IDS=$(jq -r '.ec2_instance_ids[]' worker-outputs.json)
-      
+
           for ID in $INSTANCE_IDS; do
             IP=$(aws ec2 describe-instances --instance-ids $ID \
                  --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
             echo "Deploying worker on $IP..."
-      
+
             ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-              'export AWS_ACCESS_KEY_ID='"$AWS_ACCESS_KEY_ID"'; \
+              'echo $DOCKERHUB_TOKEN | docker login -u $DOCKERHUB_USERNAME --password-stdin; \
+               export AWS_ACCESS_KEY_ID='"$AWS_ACCESS_KEY_ID"'; \
                export AWS_SECRET_ACCESS_KEY='"$AWS_SECRET_ACCESS_KEY"'; \
                export AWS_REGION='"$AWS_REGION"'; \
                export DB_HOST='"$DB_HOST"'; \
@@ -131,25 +120,11 @@ jobs:
                  -e DB_NAME \
                  -e POLL_INTERVAL_SECONDS=600 \
                  '"$DOCKERHUB_USERNAME"'/'"$IMAGE_REPO"':worker-latest'
-          done
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: us-east-1
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
           IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
           S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
-
-
-
-
-
-
-
-
-
-
-
-
-
-
