@@ -147,11 +147,11 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_REGION: us-east-1
-      S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
       IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
       SSM_PARAM_NAME: myapp_database_credentials
+      S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
 
     steps:
       - name: Checkout repository
@@ -160,8 +160,8 @@ jobs:
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
 
       - name: Fetch DB credentials from SSM
         id: ssm
@@ -176,6 +176,10 @@ jobs:
         run: |
           PEM_PATH=~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
           aws s3 cp "$S3_JSON_PATH" backend-outputs.json
+
+          echo "=== Dump backend-outputs.json for debug ==="
+          cat backend-outputs.json
+
           DB_ENDPOINT=$(jq -r '.db.endpoint' backend-outputs.json)
           DB_HOST=$(echo $DB_ENDPOINT | cut -d: -f1)
           DB_PORT=$(echo $DB_ENDPOINT | cut -d: -f2)
@@ -205,6 +209,15 @@ jobs:
                  -p 8080:8080 \
                  $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest"
           done
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: us-east-1
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
+          S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
+
 
 
 
