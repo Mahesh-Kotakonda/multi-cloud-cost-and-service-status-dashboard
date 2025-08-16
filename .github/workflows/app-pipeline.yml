@@ -184,7 +184,7 @@ jobs:
           DB_HOST=$(echo $DB_ENDPOINT | cut -d: -f1)
           DB_PORT=$(echo $DB_ENDPOINT | cut -d: -f2)
           DB_NAME=$(jq -r '.db.name' backend-outputs.json)
-          INSTANCE_IDS=$(jq -r '.backend_instance_ids[]' backend-outputs.json)
+          INSTANCE_IDS=$(jq -r '.ec2_instance_ids[]' backend-outputs.json)
 
           for ID in $INSTANCE_IDS; do
             IP=$(aws ec2 describe-instances --instance-ids $ID \
@@ -217,6 +217,7 @@ jobs:
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
           IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
           S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
+
 
 
 
