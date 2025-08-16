@@ -255,12 +255,43 @@ def collect_ec2_status(conn):
 # ----------------------------
 # Main loop
 # ----------------------------
+
+def print_all_db_rows(conn):
+    """
+    Prints all rows from aws_cost_daily and aws_ec2_instance_status tables.
+    """
+    cur = conn.cursor(dictionary=True)
+
+    # Print aws_cost_daily
+    print("\n--- aws_cost_daily ---")
+    cur.execute("SELECT * FROM aws_cost_daily ORDER BY cost_date, service")
+    rows = cur.fetchall()
+    if rows:
+        for row in rows:
+            print(row)
+    else:
+        print("No rows found in aws_cost_daily.")
+
+    # Print aws_ec2_instance_status
+    print("\n--- aws_ec2_instance_status ---")
+    cur.execute("SELECT * FROM aws_ec2_instance_status ORDER BY retrieved_bucket, instance_id")
+    rows = cur.fetchall()
+    if rows:
+        for row in rows:
+            print(row)
+    else:
+        print("No rows found in aws_ec2_instance_status.")
+
+    cur.close()
+
 def run_once():
     conn = get_db_connection()
     try:
         ensure_schema(conn)
         collect_costs(conn)
         collect_ec2_status(conn)
+        # Print all DB rows after collection
+        print_all_db_rows(conn)
     finally:
         try:
             conn.close()
