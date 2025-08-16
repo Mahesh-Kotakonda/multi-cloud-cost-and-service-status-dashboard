@@ -35,4 +35,9 @@ variable "db_password" {
   description = "Database password"
   sensitive   = true
 }
+variable "db_security_group_id" {
+  description = "The ID of the security group for the db"
+  type        = string
+}
+
 
