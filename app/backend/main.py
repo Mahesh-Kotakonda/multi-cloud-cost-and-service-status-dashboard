@@ -1,7 +1,7 @@
 # main.py
 import os
 import uvicorn
-from backend.api.metrics import app
+from api.metrics import app
 
 if __name__ == "__main__":
     host = os.environ.get("APP_HOST", "0.0.0.0")
@@ -15,7 +15,7 @@ if __name__ == "__main__":
     print(f"🖥️  EC2 Status endpoint:      http://{host}:{port}/aws/ec2-status\n")
 
     uvicorn.run(
-        "backend.api.metrics:app",
+        "api.metrics:app",
         host=host,
         port=port,
         reload=reload
