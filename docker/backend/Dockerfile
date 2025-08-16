@@ -1,24 +1,26 @@
-# Use lightweight Python image
+# docker/backend/Dockerfile
 FROM python:3.11-slim
 
-# Set working directory inside container
-WORKDIR /app
+# Set working directory
+WORKDIR /app/backend
 
-# Install system dependencies for psycopg2 & boto3
-RUN apt-get update && apt-get install -y \
+# System deps (for psycopg2 & boto3)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install
-COPY ./requirements.txt .
+# Copy requirements first (better caching)
+COPY app/backend/requirements.txt .
+
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy project files (from repo root into container)
-COPY . .
+# Copy backend code
+COPY app/backend/ ./
 
 # Expose FastAPI port
 EXPOSE 8000
 
-# Default command (can be overridden by docker run)
+# Default command
 CMD ["python", "main.py"]
