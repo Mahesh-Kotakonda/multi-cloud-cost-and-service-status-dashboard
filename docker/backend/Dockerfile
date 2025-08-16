@@ -1,16 +1,24 @@
+# Use lightweight Python image
 FROM python:3.11-slim
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
-
+# Set working directory inside container
 WORKDIR /app
 
-# install deps
-COPY app/backend/requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+# Install system dependencies for psycopg2 & boto3
+RUN apt-get update && apt-get install -y \
+    gcc \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# copy app (entire app so backend can import app.database)
-COPY app /app/app
+# Copy requirements and install
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy project files
+COPY . .
+
+# Expose FastAPI port
 EXPOSE 8000
-CMD ["uvicorn", "app.backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# Default command (can be overridden by docker run)
+CMD ["python", "main.py"]
