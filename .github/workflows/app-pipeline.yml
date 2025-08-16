@@ -85,10 +85,19 @@ jobs:
             echo "JSON file exists."
           fi
 
-
-      - name: Pull Worker Docker Image
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      
+      - name: Pull Worker Image
         run: |
-          docker pull $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-${VERSION}
+          docker pull $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
+
 
       - name: Run Worker Container
         run: |
@@ -98,4 +107,5 @@ jobs:
             -e DB_NAME=appdb \
             -e POLL_INTERVAL_SECONDS=600 \
             $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-${VERSION}
+
 
