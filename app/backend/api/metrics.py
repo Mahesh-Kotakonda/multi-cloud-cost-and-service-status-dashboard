@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException
-from app.core.database import get_db_connection
+from core.database import get_db_connection
 from decimal import Decimal
 import datetime
 
