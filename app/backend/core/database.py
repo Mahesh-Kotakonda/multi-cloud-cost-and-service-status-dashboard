@@ -1,11 +1,11 @@
-# backend/core/database.py
+
 import os
 import pymysql
 
 def get_db_connection():
-    """Create DB connection using env vars (MySQL)."""
+    """Create DB connection using MySQL + PyMySQL."""
     host = os.environ.get("DB_HOST")
-    port = int(os.environ.get("DB_PORT", 3306))   # MySQL default
+    port = int(os.environ.get("DB_PORT", 3306))
     dbname = os.environ.get("DB_NAME")
     user = os.environ.get("DB_USER")
     password = os.environ.get("DB_PASS")
@@ -16,9 +16,9 @@ def get_db_connection():
     conn = pymysql.connect(
         host=host,
         port=port,
-        db=dbname,
         user=user,
         password=password,
-        cursorclass=pymysql.cursors.DictCursor
+        db=dbname,
+        cursorclass=pymysql.cursors.Cursor
     )
     return conn
