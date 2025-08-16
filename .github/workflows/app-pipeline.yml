@@ -68,3 +68,45 @@ jobs:
             -f docker/frontend/Dockerfile .
           docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest
           docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-${VERSION}
+
+  deploy-worker:
+    needs: build-and-push-dockerhub
+    runs-on: self-hosted
+    env:
+      INFRA_JSON_PATH: ./infra.json
+      S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Terraform output JSON
+        run: |
+          aws s3 cp $S3_JSON_PATH $INFRA_JSON_PATH || exit 1
+
+      - name: Verify JSON file exists
+        run: |
+          if [ ! -f "$INFRA_JSON_PATH" ]; then
+            echo "ERROR: Terraform infra.json not found. Contact infrastructure team."
+            exit 1
+          fi
+
+      - name: Extract variables from JSON
+        id: extract
+        run: |
+          DB_HOST=$(jq -r '.db.endpoint' $INFRA_JSON_PATH | cut -d: -f1)
+          DB_NAME=$(jq -r '.db.name' $INFRA_JSON_PATH)
+          AWS_REGION=$(echo "$DB_HOST" | awk -F. '{print $4}')
+          echo "DB_HOST=$DB_HOST" >> $GITHUB_ENV
+          echo "DB_NAME=$DB_NAME" >> $GITHUB_ENV
+          echo "AWS_REGION=$AWS_REGION" >> $GITHUB_ENV
+          echo "SSM_PARAM_NAME=myapp_database_credentials" >> $GITHUB_ENV
+
+      - name: Run Worker container
+        run: |
+          docker run --rm \
+            -e AWS_REGION=$AWS_REGION \
+            -e DB_HOST=$DB_HOST \
+            -e DB_NAME=$DB_NAME \
+            -e SSM_PARAM_NAME=$SSM_PARAM_NAME \
+            ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_REPO }}:worker-latest
