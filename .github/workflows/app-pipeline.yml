@@ -102,35 +102,42 @@ jobs:
       - name: Deploy Worker on EC2 instances via SSH
         run: |
           PEM_PATH=~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
-
-          # Fetch JSON
           aws s3 cp "$S3_JSON_PATH" worker-outputs.json
           DB_HOST=$(jq -r '.db.endpoint | split(":")[0]' worker-outputs.json)
           DB_NAME=$(jq -r '.db.name' worker-outputs.json)
           INSTANCE_IDS=$(jq -r '.ec2_instance_ids[]' worker-outputs.json)
-
+      
           for ID in $INSTANCE_IDS; do
             IP=$(aws ec2 describe-instances --instance-ids $ID \
                  --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
             echo "Deploying worker on $IP..."
-
-            # Copy deploy script to remote
-            scp -i "$PEM_PATH" deploy_worker.sh ec2-user@$IP:~/deploy_worker.sh
-
-            # Execute script remotely and pass variables
-            ssh -i "$PEM_PATH" ec2-user@$IP "bash ~/deploy_worker.sh \
-              '$AWS_ACCESS_KEY_ID' \
-              '$AWS_SECRET_ACCESS_KEY' \
-              '$AWS_REGION' \
-              '$DB_HOST' \
-              '$DB_NAME' \
-              '$DOCKERHUB_USERNAME' \
-              '$IMAGE_REPO'"
+      
+            ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
+              'export AWS_ACCESS_KEY_ID='"$AWS_ACCESS_KEY_ID"'; \
+               export AWS_SECRET_ACCESS_KEY='"$AWS_SECRET_ACCESS_KEY"'; \
+               export AWS_REGION='"$AWS_REGION"'; \
+               export DB_HOST='"$DB_HOST"'; \
+               export DB_NAME='"$DB_NAME"'; \
+               export SSM_PARAM_NAME=myapp_database_credentials; \
+               echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin; \
+               docker pull '"$DOCKERHUB_USERNAME"'/'"$IMAGE_REPO"':worker-latest; \
+               docker rm -f worker || true; \
+               docker run -d --name worker \
+                 -e AWS_ACCESS_KEY_ID \
+                 -e AWS_SECRET_ACCESS_KEY \
+                 -e AWS_REGION \
+                 -e SSM_PARAM_NAME \
+                 -e DB_HOST \
+                 -e DB_NAME \
+                 -e POLL_INTERVAL_SECONDS=600 \
+                 '"$DOCKERHUB_USERNAME"'/'"$IMAGE_REPO"':worker-latest'
           done
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: us-east-1
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
           IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
           S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
+
