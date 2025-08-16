@@ -112,6 +112,8 @@ jobs:
       
           echo "Running Worker container..."
           docker run --rm \
+            -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+            -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
             -e AWS_REGION=$AWS_REGION \
             -e SSM_PARAM_NAME=myapp_database_credentials \
             -e DB_HOST=$DB_HOST \
@@ -125,6 +127,7 @@ jobs:
           S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
+
 
 
 
