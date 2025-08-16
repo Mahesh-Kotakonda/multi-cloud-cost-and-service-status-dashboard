@@ -8,7 +8,7 @@ def get_db_connection():
     port = int(os.getenv("DB_PORT", 5432))
     dbname = os.getenv("DB_NAME")     # REQUIRED
     user = os.getenv("DB_USER")       # REQUIRED
-    password = os.getenv("DB_PASSWORD")  # REQUIRED
+    password = os.getenv("DB_PASS")  # REQUIRED
 
     if not all([host, dbname, user, password]):
         raise ValueError("DB_HOST, DB_NAME, DB_USER, and DB_PASSWORD must be set")
