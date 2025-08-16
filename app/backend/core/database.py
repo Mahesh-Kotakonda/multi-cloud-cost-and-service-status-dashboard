@@ -3,12 +3,12 @@ import os
 import psycopg2
 
 def get_db_connection():
-    """Create DB connection using env vars (username/password passed directly)."""
-    host = os.environ.get("DB_HOST")
-    port = int(os.environ.get("DB_PORT", 5432))
-    dbname = os.environ.get("DB_NAME")
-    user = os.environ.get("DB_USER")
-    password = os.environ.get("DB_PASSWORD")
+    """Create DB connection using environment variables."""
+    host = os.getenv("DB_HOST")       # REQUIRED
+    port = int(os.getenv("DB_PORT", 5432))
+    dbname = os.getenv("DB_NAME")     # REQUIRED
+    user = os.getenv("DB_USER")       # REQUIRED
+    password = os.getenv("DB_PASSWORD")  # REQUIRED
 
     if not all([host, dbname, user, password]):
         raise ValueError("DB_HOST, DB_NAME, DB_USER, and DB_PASSWORD must be set")
