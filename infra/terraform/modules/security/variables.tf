@@ -8,7 +8,5 @@ variable "vpc_id" {
   description = "VPC ID where security groups will be created"
 }
 
-variable "db_security_group_id" {
-  description = "The ID of the security group for the db"
-  type        = string
-}
+
+
