@@ -80,6 +80,7 @@ module "database" {
   db_username       = local.db_creds.username
   db_password       = local.db_creds.password
   subnet_ids        = module.vpc.private_subnet_ids
+  db_security_group_id   = module.security.db_sg_id
 }
 
 # ===== Publish Terraform outputs to JSON in S3 =====
