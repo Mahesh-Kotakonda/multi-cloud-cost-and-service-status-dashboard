@@ -113,7 +113,7 @@ jobs:
                  --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
             echo "Deploying worker on $IP..."
       
-            ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ubuntu@"$IP" \
+            ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
               'export AWS_ACCESS_KEY_ID='"$AWS_ACCESS_KEY_ID"'; \
                export AWS_SECRET_ACCESS_KEY='"$AWS_SECRET_ACCESS_KEY"'; \
                export AWS_REGION='"$AWS_REGION"'; \
@@ -139,6 +139,7 @@ jobs:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
           S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
+
 
 
 
