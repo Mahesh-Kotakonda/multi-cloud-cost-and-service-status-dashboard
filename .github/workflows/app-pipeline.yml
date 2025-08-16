@@ -1,4 +1,4 @@
-name: App DockerHub Build & Push
+name: App DockerHub Build, Push & Deploy
 
 on:
   push:
@@ -20,6 +20,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ===== JOB 1: Build & Push Docker Images =====
   build-and-push-dockerhub:
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.actor == 'Mahesh-Kotakonda')
     runs-on: self-hosted
@@ -39,33 +40,21 @@ jobs:
           username: ${{ env.DOCKERHUB_USERNAME }}
           password: ${{ env.DOCKERHUB_TOKEN }}
 
-      # ===== BACKEND =====
       - name: Build & Push Backend
         run: |
-          docker build \
-            -t $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest \
-            -t $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-${VERSION} \
-            -f docker/backend/Dockerfile .
+          docker build -t $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest -t $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-${VERSION} -f docker/backend/Dockerfile .
           docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest
           docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-${VERSION}
 
-      # ===== WORKER =====
       - name: Build & Push Worker
         run: |
-          docker build \
-            -t $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest \
-            -t $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-${VERSION} \
-            -f docker/worker/Dockerfile .
+          docker build -t $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest -t $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-${VERSION} -f docker/worker/Dockerfile .
           docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest
           docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-${VERSION}
 
-      # ===== FRONTEND =====
       - name: Build & Push Frontend
         run: |
-          docker build \
-            -t $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest \
-            -t $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-${VERSION} \
-            -f docker/frontend/Dockerfile .
+          docker build -t $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest -t $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-${VERSION} -f docker/frontend/Dockerfile .
           docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest
           docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-${VERSION}
 
@@ -89,8 +78,9 @@ jobs:
       - name: Verify JSON exists in S3
         run: |
           echo "Checking JSON file in S3..."
-          if ! aws s3 ls "$S3_JSON_PATH" ; then
-            echo "JSON file not found in S3. Check with infra team."
+          aws s3 ls "$S3_JSON_PATH" >/dev/null 2>&1
+          if [ $? -ne 0 ]; then
+            echo "JSON file not found in S3. Please check with infra team."
           else
             echo "JSON file exists."
 
@@ -106,5 +96,3 @@ jobs:
             -e DB_NAME=appdb \
             -e POLL_INTERVAL_SECONDS=600 \
             $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-${VERSION}
-
-
