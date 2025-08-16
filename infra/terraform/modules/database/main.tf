@@ -20,12 +20,14 @@ resource "aws_db_instance" "app_db" {
   db_subnet_group_name     = aws_db_subnet_group.db_subnets.name
   publicly_accessible      = false
   skip_final_snapshot      = true
+  vpc_security_group_ids = var.db_security_group_id
 
   tags = {
     Name    = "${var.project_name}-db"
     Project = var.project_name
   }
 }
+
 
 
 
