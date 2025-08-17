@@ -17,17 +17,21 @@ def serialize_value(value):
     return value
 
 def get_date_range(months_back: int = 2):
-    """Return start date from `months_back` months ago until today."""
-    today = datetime.date.today()
-    first_day_this_month = today.replace(day=1)
-    # subtract `months_back` months
+    """Return start and end datetime for last `months_back` months including current month."""
+    today = datetime.datetime.utcnow()
+    first_day_this_month = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    # Compute start month
     month = first_day_this_month.month - months_back
     year = first_day_this_month.year
     while month <= 0:
         month += 12
         year -= 1
-    start_date = datetime.date(year, month, 1)
+    start_date = datetime.datetime(year, month, 1, 0, 0, 0)
+
+    # End date is now (UTC)
     end_date = today
+
     return start_date, end_date
 
 def fetch_table_rows_by_date(table_name: str, date_column: str = "retrieved_at", months_back: int = 2):
@@ -59,21 +63,19 @@ def fetch_table_rows_by_date(table_name: str, date_column: str = "retrieved_at",
 # -----------------------------
 @app.get("/aws/costs")
 def get_cloud_costs(months_back: int = Query(2, ge=0, le=12)):
-    """
-    Fetch AWS monthly cloud costs for the current month and previous `months_back` months.
-    """
+    """Fetch AWS monthly cloud costs for the current month and previous `months_back` months."""
     return fetch_table_rows_by_date("cloud_cost_monthly", months_back=months_back)
 
 @app.get("/aws/ec2-status")
 def get_server_status(months_back: int = Query(2, ge=0, le=12)):
-    """
-    Fetch EC2 aggregated server status for the current month and previous `months_back` months.
-    """
+    """Fetch EC2 aggregated server status for the current month and previous `months_back` months."""
     return fetch_table_rows_by_date("server_status_agg", months_back=months_back)
 
 @app.get("/aws/table/{table_name}")
-def get_custom_table(table_name: str, months_back: int = Query(2, ge=0, le=12), date_column: str = Query("retrieved_at")):
-    """
-    Fetch latest rows from any table dynamically based on date range.
-    """
+def get_custom_table(
+    table_name: str,
+    months_back: int = Query(2, ge=0, le=12),
+    date_column: str = Query("retrieved_at")
+):
+    """Fetch latest rows from any table dynamically based on date range."""
     return fetch_table_rows_by_date(table_name, date_column=date_column, months_back=months_back)
