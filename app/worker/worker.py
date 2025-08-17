@@ -28,7 +28,7 @@ AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 SSM_PARAM_NAME = os.getenv("SSM_PARAM_NAME", "myapp_database_credentials")
 DB_HOST = os.getenv("DB_HOST")
 DB_NAME = os.getenv("DB_NAME", "appdb")
-POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "600"))
+POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "60000"))
 
 if not DB_HOST:
     log.error("DB_HOST is required (RDS endpoint).")
