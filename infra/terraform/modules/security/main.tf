@@ -1,31 +1,30 @@
 # Security Group for EC2
 resource "aws_security_group" "ec2_sg" {
   name        = "${var.project_name}-ec2-sg"
-  description = "Security group for EC2 instances"
+  description = "Security group for EC2 instances (frontend & backend apps)"
   vpc_id      = var.vpc_id
 
-  # Allow SSH
+  # Allow only ALB to talk to EC2 (frontend 3000 + backend 8080)
+  ingress {
+    from_port       = 3000
+    to_port         = 3000
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb_sg.id]  # only ALB can access frontend
+  }
+
+  ingress {
+    from_port       = 8080
+    to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb_sg.id]  # only ALB can access backend
+  }
+
+  # Optional: allow SSH only from your IP (replace with your IP)
   ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # Allow HTTP
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # Allow custom app port 8080 from anywhere
-  ingress {
-    from_port   = 8080
-    to_port     = 8080
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["YOUR_IP/32"]  # ❌ not 0.0.0.0/0
   }
 
   egress {
@@ -41,19 +40,27 @@ resource "aws_security_group" "ec2_sg" {
   }
 }
 
-
 # Security Group for ALB
 resource "aws_security_group" "alb_sg" {
   name        = "${var.project_name}-alb-sg"
   description = "Security group for ALB"
   vpc_id      = var.vpc_id
 
+  # Allow HTTP from the world
   ingress {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  # (Optional) Allow HTTPS if you add SSL later
+  # ingress {
+  #   from_port   = 443
+  #   to_port     = 443
+  #   protocol    = "tcp"
+  #   cidr_blocks = ["0.0.0.0/0"]
+  # }
 
   egress {
     from_port   = 0
@@ -78,7 +85,7 @@ resource "aws_security_group" "db_sg" {
     from_port       = 3306
     to_port         = 3306
     protocol        = "tcp"
-    security_groups = [aws_security_group.ec2_sg.id]  # allow only EC2
+    security_groups = [aws_security_group.ec2_sg.id]  # only EC2 can access DB
   }
 
   egress {
@@ -93,4 +100,3 @@ resource "aws_security_group" "db_sg" {
     Project = var.project_name
   }
 }
-
