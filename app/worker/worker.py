@@ -176,35 +176,37 @@ def store_monthly_cost(conn, cloud, month_year, service_costs):
     log.info(f"Stored {len(rows)} services for {cloud} - {month_year}")
 
 # ----------------------------
-# Server status helpers
+# Server status helpers (updated for all regions)
 # ----------------------------
-def fetch_and_aggregate_server_status(ec2_client):
-    paginator = ec2_client.get_paginator('describe_instances')
+def fetch_and_aggregate_server_status_all_regions():
+    # Get all regions
+    regions = [r['RegionName'] for r in ec2.describe_regions()['Regions']]
+    
     agg = {}
 
-    # Aggregate per AZ
-    for page in paginator.paginate():
-        for reservation in page.get('Reservations', []):
-            for instance in reservation.get('Instances', []):
-                az = instance['Placement']['AvailabilityZone']
-                region = az[:-1]
-                state = instance['State']['Name'].lower()
+    for region in regions:
+        regional_client = boto3.client('ec2', region_name=region, config=boto_cfg)
+        paginator = regional_client.get_paginator('describe_instances')
 
-                if (region, az) not in agg:
-                    agg[(region, az)] = {'running': 0, 'stopped': 0, 'terminated': 0}
-                if state in agg[(region, az)]:
-                    agg[(region, az)][state] += 1
+        for page in paginator.paginate():
+            for reservation in page.get('Reservations', []):
+                for instance in reservation.get('Instances', []):
+                    az = instance['Placement']['AvailabilityZone']
+                    state = instance['State']['Name'].lower()
+
+                    if (region, az) not in agg:
+                        agg[(region, az)] = {'running': 0, 'stopped': 0, 'terminated': 0}
+                    if state in agg[(region, az)]:
+                        agg[(region, az)][state] += 1
 
     retrieved_at = datetime.utcnow()
     rows = []
     region_totals = {}
 
-    # Insert AZ rows if they have at least 1 instance
     for (region, az), counts in agg.items():
         total_instances = counts['running'] + counts['stopped'] + counts['terminated']
         if total_instances > 0:
             rows.append((region, az, counts['running'], counts['stopped'], counts['terminated'], retrieved_at))
-
             if region not in region_totals:
                 region_totals[region] = {'running': 0, 'stopped': 0, 'terminated': 0}
             for k in counts:
@@ -214,13 +216,19 @@ def fetch_and_aggregate_server_status(ec2_client):
     for region, counts in region_totals.items():
         rows.append((region, 'TOTAL', counts['running'], counts['stopped'], counts['terminated'], retrieved_at))
 
-    # Insert overall ALL row (sum of all regions)
+    # Insert overall ALL row
     total_running = sum(counts['running'] for counts in region_totals.values())
     total_stopped = sum(counts['stopped'] for counts in region_totals.values())
     total_terminated = sum(counts['terminated'] for counts in region_totals.values())
     rows.append(('ALL', 'ALL', total_running, total_stopped, total_terminated, retrieved_at))
 
     return rows
+
+
+def collect_ec2_status(conn):
+    rows = fetch_and_aggregate_server_status_all_regions()
+    store_server_status_agg(conn, rows)
+
 
 
 
@@ -239,10 +247,6 @@ def store_server_status_agg(conn, rows):
     conn.commit()
     cur.close()
     log.info(f"Stored {len(rows)} aggregated server status rows")
-
-def collect_ec2_status(conn):
-    rows = fetch_and_aggregate_server_status(ec2)
-    store_server_status_agg(conn, rows)
 
 # ----------------------------
 # Utility: Print table rows
