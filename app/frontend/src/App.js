@@ -8,11 +8,13 @@ function App() {
   useEffect(() => {
     async function fetchData() {
       try {
-        // Replace these URLs with your actual API endpoints
-        const ec2Response = await fetch("http://44.201.28.31:8080/aws/ec2-status");
+        // ✅ Use relative URLs so they work via the same ALB
+        const ec2Response = await fetch("/aws/ec2-status");
+        if (!ec2Response.ok) throw new Error("Failed to fetch EC2 status");
         const ec2Json = await ec2Response.json();
 
-        const costResponse = await fetch("http://44.201.28.31:8080/aws/costs");
+        const costResponse = await fetch("/aws/costs");
+        if (!costResponse.ok) throw new Error("Failed to fetch AWS costs");
         const costJson = await costResponse.json();
 
         setEc2Data(ec2Json);
@@ -20,6 +22,7 @@ function App() {
         setLoading(false);
       } catch (err) {
         console.error("Error fetching data:", err);
+        setLoading(false);
       }
     }
 
@@ -31,6 +34,7 @@ function App() {
   return (
     <div style={{ padding: "20px", fontFamily: "Arial" }}>
       <h1>AWS Dashboard</h1>
+
       <h2>EC2 Status</h2>
       <table border="1" cellPadding="5" cellSpacing="0">
         <thead>
