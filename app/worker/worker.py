@@ -114,11 +114,12 @@ def ensure_tables(conn):
             az VARCHAR(32) NOT NULL,
             running INT NOT NULL,
             stopped INT NOT NULL,
-            terminated INT NOT NULL,
+            `terminated` INT NOT NULL,
             retrieved_at TIMESTAMP NOT NULL,
             PRIMARY KEY (region, az)
         ) ENGINE=InnoDB;
     """)
+
     
     conn.commit()
     cur.close()
@@ -218,14 +219,15 @@ def fetch_and_aggregate_server_status(ec2_client):
 def store_server_status_agg(conn, rows):
     cur = conn.cursor()
     cur.executemany("""
-        INSERT INTO server_status_agg (region, az, running, stopped, terminated, retrieved_at)
+        INSERT INTO server_status_agg (region, az, running, stopped, `terminated`, retrieved_at)
         VALUES (%s,%s,%s,%s,%s,%s)
         ON DUPLICATE KEY UPDATE
             running=VALUES(running),
             stopped=VALUES(stopped),
-            terminated=VALUES(terminated),
+            `terminated`=VALUES(`terminated`),
             retrieved_at=VALUES(retrieved_at)
     """, rows)
+
     conn.commit()
     cur.close()
     log.info(f"Stored {len(rows)} aggregated server status rows")
