@@ -260,7 +260,7 @@ jobs:
               "echo '$DOCKERHUB_TOKEN' | docker login -u '$DOCKERHUB_USERNAME' --password-stdin; \
                docker pull $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest; \
                docker rm -f frontend || true; \
-               docker run -d --name frontend -p 3000:80 \
+               docker run -d --name frontend -p 3000:3000 \
                  $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
           done
         env:
@@ -271,6 +271,7 @@ jobs:
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
           IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
           S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
+
 
 
 
