@@ -1,13 +1,25 @@
-FROM node:18-alpine AS build
-WORKDIR /src
-COPY app/frontend/package*.json ./
+# Stage 1: Build React app
+FROM node:20-alpine AS build
+
+# Set working directory inside container
+WORKDIR /app/frontend
+
+# Copy package.json and install dependencies
+COPY package.json package-lock.json* ./
 RUN npm install
-COPY app/frontend ./
-ARG REACT_APP_API_BASE=""
-ENV REACT_APP_API_BASE=$REACT_APP_API_BASE
+
+# Copy source code and build
+COPY . .
 RUN npm run build
 
+# Stage 2: Serve with Nginx
 FROM nginx:alpine
-COPY --from=build /src/build /usr/share/nginx/html
+
+# Copy built app to Nginx html directory
+COPY --from=build /app/frontend/build /usr/share/nginx/html
+
+# Expose port 80
 EXPOSE 80
+
+# Start Nginx
 CMD ["nginx", "-g", "daemon off;"]
