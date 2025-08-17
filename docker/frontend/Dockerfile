@@ -1,24 +1,18 @@
-# Use Node base image
+# Build React app
 FROM node:20-alpine
 
 # Set working directory
 WORKDIR /app/frontend
 
-# Copy package files and install dependencies
-COPY frontend/package.json frontend/package-lock.json* ./
+# Copy package.json and install dependencies
+COPY package.json package-lock.json* ./
 RUN npm install
 
-# Copy all frontend code
-COPY frontend/. ./
+# Copy source code
+COPY . .
 
-# Build the React app
-RUN npm run build
+# Expose port React uses by default
+EXPOSE 3000
 
-# Install serve to run the build folder
-RUN npm install -g serve
-
-# Expose port
-EXPOSE 80
-
-# Launch the app
-CMD ["serve", "-s", "build", "-l", "80"]
+# Start the app
+CMD ["npm", "start"]
