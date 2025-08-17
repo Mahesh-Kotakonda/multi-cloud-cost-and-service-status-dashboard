@@ -9,10 +9,10 @@ function App() {
     async function fetchData() {
       try {
         // Replace these URLs with your actual API endpoints
-        const ec2Response = await fetch("http://localhost:5000/api/ec2-status");
+        const ec2Response = await fetch("http://44.201.28.31:8080/aws/ec2-status");
         const ec2Json = await ec2Response.json();
 
-        const costResponse = await fetch("http://localhost:5000/api/cost");
+        const costResponse = await fetch("http://44.201.28.31:8080/aws/costs");
         const costJson = await costResponse.json();
 
         setEc2Data(ec2Json);
