@@ -1,29 +1,27 @@
 # Stage 1: Build React app
 FROM node:20-alpine AS build
 
-# Workdir
 WORKDIR /app/frontend
 
-# Copy package.json and package-lock.json first for caching
-COPY ../../app/frontend/package.json ../../app/frontend/package-lock.json* ./
-
-# Install dependencies
+COPY package.json package-lock.json* ./
 RUN npm install
 
-# Copy all frontend source code
-COPY ../../app/frontend/. ./
-
-# Build the app
+COPY . ./
 RUN npm run build
 
-# Stage 2: Serve with Nginx
-FROM nginx:alpine
+# Stage 2: Serve with Node
+FROM node:20-alpine
 
-# Copy built app to Nginx html directory
-COPY --from=build /app/frontend/build /usr/share/nginx/html
+WORKDIR /app/frontend
 
-# Expose port 80
+# Copy only the build and server file
+COPY --from=build /app/frontend/build ./build
+COPY --from=build /app/frontend/package.json ./package.json
+COPY server.js ./server.js
+
+# Install express
+RUN npm install express
+
 EXPOSE 80
 
-# Start Nginx
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["node", "server.js"]
