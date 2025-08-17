@@ -252,9 +252,18 @@ def print_table(conn, table_name):
     cur = conn.cursor()
     cur.execute(f"SELECT * FROM {table_name} ORDER BY retrieved_at DESC LIMIT 20")
     rows = cur.fetchall()
+
     log.info(f"--- Last rows from {table_name} ---")
+    if table_name == "cloud_cost_monthly":
+        headers = ["cloud", "month_year", "service", "total_amount", "pct_of_total", "retrieved_at"]
+    elif table_name == "server_status_agg":
+        headers = ["region", "az", "running", "stopped", "terminated", "retrieved_at"]
+    else:
+        headers = []
+
+    print("\t".join(headers))
     for row in rows:
-        print(row)
+        print("\t".join(str(r) for r in row))
     cur.close()
 
 # ----------------------------
