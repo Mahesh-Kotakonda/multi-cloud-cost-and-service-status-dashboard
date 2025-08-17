@@ -24,7 +24,7 @@ resource "aws_security_group" "ec2_sg" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["YOUR_IP/32"]  # ❌ not 0.0.0.0/0
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
@@ -100,3 +100,4 @@ resource "aws_security_group" "db_sg" {
     Project = var.project_name
   }
 }
+
