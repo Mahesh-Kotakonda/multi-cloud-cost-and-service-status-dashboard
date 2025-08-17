@@ -1,9 +1,21 @@
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from core.database import get_db_connection
 from decimal import Decimal
 import datetime
 
 app = FastAPI(title="AWS Metrics API", version="2.0.0")
+
+# -----------------------------
+# CORS Setup
+# -----------------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://44.201.28.31:3000"],  # React frontend origin
+    allow_credentials=True,
+    allow_methods=["*"],  # GET, POST, PUT, DELETE, etc.
+    allow_headers=["*"],
+)
 
 # -----------------------------
 # Helpers
