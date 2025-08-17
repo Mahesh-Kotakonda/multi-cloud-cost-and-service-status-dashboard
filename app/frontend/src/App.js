@@ -1,60 +1,66 @@
 import React, { useEffect, useState } from "react";
 
-const API_BASE = process.env.REACT_APP_API_BASE || "";
-
-export default function App() {
-  const [metrics, setMetrics] = useState([]);
+function App() {
+  const [ec2Data, setEc2Data] = useState([]);
+  const [costData, setCostData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  async function load() {
-    try {
-      const res = await fetch(`${API_BASE}/metrics`);
-      const data = await res.json();
-      setMetrics(data || []);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
-    load();
-    const id = setInterval(load, 10000);
-    return () => clearInterval(id);
+    async function fetchData() {
+      try {
+        // Replace these URLs with your actual API endpoints
+        const ec2Response = await fetch("http://localhost:5000/api/ec2-status");
+        const ec2Json = await ec2Response.json();
+
+        const costResponse = await fetch("http://localhost:5000/api/cost");
+        const costJson = await costResponse.json();
+
+        setEc2Data(ec2Json);
+        setCostData(costJson);
+        setLoading(false);
+      } catch (err) {
+        console.error("Error fetching data:", err);
+      }
+    }
+
+    fetchData();
   }, []);
 
+  if (loading) return <div>Loading...</div>;
+
   return (
-    <div style={{ padding: 16, fontFamily: "system-ui, Arial" }}>
-      <h1>Resource Metrics</h1>
-      {loading ? (
-        <p>Loading...</p>
-      ) : (
-        <table border="1" cellPadding="6" cellSpacing="0">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Resource</th>
-              <th>CPU %</th>
-              <th>Memory %</th>
-              <th>Status</th>
-              <th>Time (UTC)</th>
+    <div style={{ padding: "20px", fontFamily: "Arial" }}>
+      <h1>AWS Dashboard</h1>
+      <h2>EC2 Status</h2>
+      <table border="1" cellPadding="5" cellSpacing="0">
+        <thead>
+          <tr>
+            <th>Region</th>
+            <th>AZ</th>
+            <th>Running</th>
+            <th>Stopped</th>
+            <th>Terminated</th>
+            <th>Retrieved At</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ec2Data.map((item, idx) => (
+            <tr key={idx}>
+              <td>{item.region}</td>
+              <td>{item.az}</td>
+              <td>{item.running}</td>
+              <td>{item.stopped}</td>
+              <td>{item.terminated}</td>
+              <td>{item.retrieved_at}</td>
             </tr>
-          </thead>
-          <tbody>
-            {metrics.map((m) => (
-              <tr key={m.id}>
-                <td>{m.id}</td>
-                <td>{m.resource_name}</td>
-                <td>{m.cpu_usage}</td>
-                <td>{m.memory_usage}</td>
-                <td>{m.status}</td>
-                <td>{new Date(m.created_at).toISOString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+          ))}
+        </tbody>
+      </table>
+
+      <h2>AWS Cost</h2>
+      <pre>{JSON.stringify(costData, null, 2)}</pre>
     </div>
   );
 }
+
+export default App;
