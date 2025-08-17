@@ -1,27 +1,24 @@
-# Stage 1: Build React app
-FROM node:20-alpine AS build
-
-WORKDIR /app/frontend
-
-COPY package.json package-lock.json* ./
-RUN npm install
-
-COPY . ./
-RUN npm run build
-
-# Stage 2: Serve with Node
+# Use Node base image
 FROM node:20-alpine
 
+# Set working directory
 WORKDIR /app/frontend
 
-# Copy only the build and server file
-COPY --from=build /app/frontend/build ./build
-COPY --from=build /app/frontend/package.json ./package.json
-COPY server.js ./server.js
+# Copy package files and install dependencies
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm install
 
-# Install express
-RUN npm install express
+# Copy all frontend code
+COPY frontend/. ./
 
+# Build the React app
+RUN npm run build
+
+# Install serve to run the build folder
+RUN npm install -g serve
+
+# Expose port
 EXPOSE 80
 
-CMD ["node", "server.js"]
+# Launch the app
+CMD ["serve", "-s", "build", "-l", "80"]
