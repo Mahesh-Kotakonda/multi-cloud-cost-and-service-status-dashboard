@@ -1,17 +1,17 @@
 # Stage 1: Build React app
 FROM node:20-alpine AS build
 
-# Set working directory inside container
+# Workdir
 WORKDIR /app/frontend
 
-# Copy package.json and package-lock.json from frontend folder
-COPY frontend/package.json frontend/package-lock.json* ./
+# Copy package.json and package-lock.json first for caching
+COPY ../../app/frontend/package.json ../../app/frontend/package-lock.json* ./
 
 # Install dependencies
 RUN npm install
 
 # Copy all frontend source code
-COPY frontend/. ./
+COPY ../../app/frontend/. ./
 
 # Build the app
 RUN npm run build
