@@ -1,23 +1,22 @@
-
-import json
-import logging
 import os
-import signal
 import sys
+import json
 import time
-from datetime import datetime, timedelta, timezone
+import signal
+import logging
+from datetime import datetime, timezone, timedelta
 
 import boto3
 from botocore.config import Config
-from dateutil.parser import isoparse
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 import mysql.connector
 
 # ----------------------------
-# Logging
+# Logging (adjustable via env)
 # ----------------------------
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
-    level=os.getenv("LOG_LEVEL", "INFO"),
+    level=LOG_LEVEL,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
 )
 log = logging.getLogger("worker")
@@ -27,7 +26,7 @@ log = logging.getLogger("worker")
 # ----------------------------
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 SSM_PARAM_NAME = os.getenv("SSM_PARAM_NAME", "myapp_database_credentials")
-DB_HOST = os.getenv("DB_HOST")  # REQUIRED
+DB_HOST = os.getenv("DB_HOST")
 DB_NAME = os.getenv("DB_NAME", "appdb")
 POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "600"))
 
@@ -56,7 +55,7 @@ signal.signal(signal.SIGTERM, _handle_signal)
 signal.signal(signal.SIGINT, _handle_signal)
 
 # ----------------------------
-# Secrets / DB connection
+# DB Connection
 # ----------------------------
 class TransientDBError(Exception):
     pass
@@ -68,10 +67,6 @@ class TransientDBError(Exception):
     retry=retry_if_exception_type(TransientDBError),
 )
 def get_db_connection():
-    """
-    Fetches credentials from SSM and returns a live MySQL connection.
-    Retries on transient connection errors.
-    """
     try:
         param = ssm.get_parameter(Name=SSM_PARAM_NAME, WithDecryption=True)
         creds = json.loads(param["Parameter"]["Value"])
@@ -92,231 +87,204 @@ def get_db_connection():
         )
         return conn
     except mysql.connector.Error as e:
-        # Treat network/auth errors as transient for retry
         log.warning(f"MySQL connection error: {e}")
         raise TransientDBError(e)
 
-def ensure_schema(conn):
+# ----------------------------
+# Table creation
+# ----------------------------
+def ensure_tables(conn):
     cur = conn.cursor()
+    
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS aws_cost_daily (
-          cost_date DATE NOT NULL,
-          service VARCHAR(128) NOT NULL,
-          amount DECIMAL(18,8) NOT NULL,
-          unit VARCHAR(16) NOT NULL,
-          retrieved_at TIMESTAMP NOT NULL,
-          PRIMARY KEY (cost_date, service)
+        CREATE TABLE IF NOT EXISTS cloud_cost_monthly (
+            cloud VARCHAR(32) NOT NULL,
+            month_year VARCHAR(7) NOT NULL,
+            service VARCHAR(128) NOT NULL,
+            total_amount DECIMAL(18,2) NOT NULL,
+            pct_of_total DECIMAL(5,2) NOT NULL,
+            retrieved_at TIMESTAMP NOT NULL,
+            PRIMARY KEY (cloud, month_year, service)
         ) ENGINE=InnoDB;
     """)
+    
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS aws_ec2_instance_status (
-          instance_id VARCHAR(32) NOT NULL,
-          az VARCHAR(32) NOT NULL,
-          state VARCHAR(32) NOT NULL,
-          system_status VARCHAR(32) NOT NULL,
-          instance_status VARCHAR(32) NOT NULL,
-          retrieved_bucket TIMESTAMP NOT NULL,
-          retrieved_at TIMESTAMP NOT NULL,
-          PRIMARY KEY (instance_id, retrieved_bucket),
-          INDEX idx_bucket (retrieved_bucket)
+        CREATE TABLE IF NOT EXISTS server_status_agg (
+            region VARCHAR(32) NOT NULL,
+            az VARCHAR(32) NOT NULL,
+            running INT NOT NULL,
+            stopped INT NOT NULL,
+            terminated INT NOT NULL,
+            retrieved_at TIMESTAMP NOT NULL,
+            PRIMARY KEY (region, az)
         ) ENGINE=InnoDB;
     """)
+    
+    conn.commit()
     cur.close()
 
 # ----------------------------
-# Collectors
+# Monthly cost helpers
 # ----------------------------
-def time_bucket_10min(ts: datetime) -> datetime:
-    """Round down to 10-minute buckets."""
-    minute = (ts.minute // 10) * 10
-    return ts.replace(minute=minute, second=0, microsecond=0)
-
-@retry(
-    reraise=True,
-    stop=stop_after_attempt(5),
-    wait=wait_exponential(multiplier=1, min=1, max=20),
-)
-def collect_costs(conn):
-    """
-    Collect daily AWS cost per service for yesterday and today (USD).
-    Cost Explorer has DAILY granularity; still safe to refresh every run.
-    """
-    now = datetime.now(timezone.utc).date()
-    start = (now - timedelta(days=1)).strftime("%Y-%m-%d")
-    end = (now + timedelta(days=1)).strftime("%Y-%m-%d")  # CE end is exclusive
-
-    resp = ce.get_cost_and_usage(
-        TimePeriod={"Start": start, "End": end},
-        Granularity="DAILY",
+def fetch_monthly_cost(ce_client, start_date, end_date):
+    resp = ce_client.get_cost_and_usage(
+        TimePeriod={"Start": start_date, "End": end_date},
+        Granularity="MONTHLY",
         Metrics=["UnblendedCost"],
         GroupBy=[{"Type": "DIMENSION", "Key": "SERVICE"}],
     )
-
-    rows = []
-    retrieved_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-    for result_by_time in resp.get("ResultsByTime", []):
-        cost_date = result_by_time["TimePeriod"]["Start"]
-        groups = result_by_time.get("Groups", [])
-        for g in groups:
+    
+    total = 0.0
+    service_costs = {}
+    
+    for result in resp.get("ResultsByTime", []):
+        for g in result.get("Groups", []):
             service = g["Keys"][0]
-            amount = g["Metrics"]["UnblendedCost"]["Amount"]
-            unit = g["Metrics"]["UnblendedCost"]["Unit"]
-            rows.append((cost_date, service, amount, unit, retrieved_at))
+            amount = float(g["Metrics"]["UnblendedCost"]["Amount"])
+            service_costs[service] = amount
+            total += amount
+    
+    for s in service_costs:
+        service_costs[s] = (service_costs[s], round((service_costs[s]/total)*100, 2))
+    
+    return service_costs, total
 
-    if not rows:
-        log.info("No cost rows returned from Cost Explorer.")
-        return
-
+def store_monthly_cost(conn, cloud, month_year, service_costs):
     cur = conn.cursor()
-    cur.executemany(
-        """
-        INSERT INTO aws_cost_daily (cost_date, service, amount, unit, retrieved_at)
-        VALUES (%s, %s, %s, %s, %s)
+    retrieved_at = datetime.utcnow()
+    total_amount = sum(cost for cost, pct in service_costs.values())
+    service_costs_with_total = {'TOTAL': (total_amount, 100.0)}
+    service_costs_with_total.update(service_costs)
+    
+    rows = [
+        (cloud, month_year, s, cost, pct, retrieved_at) 
+        for s, (cost, pct) in service_costs_with_total.items()
+    ]
+    
+    cur.executemany("""
+        INSERT INTO cloud_cost_monthly (cloud, month_year, service, total_amount, pct_of_total, retrieved_at)
+        VALUES (%s,%s,%s,%s,%s,%s)
         ON DUPLICATE KEY UPDATE
-          amount = VALUES(amount),
-          unit = VALUES(unit),
-          retrieved_at = VALUES(retrieved_at)
-        """,
-        rows,
-    )
+            total_amount=VALUES(total_amount),
+            pct_of_total=VALUES(pct_of_total),
+            retrieved_at=VALUES(retrieved_at)
+    """, rows)
+    
+    conn.commit()
     cur.close()
-    log.info(f"Upserted {len(rows)} cost rows.")
+    log.info(f"Stored {len(rows)} services for {cloud} - {month_year}")
 
-@retry(
-    reraise=True,
-    stop=stop_after_attempt(5),
-    wait=wait_exponential(multiplier=1, min=1, max=20),
-)
-def collect_ec2_status(conn):
-    """
-    Collect EC2 state + detailed status for all instances in the region.
-    """
-    instances = []
-    paginator = ec2.get_paginator("describe_instances")
+# ----------------------------
+# Server status helpers
+# ----------------------------
+def fetch_and_aggregate_server_status(ec2_client):
+    paginator = ec2_client.get_paginator('describe_instances')
+    agg = {}
+
     for page in paginator.paginate():
-        for r in page.get("Reservations", []):
-            for i in r.get("Instances", []):
-                instances.append({
-                    "InstanceId": i["InstanceId"],
-                    "Az": i.get("Placement", {}).get("AvailabilityZone", "unknown"),
-                    "State": i.get("State", {}).get("Name", "unknown"),
-                })
+        for reservation in page.get('Reservations', []):
+            for instance in reservation.get('Instances', []):
+                az = instance['Placement']['AvailabilityZone']
+                region = az[:-1]
+                state = instance['State']['Name'].lower()
 
-    # describe_instance_status returns detailed checks; need IncludeAllInstances=True
-    detail = {}
-    paginator = ec2.get_paginator("describe_instance_status")
-    for page in paginator.paginate(IncludeAllInstances=True):
-        for s in page.get("InstanceStatuses", []):
-            iid = s["InstanceId"]
-            detail[iid] = {
-                "SystemStatus": s.get("SystemStatus", {}).get("Status", "unknown"),
-                "InstanceStatus": s.get("InstanceStatus", {}).get("Status", "unknown"),
-            }
+                if (region, az) not in agg:
+                    agg[(region, az)] = {'running':0,'stopped':0,'terminated':0}
+                if state in agg[(region, az)]:
+                    agg[(region, az)][state] += 1
 
-    now = datetime.utcnow().replace(tzinfo=timezone.utc)
-    bucket = time_bucket_10min(now).strftime("%Y-%m-%d %H:%M:%S")
-    retrieved_at = now.strftime("%Y-%m-%d %H:%M:%S")
-
+    retrieved_at = datetime.utcnow()
     rows = []
-    for ins in instances:
-        iid = ins["InstanceId"]
-        rows.append((
-            iid,
-            ins["Az"],
-            ins["State"],
-            detail.get(iid, {}).get("SystemStatus", "unknown"),
-            detail.get(iid, {}).get("InstanceStatus", "unknown"),
-            bucket,
-            retrieved_at,
-        ))
+    region_totals = {}
 
-    if not rows:
-        log.info("No EC2 instances found.")
-        return
+    for (region, az), counts in agg.items():
+        rows.append((region, az, counts['running'], counts['stopped'], counts['terminated'], retrieved_at))
+        if region not in region_totals:
+            region_totals[region] = {'running':0,'stopped':0,'terminated':0}
+        for k in counts:
+            region_totals[region][k] += counts[k]
 
+    for region, counts in region_totals.items():
+        rows.append((region, 'TOTAL', counts['running'], counts['stopped'], counts['terminated'], retrieved_at))
+
+    overall = {'running':0,'stopped':0,'terminated':0}
+    for counts in region_totals.values():
+        for k in overall:
+            overall[k] += counts[k]
+    rows.append(('ALL', 'ALL', overall['running'], overall['stopped'], overall['terminated'], retrieved_at))
+
+    return rows
+
+def store_server_status_agg(conn, rows):
     cur = conn.cursor()
-    cur.executemany(
-        """
-        INSERT INTO aws_ec2_instance_status
-        (instance_id, az, state, system_status, instance_status, retrieved_bucket, retrieved_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+    cur.executemany("""
+        INSERT INTO server_status_agg (region, az, running, stopped, terminated, retrieved_at)
+        VALUES (%s,%s,%s,%s,%s,%s)
         ON DUPLICATE KEY UPDATE
-          az = VALUES(az),
-          state = VALUES(state),
-          system_status = VALUES(system_status),
-          instance_status = VALUES(instance_status),
-          retrieved_at = VALUES(retrieved_at)
-        """,
-        rows,
-    )
+            running=VALUES(running),
+            stopped=VALUES(stopped),
+            terminated=VALUES(terminated),
+            retrieved_at=VALUES(retrieved_at)
+    """, rows)
+    conn.commit()
     cur.close()
-    log.info(f"Upserted {len(rows)} EC2 status rows.")
+    log.info(f"Stored {len(rows)} aggregated server status rows")
+
+def collect_ec2_status(conn):
+    rows = fetch_and_aggregate_server_status(ec2)
+    store_server_status_agg(conn, rows)
+
+# ----------------------------
+# Utility: Print table rows
+# ----------------------------
+def print_table(conn, table_name):
+    cur = conn.cursor()
+    cur.execute(f"SELECT * FROM {table_name} ORDER BY retrieved_at DESC LIMIT 20")
+    rows = cur.fetchall()
+    log.info(f"--- Last rows from {table_name} ---")
+    for row in rows:
+        print(row)
+    cur.close()
 
 # ----------------------------
 # Main loop
 # ----------------------------
-
-def print_all_db_rows(conn):
-    """
-    Prints all rows from aws_cost_daily and aws_ec2_instance_status tables.
-    """
-    cur = conn.cursor(dictionary=True)
-
-    # Print aws_cost_daily
-    print("\n--- aws_cost_daily ---")
-    cur.execute("SELECT * FROM aws_cost_daily ORDER BY cost_date, service")
-    rows = cur.fetchall()
-    if rows:
-        for row in rows:
-            print(row)
-    else:
-        print("No rows found in aws_cost_daily.")
-
-    # Print aws_ec2_instance_status
-    print("\n--- aws_ec2_instance_status ---")
-    cur.execute("SELECT * FROM aws_ec2_instance_status ORDER BY retrieved_bucket, instance_id")
-    rows = cur.fetchall()
-    if rows:
-        for row in rows:
-            print(row)
-    else:
-        print("No rows found in aws_ec2_instance_status.")
-
-    cur.close()
-
 def run_once():
     conn = get_db_connection()
-    try:
-        ensure_schema(conn)
-        collect_costs(conn)
-        collect_ec2_status(conn)
-        # Print all DB rows after collection
-        print_all_db_rows(conn)
-    finally:
-        try:
-            conn.close()
-        except Exception:
-            pass
+    ensure_tables(conn)
+
+    today = datetime.now(timezone.utc)
+    months = [
+        ((today.replace(day=1) - timedelta(days=61)).replace(day=1).strftime("%Y-%m-%d"),
+         (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m-%d")),
+        ((today.replace(day=1) - timedelta(days=31)).replace(day=1).strftime("%Y-%m-%d"),
+         (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m-%d")),
+        (today.replace(day=1).strftime("%Y-%m-%d"), today.strftime("%Y-%m-%d")),
+    ]
+
+    for start, end in months:
+        month_str = datetime.strptime(start, "%Y-%m-%d").strftime("%Y-%m")
+        service_costs, total = fetch_monthly_cost(ce, start, end)
+        log.info(f"Month {month_str} total cost: {total:.2f} USD")
+        for s, (amt, pct) in service_costs.items():
+            log.info(f"  {s}: {amt:.2f} USD ({pct}%)")
+        store_monthly_cost(conn, 'AWS', month_str, service_costs)
+
+    collect_ec2_status(conn)
+
+    # Print last rows of both tables
+    print_table(conn, "cloud_cost_monthly")
+    print_table(conn, "server_status_agg")
+
+    conn.close()
 
 def main():
-    log.info("Worker starting...")
-    log.info(f"AWS_REGION={AWS_REGION} DB_HOST={DB_HOST} DB_NAME={DB_NAME} PARAM={SSM_PARAM_NAME} interval={POLL_INTERVAL_SECONDS}s")
-
     while not _shutdown:
-        start = time.time()
-        try:
-            run_once()
-        except Exception as e:
-            log.exception("Run failed, will retry next interval.")
-        # sleep remainder of interval, responsive to shutdown
-        elapsed = time.time() - start
-        sleep_for = max(1, POLL_INTERVAL_SECONDS - int(elapsed))
-        for _ in range(sleep_for):
-            if _shutdown:
-                break
-            time.sleep(1)
-
-    log.info("Worker stopped. Bye.")
+        run_once()
+        if _shutdown:
+            break
+        log.info(f"Sleeping {POLL_INTERVAL_SECONDS}s before next run...")
+        time.sleep(POLL_INTERVAL_SECONDS)
 
 if __name__ == "__main__":
     main()
