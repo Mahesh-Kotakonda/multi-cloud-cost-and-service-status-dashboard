@@ -1,8 +1,8 @@
-# ----------------------------
+#########################################
 # Application Load Balancer
-# ----------------------------
+#########################################
 resource "aws_lb" "app_alb" {
-  name               = "${var.project_name}-alb"
+  name               = "${substr(var.project_name, 0, 20)}-alb"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [var.security_group_id]
@@ -14,13 +14,13 @@ resource "aws_lb" "app_alb" {
   }
 }
 
-# ----------------------------
+#########################################
 # Target Groups
-# ----------------------------
+#########################################
 
 # Frontend TG (port 3000)
 resource "aws_lb_target_group" "frontend_tg" {
-  name     = "${var.project_name}-frontend-tg"
+  name     = "${substr(var.project_name, 0, 16)}-fe-tg"
   port     = 3000
   protocol = "HTTP"
   vpc_id   = var.vpc_id
@@ -42,13 +42,13 @@ resource "aws_lb_target_group" "frontend_tg" {
 
 # Backend TG (port 8080)
 resource "aws_lb_target_group" "backend_tg" {
-  name     = "${var.project_name}-backend-tg"
+  name     = "${substr(var.project_name, 0, 16)}-be-tg"
   port     = 8080
   protocol = "HTTP"
   vpc_id   = var.vpc_id
 
   health_check {
-    path                = "/aws/ec2-status"
+    path                = "/health" # ✅ use lightweight health endpoint
     interval            = 30
     timeout             = 5
     healthy_threshold   = 2
@@ -62,9 +62,9 @@ resource "aws_lb_target_group" "backend_tg" {
   }
 }
 
-# ----------------------------
+#########################################
 # Listener & Routing
-# ----------------------------
+#########################################
 resource "aws_lb_listener" "app_listener" {
   load_balancer_arn = aws_lb.app_alb.arn
   port              = 80
@@ -94,9 +94,9 @@ resource "aws_lb_listener_rule" "backend_rule" {
   }
 }
 
-# ----------------------------
-# Attach EC2 instances
-# ----------------------------
+#########################################
+# Attach EC2 Instances
+#########################################
 resource "aws_lb_target_group_attachment" "frontend_attach" {
   count            = length(var.target_instance_ids)
   target_group_arn = aws_lb_target_group.frontend_tg.arn
@@ -109,4 +109,27 @@ resource "aws_lb_target_group_attachment" "backend_attach" {
   target_group_arn = aws_lb_target_group.backend_tg.arn
   target_id        = var.target_instance_ids[count.index]
   port             = 8080
+}
+
+#########################################
+# Outputs
+#########################################
+output "alb_arn" {
+  value       = aws_lb.app_alb.arn
+  description = "ARN of the Application Load Balancer"
+}
+
+output "alb_dns" {
+  value       = aws_lb.app_alb.dns_name
+  description = "DNS name of the Application Load Balancer"
+}
+
+output "frontend_target_group_arn" {
+  value       = aws_lb_target_group.frontend_tg.arn
+  description = "ARN of the frontend target group (port 3000)"
+}
+
+output "backend_target_group_arn" {
+  value       = aws_lb_target_group.backend_tg.arn
+  description = "ARN of the backend target group (port 8080)"
 }
