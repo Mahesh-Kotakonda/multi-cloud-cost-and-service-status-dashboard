@@ -191,38 +191,37 @@ def fetch_and_aggregate_server_status(ec2_client):
                 state = instance['State']['Name'].lower()
 
                 if (region, az) not in agg:
-                    agg[(region, az)] = {'running':0,'stopped':0,'terminated':0}
+                    agg[(region, az)] = {'running': 0, 'stopped': 0, 'terminated': 0}
                 if state in agg[(region, az)]:
                     agg[(region, az)][state] += 1
 
     retrieved_at = datetime.utcnow()
     rows = []
     region_totals = {}
-    any_instances = False
 
     # Insert AZ rows if they have at least 1 instance
     for (region, az), counts in agg.items():
         total_instances = counts['running'] + counts['stopped'] + counts['terminated']
         if total_instances > 0:
             rows.append((region, az, counts['running'], counts['stopped'], counts['terminated'], retrieved_at))
-            any_instances = True
 
             if region not in region_totals:
-                region_totals[region] = {'running':0,'stopped':0,'terminated':0}
+                region_totals[region] = {'running': 0, 'stopped': 0, 'terminated': 0}
             for k in counts:
                 region_totals[region][k] += counts[k]
 
-    # Insert Region TOTAL rows if region has at least one instance
+    # Insert Region TOTAL rows
     for region, counts in region_totals.items():
-        total_instances = counts['running'] + counts['stopped'] + counts['terminated']
-        if total_instances > 0:
-            rows.append((region, 'TOTAL', counts['running'], counts['stopped'], counts['terminated'], retrieved_at))
+        rows.append((region, 'TOTAL', counts['running'], counts['stopped'], counts['terminated'], retrieved_at))
 
-    # Insert overall ALL row only if no instances exist at all
-    if not any_instances:
-        rows.append(('ALL', 'ALL', 0, 0, 0, retrieved_at))
+    # Insert overall ALL row (sum of all regions)
+    total_running = sum(counts['running'] for counts in region_totals.values())
+    total_stopped = sum(counts['stopped'] for counts in region_totals.values())
+    total_terminated = sum(counts['terminated'] for counts in region_totals.values())
+    rows.append(('ALL', 'ALL', total_running, total_stopped, total_terminated, retrieved_at))
 
     return rows
+
 
 
 def store_server_status_agg(conn, rows):
