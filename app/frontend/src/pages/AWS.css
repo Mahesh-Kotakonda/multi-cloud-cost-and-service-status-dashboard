@@ -1,0 +1,62 @@
+body {
+  background-color: #f4f7fa;
+  font-family: 'Arial', sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+.aws-dashboard {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 30px;
+}
+
+.section {
+  margin-bottom: 50px;
+}
+
+h1 {
+  color: #333;
+  margin-bottom: 20px;
+}
+
+.ec2-cards, .service-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.ec2-card, .service-card {
+  flex: 1 1 250px;
+  background-color: #fff;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.ec2-card h3, .service-card h4 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: #222;
+}
+
+.total-cost {
+  font-size: 24px;
+  color: #FF8C00;
+  margin-bottom: 15px;
+}
+
+.loading {
+  padding: 50px;
+  font-size: 22px;
+  text-align: center;
+  color: #555;
+}
+
+.month-section {
+  margin-bottom: 40px;
+}
+
+.service-card p {
+  margin: 5px 0;
+}
