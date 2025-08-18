@@ -59,86 +59,86 @@ jobs:
           docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest
           docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-${VERSION}
 
-  # # ===== JOB 2: Deployment Check & Run Worker =====
-  # deployment-check:
-  #   needs: build-and-push-dockerhub
-  #   runs-on: self-hosted
-  #   env:
-  #     AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  #     AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  #     AWS_REGION: us-east-1
-  #     S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
-  #     DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-  #     IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
-  #     VERSION: v${{ github.run_number }}
+  # ===== JOB 2: Deployment Check & Run Worker =====
+  deployment-check:
+    needs: build-and-push-dockerhub
+    runs-on: self-hosted
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: us-east-1
+      S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
+      VERSION: v${{ github.run_number }}
 
-  #   steps:
-  #     - name: Checkout repository
-  #       uses: actions/checkout@v4
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-  #     - name: Verify JSON exists in S3
-  #       run: |
-  #         echo "Checking JSON file in S3..."
-  #         aws s3 ls "$S3_JSON_PATH" >/dev/null 2>&1
-  #         if [ $? -ne 0 ]; then
-  #           echo "JSON file not found in S3. Please check with infra team."
-  #         else
-  #           echo "JSON file exists."
-  #         fi
+      - name: Verify JSON exists in S3
+        run: |
+          echo "Checking JSON file in S3..."
+          aws s3 ls "$S3_JSON_PATH" >/dev/null 2>&1
+          if [ $? -ne 0 ]; then
+            echo "JSON file not found in S3. Please check with infra team."
+          else
+            echo "JSON file exists."
+          fi
 
-  #     - name: Log in to Docker Hub
-  #       uses: docker/login-action@v3
-  #       with:
-  #         username: ${{ secrets.DOCKERHUB_USERNAME }}
-  #         password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       
-  #     - name: Pull Worker Image
-  #       run: |
-  #         docker pull $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest
-  #       env:
-  #         DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-  #         IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
-  #     - name: Deploy Worker on EC2 instances via SSH
-  #       run: |
-  #         PEM_PATH=~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
-  #         aws s3 cp "$S3_JSON_PATH" worker-outputs.json
-  #         DB_HOST=$(jq -r '.db.endpoint | split(":")[0]' worker-outputs.json)
-  #         DB_NAME=$(jq -r '.db.name' worker-outputs.json)
-  #         INSTANCE_IDS=$(jq -r '.ec2_instance_ids[]' worker-outputs.json)
+      - name: Pull Worker Image
+        run: |
+          docker pull $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
+      - name: Deploy Worker on EC2 instances via SSH
+        run: |
+          PEM_PATH=~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
+          aws s3 cp "$S3_JSON_PATH" worker-outputs.json
+          DB_HOST=$(jq -r '.db.endpoint | split(":")[0]' worker-outputs.json)
+          DB_NAME=$(jq -r '.db.name' worker-outputs.json)
+          INSTANCE_IDS=$(jq -r '.ec2_instance_ids[]' worker-outputs.json)
       
-  #         for ID in $INSTANCE_IDS; do
-  #           IP=$(aws ec2 describe-instances --instance-ids $ID \
-  #                --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
-  #           echo "Deploying worker on $IP..."
+          for ID in $INSTANCE_IDS; do
+            IP=$(aws ec2 describe-instances --instance-ids $ID \
+                 --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
+            echo "Deploying worker on $IP..."
       
-  #           ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-  #             "export AWS_ACCESS_KEY_ID='$AWS_ACCESS_KEY_ID'; \
-  #              export AWS_SECRET_ACCESS_KEY='$AWS_SECRET_ACCESS_KEY'; \
-  #              export AWS_REGION='$AWS_REGION'; \
-  #              export DB_HOST='$DB_HOST'; \
-  #              export DB_NAME='$DB_NAME'; \
-  #              export SSM_PARAM_NAME=myapp_database_credentials; \
-  #              echo '$DOCKERHUB_TOKEN' | docker login -u '$DOCKERHUB_USERNAME' --password-stdin; \
-  #              docker pull $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest; \
-  #              docker rm -f worker || true; \
-  #              docker run -d --name worker \
-  #                -e AWS_ACCESS_KEY_ID \
-  #                -e AWS_SECRET_ACCESS_KEY \
-  #                -e AWS_REGION \
-  #                -e SSM_PARAM_NAME \
-  #                -e DB_HOST \
-  #                -e DB_NAME \
-  #                -e POLL_INTERVAL_SECONDS=60000 \
-  #                $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest"
-  #         done
-  #       env:
-  #         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  #         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  #         AWS_REGION: us-east-1
-  #         DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-  #         DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-  #         IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
-  #         S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
+            ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
+              "export AWS_ACCESS_KEY_ID='$AWS_ACCESS_KEY_ID'; \
+               export AWS_SECRET_ACCESS_KEY='$AWS_SECRET_ACCESS_KEY'; \
+               export AWS_REGION='$AWS_REGION'; \
+               export DB_HOST='$DB_HOST'; \
+               export DB_NAME='$DB_NAME'; \
+               export SSM_PARAM_NAME=myapp_database_credentials; \
+               echo '$DOCKERHUB_TOKEN' | docker login -u '$DOCKERHUB_USERNAME' --password-stdin; \
+               docker pull $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest; \
+               docker rm -f worker || true; \
+               docker run -d --name worker \
+                 -e AWS_ACCESS_KEY_ID \
+                 -e AWS_SECRET_ACCESS_KEY \
+                 -e AWS_REGION \
+                 -e SSM_PARAM_NAME \
+                 -e DB_HOST \
+                 -e DB_NAME \
+                 -e POLL_INTERVAL_SECONDS=60000 \
+                 $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest"
+          done
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: us-east-1
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
+          S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
   # ===== JOB 3: Backend Deployment =====
   backend-deployment:
     needs: build-and-push-dockerhub
@@ -271,6 +271,7 @@ jobs:
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
           IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
           S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
+
 
 
 
