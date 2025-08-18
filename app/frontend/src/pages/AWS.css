@@ -11,39 +11,72 @@ body {
   padding: 30px;
 }
 
-.section {
-  margin-bottom: 50px;
+.dashboard-container {
+  display: flex;
+  gap: 30px;
+}
+
+.ec2-dashboard, .cost-dashboard {
+  flex: 1;
+  background-color: #fff;
+  padding: 25px;
+  border-radius: 15px;
+  border: 1px solid #ddd;
+  box-shadow: 0 6px 12px rgba(0,0,0,0.08);
 }
 
 h1 {
   color: #333;
-  margin-bottom: 20px;
+  margin-bottom: 15px;
 }
 
-.ec2-cards, .service-cards {
+label {
+  display: block;
+  margin-bottom: 15px;
+  font-weight: bold;
+  color: #555;
+}
+
+select {
+  margin-left: 10px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+.ec2-summary {
+  font-size: 18px;
+  color: #444;
+  line-height: 1.5;
+  margin-top: 10px;
+}
+
+.service-cards {
   display: flex;
   flex-wrap: wrap;
-  gap: 20px;
+  gap: 15px;
+  margin-top: 10px;
 }
 
-.ec2-card, .service-card {
-  flex: 1 1 250px;
-  background-color: #fff;
-  padding: 20px;
-  border-radius: 12px;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+.service-card {
+  flex: 1 1 200px;
+  background-color: #fefefe;
+  padding: 15px;
+  border-radius: 10px;
+  border: 1px solid #eee;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.05);
 }
 
-.ec2-card h3, .service-card h4 {
+.service-card h4 {
   margin-top: 0;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   color: #222;
 }
 
-.total-cost {
-  font-size: 24px;
-  color: #FF8C00;
-  margin-bottom: 15px;
+.service-card p {
+  margin: 4px 0;
+  font-size: 14px;
+  color: #555;
 }
 
 .loading {
@@ -51,12 +84,4 @@ h1 {
   font-size: 22px;
   text-align: center;
   color: #555;
-}
-
-.month-section {
-  margin-bottom: 40px;
-}
-
-.service-card p {
-  margin: 5px 0;
 }
