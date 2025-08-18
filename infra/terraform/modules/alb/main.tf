@@ -69,19 +69,9 @@ resource "aws_lb_listener" "app_listener" {
   load_balancer_arn = aws_lb.app_alb.arn
   port              = 80
   protocol          = "HTTP"
-
-  # Default action → return 404 for any other paths
-  default_action {
-    type = "fixed-response"
-    fixed_response {
-      content_type = "text/plain"
-      message_body = "Error: Invalid path"
-      status_code  = "404"
-    }
-  }
 }
 
-# Rule 1: /api/aws/* → backend
+# Backend API: /api/aws/* → backend
 resource "aws_lb_listener_rule" "backend_api_rule" {
   listener_arn = aws_lb_listener.app_listener.arn
   priority     = 10
@@ -98,7 +88,7 @@ resource "aws_lb_listener_rule" "backend_api_rule" {
   }
 }
 
-# Rule 2: / → frontend
+# Frontend: only exact root "/" → frontend
 resource "aws_lb_listener_rule" "frontend_root_rule" {
   listener_arn = aws_lb_listener.app_listener.arn
   priority     = 20
