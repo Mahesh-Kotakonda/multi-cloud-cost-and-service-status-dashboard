@@ -17,7 +17,6 @@ function AWS() {
         const ec2Data = await ec2Res.json();
         const costData = await costRes.json();
 
-        // Filter cost entries with percentage > 0
         const filteredCosts = costData.filter(c => c.pct_of_total > 0);
 
         setCloudData({ ec2: ec2Data, costs: filteredCosts });
@@ -32,12 +31,10 @@ function AWS() {
   }, []);
 
   if (loading) {
-    return <div style={{ padding: 20 }}>Loading AWS dashboard...</div>;
+    return <div style={{ padding: 20, fontSize: 18 }}>Loading AWS dashboard...</div>;
   }
 
-  // -------------------------------
-  // EC2 Data Aggregation
-  // -------------------------------
+  // Aggregate EC2 data
   const aggregatedEC2 = {
     totalRunning: 0,
     totalStopped: 0,
@@ -49,102 +46,89 @@ function AWS() {
     aggregatedEC2.totalRunning += item.running;
     aggregatedEC2.totalStopped += item.stopped;
     aggregatedEC2.totalTerminated += item.terminated;
-    aggregatedEC2.regions.push(item); // Keep regional breakdown
+    aggregatedEC2.regions.push(item);
   });
 
-  // -------------------------------
-  // Cost Data Aggregation
-  // -------------------------------
+  // Aggregate Costs
   const totalCost = cloudData.costs.reduce((acc, c) => acc + c.total_amount, 0);
 
+  // Badge colors
+  const getStatusColor = (status) => {
+    if (status === "Running") return "#4CAF50"; // green
+    if (status === "Stopped") return "#F44336"; // red
+    if (status === "Terminated") return "#9E9E9E"; // gray
+    return "#000";
+  };
+
   return (
-    <div style={{ padding: "20px", fontFamily: "Arial, sans-serif" }}>
-      {/* -------------------------------
-          EC2 Instances Section
-          ------------------------------- */}
-      <h2>AWS EC2 Instances Dashboard</h2>
-      <p>
-        This section shows the current status of all EC2 instances across all AWS regions. 
-        The first row displays the total count for the entire account, followed by 
-        detailed per-region breakdowns.
-      </p>
-
-      <table border="1" cellPadding="5" cellSpacing="0" width="100%">
-        <thead>
-          <tr>
-            <th>Region</th>
-            <th>Availability Zone (AZ)</th>
-            <th>Running</th>
-            <th>Stopped</th>
-            <th>Terminated</th>
-            <th>Retrieved At</th>
-          </tr>
-        </thead>
-        <tbody>
-          {/* Total row */}
-          <tr style={{ fontWeight: 'bold', backgroundColor: '#f0f0f0' }}>
-            <td>Total</td>
-            <td>-</td>
-            <td>{aggregatedEC2.totalRunning}</td>
-            <td>{aggregatedEC2.totalStopped}</td>
-            <td>{aggregatedEC2.totalTerminated}</td>
-            <td>-</td>
-          </tr>
-          {/* Per-region rows */}
-          {aggregatedEC2.regions.map((item, idx) => (
-            <tr key={idx}>
-              <td>{item.region}</td>
-              <td>{item.az}</td>
-              <td>{item.running}</td>
-              <td>{item.stopped}</td>
-              <td>{item.terminated}</td>
-              <td>{item.retrieved_at}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div style={{ padding: 20, fontFamily: "Arial, sans-serif", maxWidth: 900, margin: "0 auto" }}>
+      <h1>AWS Dashboard</h1>
 
       {/* -------------------------------
-          AWS Costs Section
-          ------------------------------- */}
-      <h2 style={{ marginTop: "40px" }}>AWS Monthly Costs</h2>
+          EC2 Summary Cards
+      ------------------------------- */}
+      <h2>EC2 Instances Overview</h2>
       <p>
-        This section shows the monthly costs for each AWS service. 
-        The first row shows the total cost across all services, followed by 
-        per-service breakdowns. Only services with costs greater than 0% of the total are shown.
+        The total EC2 instances in your AWS account are shown below, 
+        along with the breakdown per region. Status is indicated by color badges.
       </p>
 
-      <table border="1" cellPadding="5" cellSpacing="0" width="100%">
-        <thead>
-          <tr>
-            <th>Month</th>
-            <th>Service</th>
-            <th>Total ($)</th>
-            <th>% of Total</th>
-            <th>Retrieved At</th>
-          </tr>
-        </thead>
-        <tbody>
-          {/* Total row */}
-          <tr style={{ fontWeight: 'bold', backgroundColor: '#f0f0f0' }}>
-            <td>-</td>
-            <td>Total</td>
-            <td>{totalCost.toFixed(2)}</td>
-            <td>100%</td>
-            <td>-</td>
-          </tr>
-          {/* Per-service rows */}
-          {cloudData.costs.map((c, idx) => (
-            <tr key={idx}>
-              <td>{c.month_year}</td>
-              <td>{c.service}</td>
-              <td>{c.total_amount.toFixed(2)}</td>
-              <td>{c.pct_of_total.toFixed(2)}%</td>
-              <td>{c.retrieved_at}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div style={{ display: "flex", gap: "20px", marginBottom: "20px" }}>
+        <div style={{ flex: 1, padding: "20px", background: "#f0f8ff", borderRadius: 8, textAlign: "center" }}>
+          <h3>Total Running</h3>
+          <span style={{ fontSize: 24, color: getStatusColor("Running") }}>{aggregatedEC2.totalRunning}</span>
+        </div>
+        <div style={{ flex: 1, padding: "20px", background: "#fff0f0", borderRadius: 8, textAlign: "center" }}>
+          <h3>Total Stopped</h3>
+          <span style={{ fontSize: 24, color: getStatusColor("Stopped") }}>{aggregatedEC2.totalStopped}</span>
+        </div>
+        <div style={{ flex: 1, padding: "20px", background: "#f5f5f5", borderRadius: 8, textAlign: "center" }}>
+          <h3>Total Terminated</h3>
+          <span style={{ fontSize: 24, color: getStatusColor("Terminated") }}>{aggregatedEC2.totalTerminated}</span>
+        </div>
+      </div>
+
+      <h3>Regional Breakdown</h3>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "15px" }}>
+        {aggregatedEC2.regions.map((item, idx) => (
+          <div key={idx} style={{ flex: "1 1 200px", padding: 15, border: "1px solid #ddd", borderRadius: 8 }}>
+            <h4>{item.region} - {item.az}</h4>
+            <p><strong>Running:</strong> <span style={{ color: getStatusColor("Running") }}>{item.running}</span></p>
+            <p><strong>Stopped:</strong> <span style={{ color: getStatusColor("Stopped") }}>{item.stopped}</span></p>
+            <p><strong>Terminated:</strong> <span style={{ color: getStatusColor("Terminated") }}>{item.terminated}</span></p>
+            <p style={{ fontSize: 12, color: "#666" }}>Retrieved: {item.retrieved_at}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* -------------------------------
+          Costs Section
+      ------------------------------- */}
+      <h2 style={{ marginTop: 40 }}>AWS Monthly Costs</h2>
+      <p>
+        The total cost across all services is shown below, along with per-service breakdowns. 
+        Only services with cost greater than 0% of total are displayed.
+      </p>
+
+      <div style={{ display: "flex", gap: "20px", marginBottom: "20px" }}>
+        <div style={{ flex: 1, padding: "20px", background: "#fffbe6", borderRadius: 8, textAlign: "center" }}>
+          <h3>Total Cost</h3>
+          <span style={{ fontSize: 24, color: "#FFA500" }}>${totalCost.toFixed(2)}</span>
+        </div>
+      </div>
+
+      <h3>Per-Service Costs</h3>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "15px" }}>
+        {cloudData.costs.map((c, idx) => (
+          <div key={idx} style={{ flex: "1 1 250px", padding: 15, border: "1px solid #ddd", borderRadius: 8 }}>
+            <h4>{c.service}</h4>
+            <p><strong>Month:</strong> {c.month_year}</p>
+            <p><strong>Amount:</strong> ${c.total_amount.toFixed(2)}</p>
+            <p><strong>% of Total:</strong> {c.pct_of_total.toFixed(2)}%</p>
+            <p style={{ fontSize: 12, color: "#666" }}>Retrieved: {c.retrieved_at}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
