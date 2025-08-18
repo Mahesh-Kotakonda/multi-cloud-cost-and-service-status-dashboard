@@ -70,15 +70,19 @@ resource "aws_lb_listener" "app_listener" {
   port              = 80
   protocol          = "HTTP"
 
-  # Default action → frontend
+  # Default action → return 404 for any other paths
   default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.frontend_tg.arn
+    type = "fixed-response"
+    fixed_response {
+      content_type = "text/plain"
+      message_body = "Error: Invalid path"
+      status_code  = "404"
+    }
   }
 }
 
-# Rule: /aws/* → backend
-resource "aws_lb_listener_rule" "backend_rule" {
+# Rule 1: /api/aws/* → backend
+resource "aws_lb_listener_rule" "backend_api_rule" {
   listener_arn = aws_lb_listener.app_listener.arn
   priority     = 10
 
@@ -90,6 +94,23 @@ resource "aws_lb_listener_rule" "backend_rule" {
   condition {
     path_pattern {
       values = ["/api/aws/*"]
+    }
+  }
+}
+
+# Rule 2: / → frontend
+resource "aws_lb_listener_rule" "frontend_root_rule" {
+  listener_arn = aws_lb_listener.app_listener.arn
+  priority     = 20
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.frontend_tg.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/"]
     }
   }
 }
@@ -110,7 +131,3 @@ resource "aws_lb_target_group_attachment" "backend_attach" {
   target_id        = var.target_instance_ids[count.index]
   port             = 8080
 }
-
-
-
-
