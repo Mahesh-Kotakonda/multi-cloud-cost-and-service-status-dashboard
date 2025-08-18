@@ -69,6 +69,12 @@ resource "aws_lb_listener" "app_listener" {
   load_balancer_arn = aws_lb.app_alb.arn
   port              = 80
   protocol          = "HTTP"
+
+  # Default action → forward to frontend TG
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.frontend_tg.arn
+  }
 }
 
 # Backend API: /api/aws/* → backend
@@ -88,7 +94,7 @@ resource "aws_lb_listener_rule" "backend_api_rule" {
   }
 }
 
-# Frontend: only exact root "/" → frontend
+# Frontend: exact root "/" → frontend
 resource "aws_lb_listener_rule" "frontend_root_rule" {
   listener_arn = aws_lb_listener.app_listener.arn
   priority     = 20
