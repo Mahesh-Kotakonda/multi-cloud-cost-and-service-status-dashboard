@@ -48,7 +48,7 @@ resource "aws_lb_target_group" "backend_tg" {
   vpc_id   = var.vpc_id
 
   health_check {
-    path                = "/health" # ✅ use lightweight health endpoint
+    path                = "/docs"
     interval            = 30
     timeout             = 5
     healthy_threshold   = 2
@@ -89,7 +89,7 @@ resource "aws_lb_listener_rule" "backend_rule" {
 
   condition {
     path_pattern {
-      values = ["/aws/*"]
+      values = ["/api/aws/*"]
     }
   }
 }
@@ -110,6 +110,7 @@ resource "aws_lb_target_group_attachment" "backend_attach" {
   target_id        = var.target_instance_ids[count.index]
   port             = 8080
 }
+
 
 
 
