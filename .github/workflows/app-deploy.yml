@@ -10,11 +10,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Guard job to check branch and username
+  pre-check:
+    runs-on: self-hosted
+    outputs:
+      can_deploy: ${{ steps.check.outputs.can_deploy }}
+    steps:
+      - name: Check if deployment should run
+        id: check
+        run: |
+          echo "ref: ${{ github.event.client_payload.ref }}"
+          echo "actor: ${{ github.actor }}"
+          if [[ "${{ github.event.client_payload.ref }}" == "refs/heads/main" && "${{ github.actor }}" == "your-github-username" ]]; then
+            echo "✅ Allowed to deploy"
+            echo "can_deploy=true" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ Not allowed to deploy (must be main branch + correct user)"
+            echo "can_deploy=false" >> $GITHUB_OUTPUT
+
   deploy:
+    needs: pre-check
+    if: needs.pre-check.outputs.can_deploy == 'true'
     runs-on: self-hosted
     environment:
       name: production
-      url: https://your-app-url   # optional
+
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
