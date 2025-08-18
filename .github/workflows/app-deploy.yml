@@ -12,28 +12,29 @@ concurrency:
 jobs:
   # Guard job to check branch and username
   pre-check:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     outputs:
-      can_deploy: ${{ steps.check.outputs.can_deploy }}
+      can_deploy: ${{ steps.set-output.outputs.can_deploy }}
     steps:
       - name: Check if deployment should run
-        id: check
+        id: set-output
         run: |
-          echo "ref: ${{ github.event.client_payload.ref }}"
-          echo "actor: ${{ github.actor }}"
-          if [[ "${{ github.event.client_payload.ref }}" == "refs/heads/main" && "${{ github.actor }}" == "your-github-username" ]]; then
+          echo "ref=${{ github.event.client_payload.ref }}"
+          echo "actor=${{ github.actor }}"
+          if [ "${{ github.event.client_payload.ref }}" = "refs/heads/main" ] && [ "${{ github.actor }}" = "Mahesh-Kotakonda" ]; then
             echo "✅ Allowed to deploy"
             echo "can_deploy=true" >> $GITHUB_OUTPUT
           else
             echo "⚠️ Not allowed to deploy (must be main branch + correct user)"
             echo "can_deploy=false" >> $GITHUB_OUTPUT
+          fi
 
   deploy:
     needs: pre-check
     if: needs.pre-check.outputs.can_deploy == 'true'
     runs-on: self-hosted
     environment:
-      name: production
+      name: production   # 👈 set required reviewers in repo settings
 
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
