@@ -12,7 +12,7 @@ concurrency:
 jobs:
   # Guard job to check branch and username
   pre-check:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     outputs:
       can_deploy: ${{ steps.set-output.outputs.can_deploy }}
     steps:
@@ -21,7 +21,7 @@ jobs:
         run: |
           echo "ref=${{ github.event.client_payload.ref }}"
           echo "actor=${{ github.actor }}"
-          if [ "${{ github.event.client_payload.ref }}" = "refs/heads/main" ] && [ "${{ github.actor }}" = "Mahesh-Kotakonda" ]; then
+          if [ "${{ github.event.client_payload.ref }}" = "refs/heads/main" ]; then
             echo "✅ Allowed to deploy"
             echo "can_deploy=true" >> $GITHUB_OUTPUT
           else
