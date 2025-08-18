@@ -1,82 +1,90 @@
-.aws-dashboard {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 20px;
+body {
+  background-color: #f0f4f8;
+  font-family: 'Arial', sans-serif;
+  margin: 0;
+  padding: 0;
 }
 
-.dashboard-container {
+.aws-dashboard {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 30px;
   display: flex;
   gap: 20px;
 }
 
 .ec2-dashboard, .cost-dashboard {
   flex: 1;
-  background-color: #fff;
-  padding: 20px;
-  border-radius: 12px;
+  background: #ffffff;
+  padding: 25px;
+  border-radius: 16px;
   border: 1px solid #ddd;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+  box-shadow: 0 6px 12px rgba(0,0,0,0.08);
 }
 
 h1 {
-  color: #333;
-  margin-bottom: 10px;
-  font-size: 20px;
+  color: #222;
+  margin-bottom: 15px;
+  font-size: 22px;
 }
 
 label {
   display: block;
-  margin-bottom: 10px;
-  font-weight: bold;
+  margin-bottom: 12px;
+  font-weight: 600;
   color: #555;
 }
 
 select {
   margin-left: 10px;
-  padding: 4px 8px;
-  border-radius: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
   border: 1px solid #ccc;
 }
 
 .ec2-summary {
   font-size: 16px;
-  color: #444;
-  line-height: 1.4;
-  margin-bottom: 10px;
+  color: #333;
+  line-height: 1.5;
+  margin-bottom: 20px;
 }
 
 .ec2-cards, .service-cards {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 10px;
+  gap: 20px;
 }
 
 .ec2-card, .service-card {
-  flex: 1 1 150px;
-  background-color: #fefefe;
-  padding: 10px 12px;
-  border-radius: 8px;
+  flex: 1 1 300px;
+  min-width: 280px;
+  background-color: #fafafa;
+  padding: 18px 20px;
+  border-radius: 12px;
   border: 1px solid #eee;
-  box-shadow: 0 3px 6px rgba(0,0,0,0.05);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
   font-size: 14px;
 }
 
 .ec2-card h3, .service-card h4 {
   margin-top: 0;
-  margin-bottom: 6px;
-  font-size: 14px;
+  margin-bottom: 10px;
+  font-size: 16px;
   color: #222;
 }
 
 .ec2-card p, .service-card p {
-  margin: 2px 0;
-  font-size: 13px;
-  color: #555;
+  margin: 4px 0;
+  font-size: 14px;
+  line-height: 1.4;
 }
 
+.status-running { color: #28a745; font-weight: 600; }
+.status-stopped { color: #ff9800; font-weight: 600; }
+.status-terminated { color: #dc3545; font-weight: 600; }
+
 .loading {
-  padding: 50px;
+  padding: 60px;
   font-size: 20px;
   text-align: center;
   color: #555;
