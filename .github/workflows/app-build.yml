@@ -8,7 +8,7 @@ on:
     paths:
       - 'app/**'
       - 'docker/**'
-      - '.github/workflows/build.yml'
+      - '.github/workflows/app-build.yml'
   pull_request:
     branches:
       - main
@@ -63,11 +63,11 @@ jobs:
   # Trigger deployment workflow after build succeeds
   trigger-deployment:
     needs: build-and-push-dockerhub
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Trigger Deployment Workflow
         uses: peter-evans/repository-dispatch@v3
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}   # built-in token
           event-type: trigger-deployment
           client-payload: '{"ref": "${{ github.ref }}", "run_number": "${{ github.run_number }}"}'
