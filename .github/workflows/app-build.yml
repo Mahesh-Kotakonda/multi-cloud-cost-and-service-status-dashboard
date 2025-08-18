@@ -1,0 +1,73 @@
+name: App DockerHub Build
+
+on:
+  push:
+    branches:
+      - main
+      - blue_green_deployment
+    paths:
+      - 'app/**'
+      - 'docker/**'
+      - '.github/workflows/app-build.yml'
+  pull_request:
+    branches:
+      - main
+      - blue_green_deployment
+    paths:
+      - 'app/**'
+      - 'docker/**'
+  workflow_dispatch:
+
+concurrency:
+  group: docker-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-push-dockerhub:
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/blue_green_deployment')
+    runs-on: self-hosted
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
+      VERSION: v${{ github.run_number }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
+
+      - name: Build & Push Backend
+        run: |
+          docker build -t $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest -t $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-${VERSION} -f docker/backend/Dockerfile .
+          docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest
+          docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-${VERSION}
+
+      - name: Build & Push Worker
+        run: |
+          docker build -t $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest -t $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-${VERSION} -f docker/worker/Dockerfile .
+          docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest
+          docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-${VERSION}
+
+      - name: Build & Push Frontend
+        run: |
+          docker build -t $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest -t $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-${VERSION} -f docker/frontend/Dockerfile .
+          docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest
+          docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-${VERSION}
+
+  # Trigger deployment workflow after build succeeds
+  trigger-deployment:
+    needs: build-and-push-dockerhub
+    runs-on: self-hosted
+    steps:
+      - name: Trigger Deployment Workflow
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}   # built-in token
+          event-type: trigger-deployment
+          client-payload: '{"ref": "${{ github.ref }}", "run_number": "${{ github.run_number }}"}'
