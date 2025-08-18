@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import "./AWS.css"; // import CSS
 
 function AWS() {
   const [cloudData, setCloudData] = useState({ ec2: [], costs: [] });
@@ -17,7 +18,8 @@ function AWS() {
         const ec2Data = await ec2Res.json();
         const costData = await costRes.json();
 
-        const filteredCosts = costData.filter(c => c.pct_of_total > 0);
+        // filter costs > 0% only for service cards
+        const filteredCosts = costData.filter(c => c.pct_of_total > 0 || c.service === "TOTAL");
 
         setCloudData({ ec2: ec2Data, costs: filteredCosts });
         setLoading(false);
@@ -31,104 +33,71 @@ function AWS() {
   }, []);
 
   if (loading) {
-    return <div style={{ padding: 20, fontSize: 18 }}>Loading AWS dashboard...</div>;
+    return <div className="loading">Loading AWS dashboard...</div>;
   }
 
-  // Aggregate EC2 data
-  const aggregatedEC2 = {
-    totalRunning: 0,
-    totalStopped: 0,
-    totalTerminated: 0,
-    regions: []
-  };
-
-  cloudData.ec2.forEach(item => {
-    aggregatedEC2.totalRunning += item.running;
-    aggregatedEC2.totalStopped += item.stopped;
-    aggregatedEC2.totalTerminated += item.terminated;
-    aggregatedEC2.regions.push(item);
-  });
-
-  // Aggregate Costs
-  const totalCost = cloudData.costs.reduce((acc, c) => acc + c.total_amount, 0);
-
-  // Badge colors
   const getStatusColor = (status) => {
-    if (status === "Running") return "#4CAF50"; // green
-    if (status === "Stopped") return "#F44336"; // red
-    if (status === "Terminated") return "#9E9E9E"; // gray
+    if (status === "Running") return "#4CAF50";
+    if (status === "Stopped") return "#F44336";
+    if (status === "Terminated") return "#9E9E9E";
     return "#000";
   };
 
+  // Costs grouped by month
+  const costsByMonth = {};
+  cloudData.costs.forEach(c => {
+    if (!costsByMonth[c.month_year]) costsByMonth[c.month_year] = [];
+    costsByMonth[c.month_year].push(c);
+  });
+
+  const sortedMonths = Object.keys(costsByMonth).sort((a, b) => b.localeCompare(a)); // current month first
+
   return (
-    <div style={{ padding: 20, fontFamily: "Arial, sans-serif", maxWidth: 900, margin: "0 auto" }}>
-      <h1>AWS Dashboard</h1>
-
-      {/* -------------------------------
-          EC2 Summary Cards
-      ------------------------------- */}
-      <h2>EC2 Instances Overview</h2>
-      <p>
-        The total EC2 instances in your AWS account are shown below, 
-        along with the breakdown per region. Status is indicated by color badges.
-      </p>
-
-      <div style={{ display: "flex", gap: "20px", marginBottom: "20px" }}>
-        <div style={{ flex: 1, padding: "20px", background: "#f0f8ff", borderRadius: 8, textAlign: "center" }}>
-          <h3>Total Running</h3>
-          <span style={{ fontSize: 24, color: getStatusColor("Running") }}>{aggregatedEC2.totalRunning}</span>
+    <div className="aws-dashboard">
+      {/* EC2 Dashboard */}
+      <section className="section">
+        <h1>AWS EC2 Dashboard</h1>
+        <div className="ec2-cards">
+          {cloudData.ec2.map((item, idx) => (
+            <div key={idx} className="ec2-card">
+              <h3>{item.region} - {item.az}</h3>
+              <p>Running: <span style={{ color: getStatusColor("Running") }}>{item.running}</span></p>
+              <p>Stopped: <span style={{ color: getStatusColor("Stopped") }}>{item.stopped}</span></p>
+              <p>Terminated: <span style={{ color: getStatusColor("Terminated") }}>{item.terminated}</span></p>
+            </div>
+          ))}
         </div>
-        <div style={{ flex: 1, padding: "20px", background: "#fff0f0", borderRadius: 8, textAlign: "center" }}>
-          <h3>Total Stopped</h3>
-          <span style={{ fontSize: 24, color: getStatusColor("Stopped") }}>{aggregatedEC2.totalStopped}</span>
-        </div>
-        <div style={{ flex: 1, padding: "20px", background: "#f5f5f5", borderRadius: 8, textAlign: "center" }}>
-          <h3>Total Terminated</h3>
-          <span style={{ fontSize: 24, color: getStatusColor("Terminated") }}>{aggregatedEC2.totalTerminated}</span>
-        </div>
-      </div>
+      </section>
 
-      <h3>Regional Breakdown</h3>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "15px" }}>
-        {aggregatedEC2.regions.map((item, idx) => (
-          <div key={idx} style={{ flex: "1 1 200px", padding: 15, border: "1px solid #ddd", borderRadius: 8 }}>
-            <h4>{item.region} - {item.az}</h4>
-            <p><strong>Running:</strong> <span style={{ color: getStatusColor("Running") }}>{item.running}</span></p>
-            <p><strong>Stopped:</strong> <span style={{ color: getStatusColor("Stopped") }}>{item.stopped}</span></p>
-            <p><strong>Terminated:</strong> <span style={{ color: getStatusColor("Terminated") }}>{item.terminated}</span></p>
-            <p style={{ fontSize: 12, color: "#666" }}>Retrieved: {item.retrieved_at}</p>
-          </div>
-        ))}
-      </div>
+      {/* Costs Dashboard */}
+      <section className="section">
+        <h1>AWS Costs Dashboard</h1>
+        {sortedMonths.map(month => {
+          const monthCosts = costsByMonth[month];
+          const totalCostObj = monthCosts.find(c => c.service === "TOTAL");
+          const totalCost = totalCostObj ? totalCostObj.total_amount : 0;
 
-      {/* -------------------------------
-          Costs Section
-      ------------------------------- */}
-      <h2 style={{ marginTop: 40 }}>AWS Monthly Costs</h2>
-      <p>
-        The total cost across all services is shown below, along with per-service breakdowns. 
-        Only services with cost greater than 0% of total are displayed.
-      </p>
+          const services = monthCosts.filter(c => c.service !== "TOTAL" && c.pct_of_total > 0);
 
-      <div style={{ display: "flex", gap: "20px", marginBottom: "20px" }}>
-        <div style={{ flex: 1, padding: "20px", background: "#fffbe6", borderRadius: 8, textAlign: "center" }}>
-          <h3>Total Cost</h3>
-          <span style={{ fontSize: 24, color: "#FFA500" }}>${totalCost.toFixed(2)}</span>
-        </div>
-      </div>
-
-      <h3>Per-Service Costs</h3>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "15px" }}>
-        {cloudData.costs.map((c, idx) => (
-          <div key={idx} style={{ flex: "1 1 250px", padding: 15, border: "1px solid #ddd", borderRadius: 8 }}>
-            <h4>{c.service}</h4>
-            <p><strong>Month:</strong> {c.month_year}</p>
-            <p><strong>Amount:</strong> ${c.total_amount.toFixed(2)}</p>
-            <p><strong>% of Total:</strong> {c.pct_of_total.toFixed(2)}%</p>
-            <p style={{ fontSize: 12, color: "#666" }}>Retrieved: {c.retrieved_at}</p>
-          </div>
-        ))}
-      </div>
+          return (
+            <div key={month} className="month-section">
+              <h2>{month} Costs</h2>
+              <div className="total-cost">
+                Total Cost: ${totalCost.toFixed(2)}
+              </div>
+              <div className="service-cards">
+                {services.map((c, idx) => (
+                  <div key={idx} className="service-card">
+                    <h4>{c.service}</h4>
+                    <p>Amount: ${c.total_amount.toFixed(2)}</p>
+                    <p>% of Total: {c.pct_of_total.toFixed(2)}%</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </section>
     </div>
   );
 }
