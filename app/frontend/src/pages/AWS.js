@@ -35,37 +35,43 @@ function AWS() {
     ? cloudData.ec2.filter(i => i.az === "TOTAL" || i.az === "ALL")
     : cloudData.ec2.filter(i => i.region === selectedRegion);
 
-  // EC2 Summary Paragraph
+  // EC2 Summary Paragraph using API totals
   const getEC2Summary = (data) => {
-    let running = 0, stopped = 0, terminated = 0;
-    data.forEach(d => {
-      running += d.running || 0;
-      stopped += d.stopped || 0;
-      terminated += d.terminated || 0;
-    });
+    const total = data.find(d => d.az === "TOTAL" || d.az === "ALL") || {};
     return selectedRegion === "ALL"
-      ? `There are ${running} running, ${stopped} stopped, and ${terminated} terminated instances in all regions. To view per-region details, please select a region.`
-      : `Region ${selectedRegion} has ${running} running, ${stopped} stopped, and ${terminated} terminated instances. Below are details for availability zones in this region.`;
+      ? `There are ${total.running || 0} running, ${total.stopped || 0} stopped, and ${total.terminated || 0} terminated instances in all regions.`
+      : `Region ${selectedRegion} has ${total.running || 0} running, ${total.stopped || 0} stopped, and ${total.terminated || 0} terminated instances.`;
   };
 
-  // Get months for cost dashboard
+  // Get unique regions for dropdown
+  const regions = cloudData.ec2.filter(i => i.az === "TOTAL").map(i => i.region);
+
+  // Month dropdown with names
+  const monthNames = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
   const months = [...new Set(cloudData.costs.map(c => c.month_year))];
+
   const costsFiltered = selectedMonth
     ? cloudData.costs.filter(c => c.month_year === selectedMonth)
     : cloudData.costs.filter(c => c.month_year === months[0]);
+
+  const formatMonthName = (monthYear) => {
+    const [year, month] = monthYear.split("-");
+    return `${monthNames[parseInt(month) - 1]} ${year}`;
+  };
 
   return (
     <div className="aws-dashboard">
       {/* EC2 Dashboard */}
       <section className="section ec2-dashboard">
-        <h1>Cloud Compute Overview</h1>
+        <h2>Cloud Compute Overview</h2>
         <label>
-          Filter by Region:
+          Region:
           <select value={selectedRegion} onChange={(e) => setSelectedRegion(e.target.value)}>
             <option value="ALL">All Regions</option>
-            {cloudData.ec2
-              .filter(i => i.az === "TOTAL")
-              .map((i, idx) => <option key={idx} value={i.region}>{i.region}</option>)}
+            {regions.map((r, idx) => <option key={idx} value={r}>{r}</option>)}
           </select>
         </label>
 
@@ -73,11 +79,9 @@ function AWS() {
 
         {selectedRegion !== "ALL" && (
           <div className="ec2-cards">
-            {ec2Filtered
-              .filter(d => d.az !== "TOTAL" && d.az !== "ALL")
-              .map((d, idx) => (
+            {ec2Filtered.filter(d => d.az !== "TOTAL" && d.az !== "ALL").map((d, idx) => (
               <div key={idx} className="ec2-card">
-                <h3>AZ: {d.az}</h3>
+                <h4>{d.az}</h4>
                 {d.running > 0 && <p className="status-running">Running: {d.running}</p>}
                 {d.stopped > 0 && <p className="status-stopped">Stopped: {d.stopped}</p>}
                 {d.terminated > 0 && <p className="status-terminated">Terminated: {d.terminated}</p>}
@@ -89,11 +93,11 @@ function AWS() {
 
       {/* Cost Dashboard */}
       <section className="section cost-dashboard">
-        <h1>Cloud Cost Overview</h1>
+        <h2>Cloud Cost Overview</h2>
         <label>
-          Select Month:
+          Month:
           <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)}>
-            {months.map((m, idx) => <option key={idx} value={m}>{m}</option>)}
+            {months.map((m, idx) => <option key={idx} value={m}>{formatMonthName(m)}</option>)}
           </select>
         </label>
 
@@ -101,7 +105,7 @@ function AWS() {
           {costsFiltered.filter(c => c.total_amount > 0).map((c, idx) => (
             <div key={idx} className="service-card">
               <h4>{c.service}</h4>
-              <p>Month: {c.month_year}</p>
+              <p>Month: {formatMonthName(c.month_year)}</p>
               <p>Cost: ${c.total_amount.toLocaleString()}</p>
             </div>
           ))}
