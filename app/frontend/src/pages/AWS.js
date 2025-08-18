@@ -18,29 +18,37 @@ function AWS() {
         const costData = await costRes.json();
 
         setCloudData({ ec2: ec2Data, costs: costData });
+        setSelectedMonth(costData.length ? costData[0].month_year : "");
         setLoading(false);
       } catch (err) {
         console.error(err);
         setLoading(false);
       }
     }
-
     fetchCloudData();
   }, []);
 
   if (loading) return <div className="loading">Loading AWS dashboard...</div>;
 
+  // Filter EC2 based on selected region
   const ec2Filtered = selectedRegion === "ALL"
-    ? cloudData.ec2
+    ? cloudData.ec2.filter(i => i.az === "TOTAL" || i.az === "ALL")
     : cloudData.ec2.filter(i => i.region === selectedRegion);
 
+  // EC2 Summary Paragraph
   const getEC2Summary = (data) => {
-    if (!data.length) return "No EC2 instances available.";
-    let running = 0, stopped = 0;
-    data.forEach(d => { if (d.running) running += d.running; if (d.stopped) stopped += d.stopped; });
-    return `There are ${running} running instances and ${stopped} stopped instances. To view per-region details, please select a region from the dropdown.`;
+    let running = 0, stopped = 0, terminated = 0;
+    data.forEach(d => {
+      running += d.running || 0;
+      stopped += d.stopped || 0;
+      terminated += d.terminated || 0;
+    });
+    return selectedRegion === "ALL"
+      ? `There are ${running} running, ${stopped} stopped, and ${terminated} terminated instances in all regions. To view per-region details, please select a region.`
+      : `Region ${selectedRegion} has ${running} running, ${stopped} stopped, and ${terminated} terminated instances. Below are details for availability zones in this region.`;
   };
 
+  // Get months for cost dashboard
   const months = [...new Set(cloudData.costs.map(c => c.month_year))];
   const costsFiltered = selectedMonth
     ? cloudData.costs.filter(c => c.month_year === selectedMonth)
@@ -65,11 +73,14 @@ function AWS() {
 
         {selectedRegion !== "ALL" && (
           <div className="ec2-cards">
-            {ec2Filtered.map((d, idx) => (
+            {ec2Filtered
+              .filter(d => d.az !== "TOTAL" && d.az !== "ALL")
+              .map((d, idx) => (
               <div key={idx} className="ec2-card">
-                <h3>{d.region}</h3>
+                <h3>AZ: {d.az}</h3>
                 {d.running > 0 && <p className="status-running">Running: {d.running}</p>}
                 {d.stopped > 0 && <p className="status-stopped">Stopped: {d.stopped}</p>}
+                {d.terminated > 0 && <p className="status-terminated">Terminated: {d.terminated}</p>}
               </div>
             ))}
           </div>
