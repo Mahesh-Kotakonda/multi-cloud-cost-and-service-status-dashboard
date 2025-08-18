@@ -1,5 +1,5 @@
 # This workflow manages the Terraform infrastructure for the project.
-name: Infrastructure Creation Workflow
+name: Infrastructure Creation
 
 on:
   # This section triggers the workflow on both pull requests and pushes to the main branch.
@@ -72,6 +72,7 @@ jobs:
         working-directory: infra/terraform
         # Apply the previously created plan. The -auto-approve flag is used for automation.
         run: terraform apply -auto-approve tfplan
+
 
 
 
