@@ -4,26 +4,23 @@
   align-items: center;
   flex-direction: column;
   text-align: center;
-  padding: 30px 15px;
+  padding: 30px 20px; /* reduced height by reducing padding */
   background: linear-gradient(90deg, #0b3d91, #1c6dd0);
   color: white;
-  box-shadow: 0 3px 6px rgba(0,0,0,0.15);
-  max-width: 90%;
-  margin: 0 auto;
-  border-radius: 8px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
 }
 
 .header-title {
-  font-size: 2rem;
-  margin: 0 0 10px 0;
+  font-size: 3rem;
+  margin: 0 0 10px 0; /* smaller bottom margin to reduce height */
   font-weight: 700;
   letter-spacing: 1px;
 }
 
 .header-subtitle {
-  font-size: 1rem;
+  font-size: 1.25rem;
   font-weight: 400;
   margin: 0;
-  max-width: 700px;
-  line-height: 1.4;
+  max-width: 900px;
+  line-height: 1.6;
 }
