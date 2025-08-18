@@ -73,12 +73,12 @@ def fetch_table_rows_by_date(table_name: str, date_column: str = "retrieved_at",
 # -----------------------------
 # API Endpoints
 # -----------------------------
-@app.get("/aws/costs")
+@app.get("/api/aws/costs")
 def get_cloud_costs(months_back: int = Query(2, ge=0, le=12)):
     """Fetch AWS monthly cloud costs for the current month and previous `months_back` months."""
     return fetch_table_rows_by_date("cloud_cost_monthly", months_back=months_back)
 
-@app.get("/aws/ec2-status")
+@app.get("/api/aws/status")
 def get_server_status(months_back: int = Query(2, ge=0, le=12)):
     """Fetch EC2 aggregated server status for the current month and previous `months_back` months."""
     return fetch_table_rows_by_date("server_status_agg", months_back=months_back)
