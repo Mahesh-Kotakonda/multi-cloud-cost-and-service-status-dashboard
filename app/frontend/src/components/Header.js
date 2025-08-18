@@ -7,7 +7,7 @@ function Header() {
       <div className="header-content">
         <h1 className="header-title">Multi-Cloud Monitoring Dashboard</h1>
         <p className="header-subtitle">
-          Real-time updates on cloud costs and service statuses across AWS, GCP, Azure, and more.
+          Real-time updates on cloud costs and service statuses across AWS, GCP, Azure.
         </p>
 
       </div>
@@ -16,4 +16,5 @@ function Header() {
 }
 
 export default Header;
+
 
