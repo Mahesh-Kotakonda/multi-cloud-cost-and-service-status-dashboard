@@ -1,4 +1,4 @@
-name: Terraform Destroy
+name: Infrastructure Destroy
 
 on:
   workflow_dispatch:
@@ -33,7 +33,7 @@ jobs:
         working-directory: infra/terraform
         run: terraform destroy -auto-approve
         
-        # Delete old JSON file from S3 before apply
+        # Delete old Infrastructure output details JSON file from S3 before apply
       - name: Delete old outputs JSON from S3
         run: |
           aws s3 rm s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
