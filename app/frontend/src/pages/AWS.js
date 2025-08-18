@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import "./AWS.css"; // import updated CSS
+import "./AWS.css";
 
 function AWS() {
   const [cloudData, setCloudData] = useState({ ec2: [], costs: [] });
@@ -13,19 +13,16 @@ function AWS() {
         const ec2Res = await fetch("/api/aws/status");
         const costRes = await fetch("/api/aws/costs");
 
-        if (!ec2Res.ok || !costRes.ok) {
-          throw new Error("Failed fetching AWS data");
-        }
+        if (!ec2Res.ok || !costRes.ok) throw new Error("Failed fetching AWS data");
 
         const ec2Data = await ec2Res.json();
         const costData = await costRes.json();
-
         const filteredCosts = costData.filter(c => c.pct_of_total > 0 || c.service === "TOTAL");
 
         setCloudData({ ec2: ec2Data, costs: filteredCosts });
         setLoading(false);
       } catch (err) {
-        console.error("Error fetching AWS data:", err);
+        console.error(err);
         setLoading(false);
       }
     }
@@ -35,27 +32,30 @@ function AWS() {
 
   if (loading) return <div className="loading">Loading AWS dashboard...</div>;
 
-  // Filtered EC2 based on region
   const ec2Filtered = selectedRegion === "ALL"
     ? cloudData.ec2.filter(i => i.az === "ALL")
-    : cloudData.ec2.filter(i => i.region === selectedRegion && i.az === "TOTAL");
+    : cloudData.ec2.filter(i => i.region === selectedRegion);
 
   const getEC2Summary = (data) => {
-    if (!data || data.length === 0) return "No instances are currently running.";
-    const running = data.reduce((acc, cur) => acc + cur.running, 0);
-    const stopped = data.reduce((acc, cur) => acc + cur.stopped, 0);
-    const terminated = data.reduce((acc, cur) => acc + cur.terminated, 0);
+    if (!data.length) return "No instances are currently running.";
 
-    let summary = `Currently, there are ${running} instance${running !== 1 ? "s" : ""} running`;
-    if (stopped) summary += `, ${stopped} instance${stopped !== 1 ? "s" : ""} are stopped`;
-    if (terminated) summary += `, and ${terminated} instance${terminated !== 1 ? "s" : ""} have been terminated.`;
+    // Sum up all properties
+    let running = 0, stopped = 0, terminated = 0;
+    data.forEach(d => {
+      if (d.running) running += d.running;
+      if (d.stopped) stopped += d.stopped;
+      if (d.terminated) terminated += d.terminated;
+    });
 
-    summary += " The infrastructure is stable and monitored as per operational guidelines.";
+    // Build paragraph dynamically
+    let parts = [];
+    if (running) parts.push(`${running} running`);
+    if (stopped) parts.push(`${stopped} stopped`);
+    if (terminated) parts.push(`${terminated} terminated`);
 
-    return summary;
+    return `Currently, there are ${parts.join(", ")} instance${parts.length > 1 ? "s" : ""} in the selected region. Infrastructure is monitored and operating smoothly.`;
   };
 
-  // Cost filtering by month
   const months = [...new Set(cloudData.costs.map(c => c.month_year))];
   const costsFiltered = selectedMonth
     ? cloudData.costs.filter(c => c.month_year === selectedMonth)
@@ -72,13 +72,27 @@ function AWS() {
             Filter by Region: 
             <select value={selectedRegion} onChange={(e) => setSelectedRegion(e.target.value)}>
               <option value="ALL">All Regions</option>
-              {cloudData.ec2.map((i, idx) => i.region !== "ALL" && i.az === "TOTAL" ? (
-                <option key={idx} value={i.region}>{i.region}</option>
-              ) : null)}
+              {cloudData.ec2
+                .filter(i => i.region !== "ALL" && i.az === "TOTAL")
+                .map((i, idx) => <option key={idx} value={i.region}>{i.region}</option>)}
             </select>
           </label>
 
           <p className="ec2-summary">{getEC2Summary(ec2Filtered)}</p>
+
+          {/* Show zone-wise breakdown if region selected */}
+          {selectedRegion !== "ALL" && (
+            <div className="ec2-cards">
+              {ec2Filtered.filter(d => d.az !== "TOTAL").map((d, idx) => (
+                <div key={idx} className="ec2-card">
+                  <h3>{d.az}</h3>
+                  {d.running > 0 && <p>Running: {d.running}</p>}
+                  {d.stopped > 0 && <p>Stopped: {d.stopped}</p>}
+                  {d.terminated > 0 && <p>Terminated: {d.terminated}</p>}
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         {/* Cost Dashboard */}
@@ -88,9 +102,7 @@ function AWS() {
           <label>
             Select Month: 
             <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)}>
-              {months.map((m, idx) => (
-                <option key={idx} value={m}>{m}</option>
-              ))}
+              {months.map((m, idx) => <option key={idx} value={m}>{m}</option>)}
             </select>
           </label>
 
