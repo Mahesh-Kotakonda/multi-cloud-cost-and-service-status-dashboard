@@ -4,23 +4,23 @@
   align-items: center;
   flex-direction: column;
   text-align: center;
-  padding: 30px 20px; /* reduced height by reducing padding */
+  padding: 20px 20px; /* reduced height */
   background: linear-gradient(90deg, #0b3d91, #1c6dd0);
   color: white;
   box-shadow: 0 4px 10px rgba(0,0,0,0.15);
 }
 
 .header-title {
-  font-size: 3rem;
-  margin: 0 0 10px 0; /* smaller bottom margin to reduce height */
+  font-size: 2rem; /* reduced headline size */
+  margin: 0 0 8px 0; /* smaller spacing below title */
   font-weight: 700;
   letter-spacing: 1px;
 }
 
 .header-subtitle {
-  font-size: 1.25rem;
+  font-size: 1rem; /* slightly smaller subtitle */
   font-weight: 400;
   margin: 0;
   max-width: 900px;
-  line-height: 1.6;
+  line-height: 1.4;
 }
