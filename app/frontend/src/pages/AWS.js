@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from "react";
-import "./AWS.css"; // import CSS
+import "./AWS.css";
 
 function AWS() {
   const [cloudData, setCloudData] = useState({ ec2: [], costs: [] });
   const [loading, setLoading] = useState(true);
+  const [selectedRegion, setSelectedRegion] = useState("ALL");
+  const [selectedMonth, setSelectedMonth] = useState("2025-08");
 
   useEffect(() => {
     async function fetchCloudData() {
@@ -11,15 +13,14 @@ function AWS() {
         const ec2Res = await fetch("/api/aws/status");
         const costRes = await fetch("/api/aws/costs");
 
-        if (!ec2Res.ok || !costRes.ok) {
-          throw new Error("Failed fetching AWS data");
-        }
+        if (!ec2Res.ok || !costRes.ok) throw new Error("Failed fetching AWS data");
 
         const ec2Data = await ec2Res.json();
         const costData = await costRes.json();
 
-        // filter costs > 0% only for service cards
-        const filteredCosts = costData.filter(c => c.pct_of_total > 0 || c.service === "TOTAL");
+        const filteredCosts = costData.filter(
+          (c) => c.pct_of_total > 0 || c.service === "TOTAL"
+        );
 
         setCloudData({ ec2: ec2Data, costs: filteredCosts });
         setLoading(false);
@@ -32,9 +33,7 @@ function AWS() {
     fetchCloudData();
   }, []);
 
-  if (loading) {
-    return <div className="loading">Loading AWS dashboard...</div>;
-  }
+  if (loading) return <div className="loading">Loading AWS dashboard...</div>;
 
   const getStatusColor = (status) => {
     if (status === "Running") return "#4CAF50";
@@ -43,22 +42,42 @@ function AWS() {
     return "#000";
   };
 
-  // Costs grouped by month
-  const costsByMonth = {};
-  cloudData.costs.forEach(c => {
-    if (!costsByMonth[c.month_year]) costsByMonth[c.month_year] = [];
-    costsByMonth[c.month_year].push(c);
-  });
+  const totalInstances = cloudData.ec2.find((e) => e.region === "ALL");
 
-  const sortedMonths = Object.keys(costsByMonth).sort((a, b) => b.localeCompare(a)); // current month first
+  const regions = Array.from(new Set(cloudData.ec2.map((e) => e.region))).filter(
+    (r) => r !== "ALL"
+  );
+
+  const filteredEC2 =
+    selectedRegion === "ALL"
+      ? cloudData.ec2
+      : cloudData.ec2.filter((e) => e.region === selectedRegion);
+
+  const months = Array.from(new Set(cloudData.costs.map((c) => c.month_year)));
+  const filteredCosts = cloudData.costs.filter((c) => c.month_year === selectedMonth);
 
   return (
-    <div className="aws-dashboard">
+    <div className="aws-dashboard" style={{ display: "flex", gap: "20px" }}>
       {/* EC2 Dashboard */}
-      <section className="section">
+      <section className="section" style={{ flex: 1 }}>
         <h1>AWS EC2 Dashboard</h1>
+        <h2>Total Instances: {totalInstances ? totalInstances.running : 0}</h2>
+        <label>
+          Filter by Region:
+          <select
+            value={selectedRegion}
+            onChange={(e) => setSelectedRegion(e.target.value)}
+          >
+            <option value="ALL">ALL</option>
+            {regions.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+        </label>
         <div className="ec2-cards">
-          {cloudData.ec2.map((item, idx) => (
+          {filteredEC2.map((item, idx) => (
             <div key={idx} className="ec2-card">
               <h3>{item.region} - {item.az}</h3>
               <p>Running: <span style={{ color: getStatusColor("Running") }}>{item.running}</span></p>
@@ -70,33 +89,40 @@ function AWS() {
       </section>
 
       {/* Costs Dashboard */}
-      <section className="section">
+      <section className="section" style={{ flex: 1 }}>
         <h1>AWS Costs Dashboard</h1>
-        {sortedMonths.map(month => {
-          const monthCosts = costsByMonth[month];
-          const totalCostObj = monthCosts.find(c => c.service === "TOTAL");
-          const totalCost = totalCostObj ? totalCostObj.total_amount : 0;
+        <label>
+          Select Month:
+          <select
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+          >
+            {months.map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
+        </label>
 
-          const services = monthCosts.filter(c => c.service !== "TOTAL" && c.pct_of_total > 0);
-
-          return (
-            <div key={month} className="month-section">
-              <h2>{month} Costs</h2>
+        <div className="month-section">
+          {filteredCosts.length > 0 && (
+            <>
               <div className="total-cost">
-                Total Cost: ${totalCost.toFixed(2)}
+                Total Cost: ${filteredCosts.find(c => c.service === "TOTAL")?.total_amount.toFixed(2) || 0}
               </div>
               <div className="service-cards">
-                {services.map((c, idx) => (
-                  <div key={idx} className="service-card">
-                    <h4>{c.service}</h4>
-                    <p>Amount: ${c.total_amount.toFixed(2)}</p>
-                    <p>% of Total: {c.pct_of_total.toFixed(2)}%</p>
-                  </div>
-                ))}
+                {filteredCosts
+                  .filter(c => c.service !== "TOTAL")
+                  .map((c, idx) => (
+                    <div key={idx} className="service-card">
+                      <h4>{c.service}</h4>
+                      <p>Amount: ${c.total_amount.toFixed(2)}</p>
+                      <p>% of Total: {c.pct_of_total.toFixed(2)}%</p>
+                    </div>
+                  ))}
               </div>
-            </div>
-          );
-        })}
+            </>
+          )}
+        </div>
       </section>
     </div>
   );
