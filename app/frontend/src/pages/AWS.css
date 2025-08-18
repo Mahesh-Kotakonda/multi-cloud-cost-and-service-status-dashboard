@@ -6,7 +6,7 @@ body {
 }
 
 .aws-dashboard {
-  max-width: 1200px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: 20px;
   display: flex;
@@ -25,7 +25,7 @@ body {
 h1 {
   color: #222;
   margin-bottom: 15px;
-  font-size: 20px;
+  font-size: 22px;
 }
 
 label {
@@ -52,17 +52,17 @@ select {
 .ec2-cards, .service-cards {
   display: flex;
   flex-wrap: wrap;
-  gap: 15px;
+  gap: 12px;
 }
 
 .ec2-card, .service-card {
   flex: 1 1 45%;
-  min-width: 200px;
+  min-width: 220px;
   background-color: #fafafa;
-  padding: 15px 18px;
+  padding: 14px 16px;
   border-radius: 10px;
   border: 1px solid #eee;
-  box-shadow: 0 3px 6px rgba(0,0,0,0.04);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.03);
   font-size: 13px;
 }
 
@@ -81,6 +81,7 @@ select {
 
 .status-running { color: #28a745; font-weight: 600; }
 .status-stopped { color: #ff9800; font-weight: 600; }
+.status-terminated { color: #dc3545; font-weight: 600; }
 
 .loading {
   padding: 50px;
