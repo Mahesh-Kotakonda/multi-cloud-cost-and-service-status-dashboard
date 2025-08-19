@@ -19,15 +19,32 @@ jobs:
       - name: Check if deployment should run
         id: set-output
         run: |
-          echo "ref=${{ github.event.client_payload.ref }}"
+          echo "ref=${{ github.ref }}"
+          echo "event_name=${{ github.event_name }}"
           echo "actor=${{ github.actor }}"
-          if [ "${{ github.event.client_payload.ref }}" = "refs/heads/main" ]; then
-            echo "✅ Allowed to deploy"
+
+          # Default block
+          CAN_DEPLOY=false
+
+          # Condition 1: Deployments from main branch
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "✅ Allowed: main branch"
+            CAN_DEPLOY=true
+          fi
+
+          # Condition 2: Manual trigger + correct actor
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.actor }}" = "Mahesh-Kotakonda" ]; then
+            echo "✅ Allowed: manual trigger by Mahesh-Kotakonda"
+            CAN_DEPLOY=true
+          fi
+
+          if [ "$CAN_DEPLOY" = true ]; then
             echo "can_deploy=true" >> $GITHUB_OUTPUT
           else
-            echo "⚠️ Not allowed to deploy (must be main branch + correct user)"
+            echo "⚠️ Not allowed to deploy (must be main branch OR manual trigger by Mahesh-Kotakonda)"
             echo "can_deploy=false" >> $GITHUB_OUTPUT
           fi
+
 
   deploy:
     needs: pre-check
