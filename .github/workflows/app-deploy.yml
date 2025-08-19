@@ -106,29 +106,31 @@ jobs:
                  -e POLL_INTERVAL_SECONDS=60000 \
                  $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest"
 
-            # 2. Health check the new worker container
-            echo "⏳ Waiting for worker_new to stabilize on $IP ..."
-            sleep 30   # wait for container to come up
-
-            ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-              "docker ps --filter 'name=worker_new' --filter 'status=running' | grep worker_new"
-
-            if [ $? -eq 0 ]; then
-              echo "✅ New worker is healthy on $IP. Replacing old worker..."
+              # 2. Health check the new worker container
+              echo "⏳ Waiting for worker_new to stabilize on $IP ..."
+              sleep 30   # wait for container to come up
+              
               ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-                "docker rm -f worker || true; \
-                 docker rename worker_new worker"
-            else
-              echo "❌ New worker failed on $IP. Printing logs..."
-              ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-                "echo '--- Worker Logs (last 200 lines) ---'; \
-                 docker logs --tail=200 worker_new || true; \
-                 echo '--- Worker Inspect Info ---'; \
-                 docker inspect worker_new --format='Status: {{.State.Status}}, ExitCode: {{.State.ExitCode}}, Error: {{.State.Error}}' || true; \
-                 docker rm -f worker_new || true"
-              echo "⚠️ Rollout stopped. Old worker kept on $IP."
-              exit 1
-            fi
+                "docker ps --filter 'name=worker_new' --filter 'status=running' | grep worker_new >/dev/null 2>&1"
+              STATUS=$?
+              
+              if [ $STATUS -eq 0 ]; then
+                echo "✅ New worker is healthy on $IP. Replacing old worker..."
+                ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
+                  "docker rm -f worker || true; \
+                   docker rename worker_new worker"
+              else
+                echo "❌ New worker failed on $IP. Printing logs..."
+                ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
+                  "echo '--- Worker Logs (last 200 lines) ---'; \
+                   docker logs --tail=200 worker_new || true; \
+                   echo '--- Worker Inspect Info ---'; \
+                   docker inspect worker_new --format='Status: {{.State.Status}}, ExitCode: {{.State.ExitCode}}, Error: {{.State.Error}}' || true; \
+                   docker rm -f worker_new || true"
+                echo "⚠️ Rollout stopped. Old worker kept on $IP."
+                exit 1
+              fi
+
           done
 
 
