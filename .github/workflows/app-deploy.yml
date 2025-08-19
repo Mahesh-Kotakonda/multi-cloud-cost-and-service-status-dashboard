@@ -1,3 +1,4 @@
+
 name: App Deployment
 
 on:
@@ -10,47 +11,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Guard job to check branch and username
-  pre-check:
-    runs-on: self-hosted
-    outputs:
-      can_deploy: ${{ steps.set-output.outputs.can_deploy }}
-    steps:
-      - name: Check if deployment should run
-        id: set-output
-        run: |
-          echo "ref=${{ github.ref }}"
-          echo "event_name=${{ github.event_name }}"
-          echo "actor=${{ github.actor }}"
-
-          CAN_DEPLOY=false
-
-          # Condition 1: Deployments from main branch
-          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            echo "✅ Allowed: main branch"
-            CAN_DEPLOY=true
-          fi
-
-          # Condition 2: Manual trigger + correct actor
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.actor }}" = "Mahesh-Kotakonda" ]; then
-            echo "✅ Allowed: manual trigger by Mahesh-Kotakonda"
-            CAN_DEPLOY=true
-          fi
-
-          if [ "$CAN_DEPLOY" = true ]; then
-            echo "can_deploy=true" >> $GITHUB_OUTPUT
-          else
-            echo "⚠️ Not allowed to deploy (must be main branch OR manual trigger by Mahesh-Kotakonda)"
-            echo "can_deploy=false" >> $GITHUB_OUTPUT
-          fi
-
   deploy:
-    needs: pre-check
-    if: needs.pre-check.outputs.can_deploy == 'true'
     runs-on: self-hosted
     environment:
       name: production
-
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -79,6 +43,7 @@ jobs:
           echo "DB_USER=$DB_USER" >> $GITHUB_ENV
           echo "DB_PASS=$DB_PASS" >> $GITHUB_ENV
 
+      # Deploy Worker
       - name: Deploy Worker
         run: |
           PEM_PATH=~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
@@ -86,49 +51,19 @@ jobs:
           DB_HOST=$(jq -r '.db.endpoint | split(":")[0]' worker-outputs.json)
           DB_NAME=$(jq -r '.db.name' worker-outputs.json)
           INSTANCE_IDS=$(jq -r '.ec2_instance_ids[]' worker-outputs.json)
-
           for ID in $INSTANCE_IDS; do
             IP=$(aws ec2 describe-instances --instance-ids $ID --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
-
-            # Remove previous failed container
-            ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-                "sudo docker rm -f worker_new >/dev/null 2>&1 || true"
-
-            # Deploy new container
             ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
               "echo '$DOCKERHUB_TOKEN' | docker login -u '$DOCKERHUB_USERNAME' --password-stdin; \
                docker pull $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest; \
-               docker run -d --name worker_new \
+               docker rm -f worker || true; \
+               docker run -d --name worker \
                  -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_REGION \
                  -e SSM_PARAM_NAME=myapp_database_credentials \
                  -e DB_HOST='$DB_HOST' -e DB_NAME='$DB_NAME' \
                  -e POLL_INTERVAL_SECONDS=60000 \
                  $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest"
-
-            echo "⏳ Waiting for worker_new to stabilize on $IP ..."
-            sleep 30
-
-            STATUS=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-              "sudo docker ps --filter 'name=worker_new' --filter 'status=running' | grep worker_new >/dev/null 2>&1; echo \$?")
-
-            if [ "$STATUS" -eq 0 ]; then
-              echo "✅ New worker is healthy on $IP. Replacing old worker..."
-              ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-                "sudo docker rm -f worker || true; sudo docker rename worker_new worker"
-            else
-              echo "❌ New worker failed on $IP. Printing logs..."
-              ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-                "echo '--- Worker Logs (last 200 lines) ---'; \
-                 sudo docker logs --tail=200 worker_new || true; \
-                 echo '--- Worker Inspect Info ---'; \
-                 sudo docker inspect worker_new --format='Status: {{.State.Status}}, ExitCode: {{.State.ExitCode}}, Error: {{.State.Error}}' || true; \
-                 sudo docker rm -f worker_new || true"
-              echo "⚠️ Rollout stopped. Old worker kept on $IP."
-              exit 1
-            fi
           done
-
-
 
       # Deploy Backend
       - name: Deploy Backend
