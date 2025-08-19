@@ -1,3 +1,4 @@
+
 import os
 import sys
 import json
@@ -29,8 +30,6 @@ SSM_PARAM_NAME = os.getenv("SSM_PARAM_NAME", "myapp_database_credentials")
 DB_HOST = os.getenv("DB_HOST")
 DB_NAME = os.getenv("DB_NAME", "appdb")
 POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "60000"))
-DB_USER = os.getenv("DB_USER")
-DB_PASS = os.getenv("DB_PASS")
 
 if not DB_HOST:
     log.error("DB_HOST is required (RDS endpoint).")
@@ -69,21 +68,21 @@ class TransientDBError(Exception):
     retry=retry_if_exception_type(TransientDBError),
 )
 def get_db_connection():
-    # try:
-    #     param = ssm.get_parameter(Name=SSM_PARAM_NAME, WithDecryption=True)
-    #     creds = json.loads(param["Parameter"]["Value"])
-    #     user = creds["username"]
-    #     password = creds["password"]
-    # except Exception as e:
-    #     log.exception("Failed to fetch DB creds from SSM.")
-    #     raise
+    try:
+        param = ssm.get_parameter(Name=SSM_PARAM_NAME, WithDecryption=True)
+        creds = json.loads(param["Parameter"]["Value"])
+        user = creds["username"]
+        password = creds["password"]
+    except Exception as e:
+        log.exception("Failed to fetch DB creds from SSM.")
+        raise
 
     try:
         conn = mysql.connector.connect(
             host=DB_HOST,
             database=DB_NAME,
-            user=DB_USER,
-            password=DB_PASS,
+            user=user,
+            password=password,
             autocommit=True,
             connection_timeout=10,
         )
