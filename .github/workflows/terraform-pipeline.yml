@@ -2,20 +2,20 @@
 name: Infrastructure Creation
 
 on:
-  # This section triggers the workflow on both pull requests and pushes to the main branch.
-  # The `paths` filter ensures the workflow only runs if files within infra/terraform change.
   pull_request:
     branches:
       - main
+      - frontend-and-backend-blue-green-deployment
     paths:
       - 'infra/terraform/**'
   push:
     branches:
       - main
+      - frontend-and-backend-blue-green-deployment
     paths:
       - 'infra/terraform/**'
-  # This new section allows the workflow to be triggered manually from the GitHub Actions UI.
   workflow_dispatch:
+
 
 # Define a single job named 'terraform' to handle all steps.
 jobs:
@@ -68,10 +68,11 @@ jobs:
       # but only if the user is the specified GitHub actor.
       - name: Terraform Apply
         id: apply
-        if: (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && github.actor == 'Mahesh-Kotakonda'
+        if: (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main'|| github.ref == 'refs/heads/frontend-and-backend-blue-green-deployment')) && github.actor == 'Mahesh-Kotakonda'
         working-directory: infra/terraform
         # Apply the previously created plan. The -auto-approve flag is used for automation.
         run: terraform apply -auto-approve tfplan
+
 
 
 
