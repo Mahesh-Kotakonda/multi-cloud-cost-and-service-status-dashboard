@@ -30,6 +30,8 @@ DB_HOST = os.getenv("DB_HOST")
 DB_NAME = os.getenv("DB_NAME", "appdb")
 POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "60000"))
 
+aws_access_key_id = os.environ.get("AWS_ACCESS_KEY_ID")
+aws_secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
 if not DB_HOST:
     log.error("DB_HOST is required (RDS endpoint).")
     sys.exit(1)
@@ -38,9 +40,18 @@ if not DB_HOST:
 # AWS Clients
 # ----------------------------
 boto_cfg = Config(retries={"max_attempts": 5, "mode": "standard"})
-ssm = boto3.client("ssm", region_name=AWS_REGION, config=boto_cfg)
-ec2 = boto3.client("ec2", region_name=AWS_REGION, config=boto_cfg)
-ce = boto3.client("ce", region_name=AWS_REGION, config=boto_cfg)
+
+aws_kwargs = {
+    "region_name": AWS_REGION,
+    "config": boto_cfg,
+}
+if aws_access_key_id and aws_secret_access_key:
+    aws_kwargs["aws_access_key_id"] = aws_access_key_id
+    aws_kwargs["aws_secret_access_key"] = aws_secret_access_key
+
+ssm = boto3.client("ssm", **aws_kwargs)
+ec2 = boto3.client("ec2", **aws_kwargs)
+ce = boto3.client("ce", **aws_kwargs)
 
 # ----------------------------
 # Graceful shutdown
@@ -185,7 +196,12 @@ def fetch_and_aggregate_server_status_all_regions():
     agg = {}
 
     for region in regions:
-        regional_client = boto3.client('ec2', region_name=region, config=boto_cfg)
+        region_kwargs = {"region_name": region, "config": boto_cfg}
+        if aws_access_key_id and aws_secret_access_key:
+            region_kwargs["aws_access_key_id"] = aws_access_key_id
+            region_kwargs["aws_secret_access_key"] = aws_secret_access_key
+
+        regional_client = boto3.client('ec2', **region_kwargs)
         paginator = regional_client.get_paginator('describe_instances')
 
         for page in paginator.paginate():
@@ -224,13 +240,9 @@ def fetch_and_aggregate_server_status_all_regions():
 
     return rows
 
-
 def collect_ec2_status(conn):
     rows = fetch_and_aggregate_server_status_all_regions()
     store_server_status_agg(conn, rows)
-
-
-
 
 def store_server_status_agg(conn, rows):
     cur = conn.cursor()
