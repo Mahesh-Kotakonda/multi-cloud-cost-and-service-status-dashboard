@@ -4,19 +4,33 @@ resource "aws_security_group" "ec2_sg" {
   description = "Security group for EC2 instances (frontend & backend apps)"
   vpc_id      = var.vpc_id
 
-  # Allow only ALB to talk to EC2 (frontend 3000 + backend 8080)
+  # Allow only ALB to talk to EC2
   ingress {
     from_port       = 3000
     to_port         = 3000
     protocol        = "tcp"
-    security_groups = [aws_security_group.alb_sg.id]  # only ALB can access frontend
+    security_groups = [aws_security_group.alb_sg.id]  # frontend blue
+  }
+
+  ingress {
+    from_port       = 3001
+    to_port         = 3001
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb_sg.id]  # frontend green
   }
 
   ingress {
     from_port       = 8080
     to_port         = 8080
     protocol        = "tcp"
-    security_groups = [aws_security_group.alb_sg.id]  # only ALB can access backend
+    security_groups = [aws_security_group.alb_sg.id]  # backend blue
+  }
+
+  ingress {
+    from_port       = 8081
+    to_port         = 8081
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb_sg.id]  # backend green
   }
 
   # Optional: allow SSH only from your IP (replace with your IP)
@@ -39,6 +53,7 @@ resource "aws_security_group" "ec2_sg" {
     Project = var.project_name
   }
 }
+
 
 # Security Group for ALB
 resource "aws_security_group" "alb_sg" {
@@ -100,4 +115,5 @@ resource "aws_security_group" "db_sg" {
     Project = var.project_name
   }
 }
+
 
