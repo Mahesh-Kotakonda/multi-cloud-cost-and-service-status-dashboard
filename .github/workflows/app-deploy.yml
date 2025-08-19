@@ -64,7 +64,7 @@ jobs:
           echo "DB_USER=$DB_USER" >> $GITHUB_ENV
           echo "DB_PASS=$DB_PASS" >> $GITHUB_ENV
 
-      # Deploy Worker
+      # Deploy Worker (instance-by-instance safe rollout)
       - name: Deploy Worker
         run: |
           PEM_PATH=~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
@@ -72,19 +72,48 @@ jobs:
           DB_HOST=$(jq -r '.db.endpoint | split(":")[0]' worker-outputs.json)
           DB_NAME=$(jq -r '.db.name' worker-outputs.json)
           INSTANCE_IDS=$(jq -r '.ec2_instance_ids[]' worker-outputs.json)
+
           for ID in $INSTANCE_IDS; do
-            IP=$(aws ec2 describe-instances --instance-ids $ID --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
+            echo "🔄 Deploying worker to instance: $ID"
+            IP=$(aws ec2 describe-instances --instance-ids $ID \
+                 --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
+
+            # 1. Pull and start NEW worker container (with unique name)
             ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
               "echo '$DOCKERHUB_TOKEN' | docker login -u '$DOCKERHUB_USERNAME' --password-stdin; \
                docker pull $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest; \
-               docker rm -f worker || true; \
-               docker run -d --name worker \
+               docker run -d --name worker_new \
                  -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_REGION \
                  -e SSM_PARAM_NAME=myapp_database_credentials \
                  -e DB_HOST='$DB_HOST' -e DB_NAME='$DB_NAME' \
                  -e POLL_INTERVAL_SECONDS=60000 \
                  $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest"
+
+            # 2. Health check the new worker container
+            echo "⏳ Waiting for worker_new to stabilize on $IP ..."
+            sleep 30   # wait for container to come up
+
+            ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
+              "docker ps --filter 'name=worker_new' --filter 'status=running' | grep worker_new"
+
+            if [ $? -eq 0 ]; then
+              echo "✅ New worker is healthy on $IP. Replacing old worker..."
+              ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
+                "docker rm -f worker || true; \
+                 docker rename worker_new worker"
+            else
+              echo "❌ New worker failed on $IP. Printing logs..."
+              ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
+                "echo '--- Worker Logs (last 200 lines) ---'; \
+                 docker logs --tail=200 worker_new || true; \
+                 echo '--- Worker Inspect Info ---'; \
+                 docker inspect worker_new --format='Status: {{.State.Status}}, ExitCode: {{.State.ExitCode}}, Error: {{.State.Error}}' || true; \
+                 docker rm -f worker_new || true"
+              echo "⚠️ Rollout stopped. Old worker kept on $IP."
+              exit 1
+            fi
           done
+
 
       # Deploy Backend
       - name: Deploy Backend
