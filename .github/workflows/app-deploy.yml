@@ -99,12 +99,14 @@ jobs:
             ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
               "echo '$DOCKERHUB_TOKEN' | docker login -u '$DOCKERHUB_USERNAME' --password-stdin; \
                docker pull $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest; \
+               docker rm -f worker_new 2>/dev/null || true; \
                docker run -d --name worker_new \
                  -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_REGION \
                  -e SSM_PARAM_NAME=myapp_database_credentials \
                  -e DB_HOST='$DB_HOST' -e DB_NAME='$DB_NAME' \
                  -e POLL_INTERVAL_SECONDS=60000 \
                  $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest"
+
 
               # 2. Health check the new worker container
               echo "⏳ Waiting for worker_new to stabilize on $IP ..."
