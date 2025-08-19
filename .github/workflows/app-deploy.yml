@@ -102,6 +102,7 @@ jobs:
                  -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_REGION \
                  -e SSM_PARAM_NAME=myapp_database_credentials \
                  -e DB_HOST='$DB_HOST' -e DB_NAME='$DB_NAME' \
+                 -e DB_USER="$DB_USER" -e DB_PASS="$DB_PASS" \
                  -e POLL_INTERVAL_SECONDS=60000 \
                  $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest"
 
