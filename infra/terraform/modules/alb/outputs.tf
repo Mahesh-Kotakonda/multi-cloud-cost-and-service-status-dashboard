@@ -11,15 +11,25 @@ output "alb_dns" {
   description = "DNS name of the Application Load Balancer"
 }
 
-# ----------------------------
-# Target Group Outputs
-# ----------------------------
-output "frontend_target_group_arn" {
-  value       = aws_lb_target_group.frontend_tg.arn
-  description = "ARN of the frontend target group (port 3000)"
+# Frontend Target Groups
+output "frontend_blue_target_group_arn" {
+  description = "ARN of the frontend blue target group"
+  value       = aws_lb_target_group.frontend_blue_tg.arn
 }
 
-output "backend_target_group_arn" {
-  value       = aws_lb_target_group.backend_tg.arn
-  description = "ARN of the backend target group (port 8080)"
+output "frontend_green_target_group_arn" {
+  description = "ARN of the frontend green target group"
+  value       = aws_lb_target_group.frontend_green_tg.arn
 }
+
+# Backend Target Groups
+output "backend_blue_target_group_arn" {
+  description = "ARN of the backend blue target group"
+  value       = aws_lb_target_group.backend_blue_tg.arn
+}
+
+output "backend_green_target_group_arn" {
+  description = "ARN of the backend green target group"
+  value       = aws_lb_target_group.backend_green_tg.arn
+}
+
