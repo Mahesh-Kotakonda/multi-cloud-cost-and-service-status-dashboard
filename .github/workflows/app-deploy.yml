@@ -140,49 +140,75 @@ jobs:
       #########################################
       - name: Deploy Backend (Blue-Green)
         run: |
+          set -euo pipefail
           PEM_PATH=~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
           aws s3 cp "$S3_JSON_PATH" backend-outputs.json
+      
           DB_ENDPOINT=$(jq -r '.db.endpoint' backend-outputs.json)
-          DB_HOST=$(echo $DB_ENDPOINT | cut -d: -f1)
-          DB_PORT=$(echo $DB_ENDPOINT | cut -d: -f2)
+          DB_HOST=$(echo "$DB_ENDPOINT" | cut -d: -f1)
+          DB_PORT=$(echo "$DB_ENDPOINT" | cut -d: -f2)
           DB_NAME=$(jq -r '.db.name' backend-outputs.json)
+      
           INSTANCE_IDS=$(jq -r '.ec2_instance_ids[]' backend-outputs.json)
           BACKEND_BLUE_TG=$(jq -r '.backend_blue_tg_arn' backend-outputs.json)
           BACKEND_GREEN_TG=$(jq -r '.backend_green_tg_arn' backend-outputs.json)
       
           for ID in $INSTANCE_IDS; do
-            IP=$(aws ec2 describe-instances --instance-ids $ID --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
+            IP=$(aws ec2 describe-instances --instance-ids "$ID" --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
       
-            CURRENT=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-              "docker ps --format '{{.Names}}' | grep backend- || true")
-            echo "🔎 Current backend container on $IP: $CURRENT"
+            # FIRST: check if any backend containers are running on this instance
+            BACKEND_RUNNING_COUNT=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
+              "docker ps --format '{{.Names}}' | grep -E '^backend-(blue|green)$' -c || true")
       
-            if [ -z "$CURRENT" ]; then
-              echo "First deploy → run both blue (8080) and green (8081)"
+            if [ "$BACKEND_RUNNING_COUNT" -eq 0 ]; then
+              echo "[BACKEND][$ID] First deploy → run both blue:8080 and green:8081; register BLUE TG"
               ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
                 "echo '$DOCKERHUB_TOKEN' | docker login -u '$DOCKERHUB_USERNAME' --password-stdin; \
                  docker pull $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest; \
-                 docker run -d --name backend-blue -e DB_HOST='$DB_HOST' -e DB_PORT='$DB_PORT' -e DB_NAME='$DB_NAME' -e DB_USER='${DB_USER}' -e DB_PASS='${DB_PASS}' -p 8080:8000 $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest; \
+                 docker rm -f backend-blue backend-green || true; \
+                 docker run -d --name backend-blue  -e DB_HOST='$DB_HOST' -e DB_PORT='$DB_PORT' -e DB_NAME='$DB_NAME' -e DB_USER='${DB_USER}' -e DB_PASS='${DB_PASS}' -p 8080:8000 $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest; \
                  docker run -d --name backend-green -e DB_HOST='$DB_HOST' -e DB_PORT='$DB_PORT' -e DB_NAME='$DB_NAME' -e DB_USER='${DB_USER}' -e DB_PASS='${DB_PASS}' -p 8081:8000 $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest"
-              aws elbv2 register-targets --target-group-arn ${BACKEND_BLUE_TG} --targets Id=$ID,Port=8080
+              aws elbv2 register-targets   --target-group-arn "$BACKEND_BLUE_TG"  --targets Id="$ID",Port=8080
+              # (optional) keep green unregistered until next switch
+              continue
+            fi
+      
+            # SUBSEQUENT RUNS: decide by which TG currently has THIS instance registered
+            BLUE_HAS_ID=$(aws elbv2 describe-target-health --target-group-arn "$BACKEND_BLUE_TG"  --query "length(TargetHealthDescriptions[?Target.Id=='$ID'])"  --output text)
+            GREEN_HAS_ID=$(aws elbv2 describe-target-health --target-group-arn "$BACKEND_GREEN_TG" --query "length(TargetHealthDescriptions[?Target.Id=='$ID'])"  --output text)
+      
+            if [ "$BLUE_HAS_ID" -gt 0 ]; then
+              echo "[BACKEND][$ID] Active TG=BLUE → deploy GREEN then switch"
+              ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
+                "docker rm -f backend-green || true; \
+                 echo '$DOCKERHUB_TOKEN' | docker login -u '$DOCKERHUB_USERNAME' --password-stdin; \
+                 docker pull $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest; \
+                 docker run -d --name backend-green -e DB_HOST='$DB_HOST' -e DB_PORT='$DB_PORT' -e DB_NAME='$DB_NAME' -e DB_USER='${DB_USER}' -e DB_PASS='${DB_PASS}' -p 8081:8000 $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest"
+              aws elbv2 register-targets   --target-group-arn "$BACKEND_GREEN_TG" --targets Id="$ID",Port=8081
+              aws elbv2 deregister-targets --target-group-arn "$BACKEND_BLUE_TG"  --targets Id="$ID",Port=8080
+      
+            elif [ "$GREEN_HAS_ID" -gt 0 ]; then
+              echo "[BACKEND][$ID] Active TG=GREEN → deploy BLUE then switch"
+              ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
+                "docker rm -f backend-blue || true; \
+                 echo '$DOCKERHUB_TOKEN' | docker login -u '$DOCKERHUB_USERNAME' --password-stdin; \
+                 docker pull $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest; \
+                 docker run -d --name backend-blue -e DB_HOST='$DB_HOST' -e DB_PORT='$DB_PORT' -e DB_NAME='$DB_NAME' -e DB_USER='${DB_USER}' -e DB_PASS='${DB_PASS}' -p 8080:8000 $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest"
+              aws elbv2 register-targets   --target-group-arn "$BACKEND_BLUE_TG"  --targets Id="$ID",Port=8080
+              aws elbv2 deregister-targets --target-group-arn "$BACKEND_GREEN_TG" --targets Id="$ID",Port=8081
+      
             else
-              if [[ "$CURRENT" == "backend-blue" ]]; then
-                echo "Blue running → deploy green"
-                ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-                  "docker rm -f backend-green || true; \
-                   docker run -d --name backend-green -e DB_HOST='$DB_HOST' -e DB_PORT='$DB_PORT' -e DB_NAME='$DB_NAME' -e DB_USER='${DB_USER}' -e DB_PASS='${DB_PASS}' -p 8081:8000 $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest"
-                aws elbv2 register-targets --target-group-arn ${BACKEND_GREEN_TG} --targets Id=$ID,Port=8081
-                aws elbv2 deregister-targets --target-group-arn ${BACKEND_BLUE_TG} --targets Id=$ID,Port=8080
-              else
-                echo "Green running → deploy blue"
-                ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-                  "docker rm -f backend-blue || true; \
-                   docker run -d --name backend-blue -e DB_HOST='$DB_HOST' -e DB_PORT='$DB_PORT' -e DB_NAME='$DB_NAME' -e DB_USER='${DB_USER}' -e DB_PASS='${DB_PASS}' -p 8080:8000 $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest"
-                aws elbv2 register-targets --target-group-arn ${BACKEND_BLUE_TG} --targets Id=$ID,Port=8080
-                aws elbv2 deregister-targets --target-group-arn ${BACKEND_GREEN_TG} --targets Id=$ID,Port=8081
-              fi
+              echo "[BACKEND][$ID] No TG has this instance → treat as first deploy"
+              ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
+                "echo '$DOCKERHUB_TOKEN' | docker login -u '$DOCKERHUB_USERNAME' --password-stdin; \
+                 docker pull $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest; \
+                 docker rm -f backend-blue backend-green || true; \
+                 docker run -d --name backend-blue  -e DB_HOST='$DB_HOST' -e DB_PORT='$DB_PORT' -e DB_NAME='$DB_NAME' -e DB_USER='${DB_USER}' -e DB_PASS='${DB_PASS}' -p 8080:8000 $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest; \
+                 docker run -d --name backend-green -e DB_HOST='$DB_HOST' -e DB_PORT='$DB_PORT' -e DB_NAME='$DB_NAME' -e DB_USER='${DB_USER}' -e DB_PASS='${DB_PASS}' -p 8081:8000 $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest"
+              aws elbv2 register-targets   --target-group-arn "$BACKEND_BLUE_TG"  --targets Id="$ID",Port=8080
             fi
           done
+
 
       
       #########################################
@@ -190,44 +216,70 @@ jobs:
       #########################################
       - name: Deploy Frontend (Blue-Green)
         run: |
+          set -euo pipefail
           PEM_PATH=~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
           aws s3 cp "$S3_JSON_PATH" frontend-outputs.json
+      
           INSTANCE_IDS=$(jq -r '.ec2_instance_ids[]' frontend-outputs.json)
           FRONTEND_BLUE_TG=$(jq -r '.frontend_blue_tg_arn' frontend-outputs.json)
           FRONTEND_GREEN_TG=$(jq -r '.frontend_green_tg_arn' frontend-outputs.json)
       
           for ID in $INSTANCE_IDS; do
-            IP=$(aws ec2 describe-instances --instance-ids $ID --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
+            IP=$(aws ec2 describe-instances --instance-ids "$ID" --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
       
-            CURRENT=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-              "docker ps --format '{{.Names}}' | grep frontend- || true")
-            echo "🔎 Current frontend container on $IP: $CURRENT"
-            if [ -z "$CURRENT" ]; then
-              echo "First deploy → run both blue (3000) and green (3001)"
+            # FIRST: check if any frontend containers are running on this instance
+            FRONTEND_RUNNING_COUNT=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
+              "docker ps --format '{{.Names}}' | grep -E '^frontend-(blue|green)$' -c || true")
+      
+            if [ "$FRONTEND_RUNNING_COUNT" -eq 0 ]; then
+              echo "[FRONTEND][$ID] First deploy → run both blue:3000 and green:3001; register BLUE TG"
               ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
                 "echo '$DOCKERHUB_TOKEN' | docker login -u '$DOCKERHUB_USERNAME' --password-stdin; \
                  docker pull $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest; \
-                 docker run -d --name frontend-blue -p 3000:3000 $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest; \
+                 docker rm -f frontend-blue frontend-green || true; \
+                 docker run -d --name frontend-blue  -p 3000:3000 $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest; \
                  docker run -d --name frontend-green -p 3001:3000 $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
-              aws elbv2 register-targets --target-group-arn ${FRONTEND_BLUE_TG} --targets Id=$ID,Port=3000
+              aws elbv2 register-targets   --target-group-arn "$FRONTEND_BLUE_TG"  --targets Id="$ID",Port=3000
+              # (optional) keep green unregistered until next switch
+              continue
+            fi
+      
+            # SUBSEQUENT RUNS: decide by which TG currently has THIS instance registered
+            BLUE_HAS_ID=$(aws elbv2 describe-target-health --target-group-arn "$FRONTEND_BLUE_TG"  --query "length(TargetHealthDescriptions[?Target.Id=='$ID'])"  --output text)
+            GREEN_HAS_ID=$(aws elbv2 describe-target-health --target-group-arn "$FRONTEND_GREEN_TG" --query "length(TargetHealthDescriptions[?Target.Id=='$ID'])"  --output text)
+      
+            if [ "$BLUE_HAS_ID" -gt 0 ]; then
+              echo "[FRONTEND][$ID] Active TG=BLUE → deploy GREEN then switch"
+              ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
+                "docker rm -f frontend-green || true; \
+                 echo '$DOCKERHUB_TOKEN' | docker login -u '$DOCKERHUB_USERNAME' --password-stdin; \
+                 docker pull $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest; \
+                 docker run -d --name frontend-green -p 3001:3000 $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
+              aws elbv2 register-targets   --target-group-arn "$FRONTEND_GREEN_TG" --targets Id="$ID",Port=3001
+              aws elbv2 deregister-targets --target-group-arn "$FRONTEND_BLUE_TG"  --targets Id="$ID",Port=3000
+      
+            elif [ "$GREEN_HAS_ID" -gt 0 ]; then
+              echo "[FRONTEND][$ID] Active TG=GREEN → deploy BLUE then switch"
+              ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
+                "docker rm -f frontend-blue || true; \
+                 echo '$DOCKERHUB_TOKEN' | docker login -u '$DOCKERHUB_USERNAME' --password-stdin; \
+                 docker pull $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest; \
+                 docker run -d --name frontend-blue -p 3000:3000 $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
+              aws elbv2 register-targets   --target-group-arn "$FRONTEND_BLUE_TG"  --targets Id="$ID",Port=3000
+              aws elbv2 deregister-targets --target-group-arn "$FRONTEND_GREEN_TG" --targets Id="$ID",Port=3001
+      
             else
-              if [[ "$CURRENT" == "frontend-blue" ]]; then
-                echo "Blue running → deploy green"
-                ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-                  "docker rm -f frontend-green || true; \
-                   docker run -d --name frontend-green -p 3001:3000 $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
-                aws elbv2 register-targets --target-group-arn ${FRONTEND_GREEN_TG} --targets Id=$ID,Port=3001
-                aws elbv2 deregister-targets --target-group-arn ${FRONTEND_BLUE_TG} --targets Id=$ID,Port=3000
-              else
-                echo "Green running → deploy blue"
-                ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-                  "docker rm -f frontend-blue || true; \
-                   docker run -d --name frontend-blue -p 3000:3000 $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
-                aws elbv2 register-targets --target-group-arn ${FRONTEND_BLUE_TG} --targets Id=$ID,Port=3000
-                aws elbv2 deregister-targets --target-group-arn ${FRONTEND_GREEN_TG} --targets Id=$ID,Port=3001
-              fi
+              echo "[FRONTEND][$ID] No TG has this instance → treat as first deploy"
+              ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
+                "echo '$DOCKERHUB_TOKEN' | docker login -u '$DOCKERHUB_USERNAME' --password-stdin; \
+                 docker pull $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest; \
+                 docker rm -f frontend-blue frontend-green || true; \
+                 docker run -d --name frontend-blue  -p 3000:3000 $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest; \
+                 docker run -d --name frontend-green -p 3001:3000 $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
+              aws elbv2 register-targets   --target-group-arn "$FRONTEND_BLUE_TG"  --targets Id="$ID",Port=3000
             fi
           done
+
 
 
 
