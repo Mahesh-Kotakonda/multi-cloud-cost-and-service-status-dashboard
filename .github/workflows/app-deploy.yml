@@ -172,7 +172,7 @@ jobs:
                    -p 8081:8000 \
                    $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest"
               # Register blue in ALB target group
-              aws lb register-targets --target-group-arn ${BACKEND_TARGET_GROUP_ARN} --targets Id=$ID,Port=8080
+              aws elbv2 register-targets --target-group-arn ${BACKEND_TARGET_GROUP_ARN} --targets Id=$ID,Port=8080
             else
               if [[ "$CURRENT" == "backend-blue" ]]; then
                 echo "Blue running → deploy green on 8081"
@@ -184,8 +184,8 @@ jobs:
                      -p 8081:8000 \
                      $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest"
                 # Switch ALB to green
-                aws lb register-targets --target-group-arn ${BACKEND_TARGET_GROUP_ARN} --targets Id=$ID,Port=8081
-                aws lb deregister-targets --target-group-arn ${BACKEND_TARGET_GROUP_ARN} --targets Id=$ID,Port=8080
+                aws elbv2 register-targets --target-group-arn ${BACKEND_TARGET_GROUP_ARN} --targets Id=$ID,Port=8081
+                aws elbv2 deregister-targets --target-group-arn ${BACKEND_TARGET_GROUP_ARN} --targets Id=$ID,Port=8080
               else
                 echo "Green running → deploy blue on 8080"
                 ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
@@ -196,8 +196,8 @@ jobs:
                      -p 8080:8000 \
                      $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest"
                 # Switch ALB to blue
-                aws lb register-targets --target-group-arn ${BACKEND_TARGET_GROUP_ARN} --targets Id=$ID,Port=8080
-                aws lb deregister-targets --target-group-arn ${BACKEND_TARGET_GROUP_ARN} --targets Id=$ID,Port=8081
+                aws elbv2 register-targets --target-group-arn ${BACKEND_TARGET_GROUP_ARN} --targets Id=$ID,Port=8080
+                aws elbv2 deregister-targets --target-group-arn ${BACKEND_TARGET_GROUP_ARN} --targets Id=$ID,Port=8081
               fi
             fi
           done
@@ -228,7 +228,7 @@ jobs:
                  docker run -d --name frontend-green -p 3001:3000 \
                    $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
               # Register blue in ALB TG
-              aws lb register-targets --target-group-arn ${FRONTEND_TARGET_GROUP_ARN} --targets Id=$ID,Port=3000
+              aws elbv2 register-targets --target-group-arn ${FRONTEND_TARGET_GROUP_ARN} --targets Id=$ID,Port=3000
             else
               if [[ "$CURRENT" == "frontend-blue" ]]; then
                 echo "Blue running → deploy green on 3001"
@@ -236,16 +236,16 @@ jobs:
                   "docker rm -f frontend-green || true; \
                    docker run -d --name frontend-green -p 3001:3000 \
                      $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
-                aws lb register-targets --target-group-arn ${FRONTEND_TARGET_GROUP_ARN} --targets Id=$ID,Port=3001
-                aws lb deregister-targets --target-group-arn ${FRONTEND_TARGET_GROUP_ARN} --targets Id=$ID,Port=3000
+                aws elbv2 register-targets --target-group-arn ${FRONTEND_TARGET_GROUP_ARN} --targets Id=$ID,Port=3001
+                aws elbv2 deregister-targets --target-group-arn ${FRONTEND_TARGET_GROUP_ARN} --targets Id=$ID,Port=3000
               else
                 echo "Green running → deploy blue on 3000"
                 ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
                   "docker rm -f frontend-blue || true; \
                    docker run -d --name frontend-blue -p 3000:3000 \
                      $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
-                aws lb register-targets --target-group-arn ${FRONTEND_TARGET_GROUP_ARN} --targets Id=$ID,Port=3000
-                aws lb deregister-targets --target-group-arn ${FRONTEND_TARGET_GROUP_ARN} --targets Id=$ID,Port=3001
+                aws elbv2 register-targets --target-group-arn ${FRONTEND_TARGET_GROUP_ARN} --targets Id=$ID,Port=3000
+                aws elbv2 deregister-targets --target-group-arn ${FRONTEND_TARGET_GROUP_ARN} --targets Id=$ID,Port=3001
               fi
             fi
           done
