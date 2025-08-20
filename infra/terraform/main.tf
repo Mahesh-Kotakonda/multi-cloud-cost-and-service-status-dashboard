@@ -96,8 +96,11 @@ locals {
     ec2_instance_ids   = module.ec2.instance_ids
     alb_dns            = module.alb.alb_dns
 
-    frontend_target_group_arn = module.alb.frontend_target_group_arn
-    backend_target_group_arn  = module.alb.backend_target_group_arn
+    # Blue-Green Target Groups
+    frontend_blue_tg_arn  = module.alb.frontend_blue_tg_arn
+    frontend_green_tg_arn = module.alb.frontend_green_tg_arn
+    backend_blue_tg_arn   = module.alb.backend_blue_tg_arn
+    backend_green_tg_arn  = module.alb.backend_green_tg_arn
 
     db = {
       endpoint = module.database.db_instance_endpoint
@@ -108,6 +111,7 @@ locals {
     generated_at_utc = timestamp()
   }
 }
+
 
 resource "aws_s3_object" "infra_outputs_json" {
   bucket       = local.outputs_bucket
