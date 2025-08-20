@@ -3,6 +3,14 @@ output "project_name" {
   value = var.project_name
 }
 
+output "frontend_target_group_arn" {
+  value = module.alb.frontend_target_group_arn
+}
+
+output "backend_target_group_arn" {
+  value = module.alb.backend_target_group_arn
+}
+
 # VPC outputs
 output "vpc_id" {
   value = module.vpc.vpc_id
