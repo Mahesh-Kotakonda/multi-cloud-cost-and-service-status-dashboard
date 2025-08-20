@@ -155,7 +155,7 @@ jobs:
       
             CURRENT=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
               "docker ps --format '{{.Names}}' | grep backend- || true")
-            echo "$CURRENT"
+            echo "🔎 Current backend container on $IP: $CURRENT"
       
             if [ -z "$CURRENT" ]; then
               echo "First deploy → run both blue (8080) and green (8081)"
@@ -201,7 +201,7 @@ jobs:
       
             CURRENT=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
               "docker ps --format '{{.Names}}' | grep frontend- || true")
-            echo "$CURRENT"
+            echo "🔎 Current frontend container on $IP: $CURRENT"
             if [ -z "$CURRENT" ]; then
               echo "First deploy → run both blue (3000) and green (3001)"
               ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
