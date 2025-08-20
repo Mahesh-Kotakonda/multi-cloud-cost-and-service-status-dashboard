@@ -107,55 +107,26 @@ resource "aws_lb_target_group" "backend_green_tg" {
 }
 
 #########################################
-# Listener & Routing
+# Listener (safe default only)
 #########################################
 resource "aws_lb_listener" "app_listener" {
   load_balancer_arn = aws_lb.app_alb.arn
   port              = 80
   protocol          = "HTTP"
 
-  # Default → Frontend Blue
+  # Default action → safe 503 until workflow updates
   default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.frontend_blue_tg.arn
-  }
-}
-
-# Backend API: /api/aws/* → backend-blue (switch via workflow)
-resource "aws_lb_listener_rule" "backend_api_rule" {
-  listener_arn = aws_lb_listener.app_listener.arn
-  priority     = 10
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.backend_blue_tg.arn
-  }
-
-  condition {
-    path_pattern {
-      values = ["/api/aws/*"]
+    type = "fixed-response"
+    fixed_response {
+      content_type = "text/plain"
+      message_body = "Listener not configured yet - switch via workflow"
+      status_code  = "503"
     }
   }
 }
 
-# Frontend root "/" → frontend-blue (switch via workflow)
-resource "aws_lb_listener_rule" "frontend_root_rule" {
-  listener_arn = aws_lb_listener.app_listener.arn
-  priority     = 20
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.frontend_blue_tg.arn
-  }
-
-  condition {
-    path_pattern {
-      values = ["/"]
-    }
-  }
-}
 #########################################
-# Attach EC2 Instances to Target Groups
+# Attach EC2 Instances to All Target Groups
 #########################################
 
 # Frontend Blue TG (3000)
