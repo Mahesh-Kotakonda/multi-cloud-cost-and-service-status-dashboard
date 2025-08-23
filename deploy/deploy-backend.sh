@@ -112,12 +112,18 @@ create_or_update_rule() {
         --actions Type=forward,TargetGroupArn=$tg
     fi
   else
-    # Fixed response (correct CLI syntax)
+    # Fixed response (correct JSON format)
+    FIXED_RESPONSE_JSON="{\"StatusCode\":\"$fixed_response_code\",\"ContentType\":\"text/plain\",\"MessageBody\":\"Not Found\"}"
     if [[ -z "$RULE_ARN" || "$RULE_ARN" == "None" ]]; then
       echo "Creating fixed-response $path -> $fixed_response_code"
       aws elbv2 create-rule --listener-arn "$LISTENER_ARN" --priority $priority \
         --conditions Field=path-pattern,Values="$path" \
-        --actions Type=fixed-response,FixedResponseConfig={StatusCode=$fixed_response_code,ContentType=text/plain,MessageBody="Not Found"}
+        --actions Type=fixed-response,FixedResponseConfig="$FIXED_RESPONSE_JSON"
+    else
+      echo "Updating fixed-response $path -> $fixed_response_code"
+      aws elbv2 modify-rule --rule-arn "$RULE_ARN" \
+        --conditions Field=path-pattern,Values="$path" \
+        --actions Type=fixed-response,FixedResponseConfig="$FIXED_RESPONSE_JSON"
     fi
   fi
 }
