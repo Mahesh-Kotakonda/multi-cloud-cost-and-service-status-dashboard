@@ -47,12 +47,7 @@ if [[ -z "$LISTENER_ARN" || "$LISTENER_ARN" == "null" ]]; then
 fi
 
 # === EXPORT AWS CREDS ===
-if [[ -n "${AWS_ACCESS_KEY_ID:-}" && -n "${AWS_SECRET_ACCESS_KEY:-}" && -n "${AWS_REGION:-}" ]]; then
-  export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION
-else
-  echo "AWS credentials must be provided with --aws-access-key-id, --aws-secret-access-key, --aws-region"
-  exit 1
-fi
+export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION
 
 IFS=',' read -ra INSTANCES <<< "$INSTANCE_IDS"
 
@@ -61,6 +56,7 @@ deploy_container() {
   local instance_id=$1
   local port=$2
   local color=$3
+  local container_name="frontend_${color,,}"
 
   IP=$(aws ec2 describe-instances --instance-ids "$instance_id" \
         --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
@@ -69,10 +65,18 @@ deploy_container() {
 
   ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" bash <<EOF
     set -e
-    docker ps -q --filter "publish=$port" | xargs -r docker stop | xargs -r docker rm || true
+    # Stop and remove old container if exists
+    if docker ps -a --format '{{.Names}}' | grep -q '^${container_name}\$'; then
+      docker stop $container_name || true
+      docker rm $container_name || true
+    fi
+
+    # Docker login + pull
     echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
     docker pull "$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
-    docker run -d -p $port:$port --name frontend_${color,,} "$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
+
+    # Run new container
+    docker run -d -p $port:$port --name $container_name "$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
 EOF
 }
 
@@ -103,26 +107,29 @@ create_or_update_frontend_rule() {
 }
 
 # === DETERMINE CURRENT ACTIVE FRONTEND TG ===
-CURRENT_TG=$(aws elbv2 describe-rules \
-  --listener-arn "$LISTENER_ARN" \
-  --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'/*')]].Actions[0].ForwardConfig.TargetGroups[0].TargetGroupArn" \
-  --output text || echo "")
+CURRENT_TG=$(aws elbv2 describe-listeners \
+  --listener-arns "$LISTENER_ARN" \
+  --query "Listeners[0].DefaultActions[0].TargetGroupArn" \
+  --output text 2>/dev/null || echo "")
+
+if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
+  # Try to fetch from rule if default action is empty
+  CURRENT_TG=$(aws elbv2 describe-rules \
+    --listener-arn "$LISTENER_ARN" \
+    --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'/*')]].Actions[0].ForwardConfig.TargetGroups[0].TargetGroupArn" \
+    --output text || echo "")
+fi
+
 echo "Current active frontend Target Group ARN: $CURRENT_TG"
 
 # === FIRST-TIME DEPLOYMENT ===
 if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
-  echo "First-time frontend deployment detected. Deploying BOTH BLUE and GREEN..."
+  echo "First-time frontend deployment detected. Deploying FRONTEND BLUE only..."
 
   for instance in "${INSTANCES[@]}"; do
     deploy_container "$instance" "$FRONTEND_BLUE_PORT" "BLUE"
     aws elbv2 register-targets --target-group-arn "$FRONTEND_BLUE_TG" --targets Id=$instance,Port=$FRONTEND_BLUE_PORT
-
-    deploy_container "$instance" "$FRONTEND_GREEN_PORT" "GREEN"
-    aws elbv2 register-targets --target-group-arn "$FRONTEND_GREEN_TG" --targets Id=$instance,Port=$FRONTEND_GREEN_PORT
   done
-
-  echo "Waiting for BLUE targets to be healthy..."
-  # aws elbv2 wait target-in-service --target-group-arn "$FRONTEND_BLUE_TG"
 
   echo "Creating listener rule for /* -> FRONTEND BLUE"
   create_or_update_frontend_rule 10 "$FRONTEND_BLUE_TG"
@@ -149,6 +156,7 @@ fi
 
 echo "$CURRENT_COLOR active → deploying $NEXT_COLOR"
 
+# Remove old NEXT_COLOR container before deploying
 for instance in "${INSTANCES[@]}"; do
   deploy_container "$instance" "$NEW_PORT" "$NEXT_COLOR"
   aws elbv2 register-targets --target-group-arn "$NEW_TG" --targets Id=$instance,Port=$NEW_PORT
