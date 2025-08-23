@@ -144,7 +144,6 @@ if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
   done
   create_or_update_rule 10 "/api/aws/costs" "$BACKEND_BLUE_TG"
   create_or_update_rule 11 "/api/aws/status" "$BACKEND_BLUE_TG"
-  create_or_update_rule 30 "/api/*" "" "fixed-response" 404
   echo "Backend BLUE is live."
   exit 0
 fi
@@ -175,6 +174,5 @@ done
 echo "Updating listener rules..."
 create_or_update_rule 10 "/api/aws/costs" "$NEW_TG"
 create_or_update_rule 11 "/api/aws/status" "$NEW_TG"
-create_or_update_rule 30 "/api/*" "" "fixed-response" 404
 
 echo "Backend $NEXT_COLOR deployment complete."
