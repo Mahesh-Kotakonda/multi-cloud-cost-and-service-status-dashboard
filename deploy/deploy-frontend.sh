@@ -111,7 +111,7 @@ create_or_update_frontend_rule() {
       --conditions Field=path-pattern,Values='/*' \
       --actions "Type=fixed-response,FixedResponseConfig=$FIXED_RESPONSE_JSON"
   fi
-
+}
 
 # === DETERMINE CURRENT FRONTEND TG BASED ON / RULE ONLY ===
 CURRENT_TG=$(aws elbv2 describe-rules \
