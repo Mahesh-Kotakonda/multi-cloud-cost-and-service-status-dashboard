@@ -86,49 +86,31 @@ deploy_container() {
 EOF
 }
 
-# === CREATE OR UPDATE RULES ===
+# === CREATE OR UPDATE SINGLE RULE ===
 create_or_update_rule() {
-  local priority=$1
-  local path=$2
-  local tg=$3
-  local action_type=${4:-forward}
-  local fixed_response_code=${5:-404}
+  local priority=10
+  local path="/api/aws/*"
+  local tg=$1
 
   RULE_ARN=$(aws elbv2 describe-rules \
     --listener-arn "$LISTENER_ARN" \
     --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'$path')]].RuleArn" \
     --output text || echo "")
 
-  if [[ "$action_type" == "forward" ]]; then
-    if [[ -z "$RULE_ARN" || "$RULE_ARN" == "None" ]]; then
-      echo "Creating rule $path -> TG $tg"
-      aws elbv2 create-rule --listener-arn "$LISTENER_ARN" --priority $priority \
-        --conditions Field=path-pattern,Values="$path" \
-        --actions Type=forward,TargetGroupArn=$tg
-    else
-      echo "Updating rule $path -> TG $tg"
-      aws elbv2 modify-rule --rule-arn "$RULE_ARN" \
-        --conditions Field=path-pattern,Values="$path" \
-        --actions Type=forward,TargetGroupArn=$tg
-    fi
+  if [[ -z "$RULE_ARN" || "$RULE_ARN" == "None" ]]; then
+    echo "Creating rule $path -> TG $tg"
+    aws elbv2 create-rule --listener-arn "$LISTENER_ARN" --priority $priority \
+      --conditions Field=path-pattern,Values="$path" \
+      --actions Type=forward,TargetGroupArn=$tg
   else
-    # Fixed response (correctly escaped for CLI)
-    FIXED_RESPONSE_JSON="{\\\"StatusCode\\\":\\\"$fixed_response_code\\\",\\\"ContentType\\\":\\\"text/plain\\\",\\\"MessageBody\\\":\\\"Not Found\\\"}"
-    if [[ -z "$RULE_ARN" || "$RULE_ARN" == "None" ]]; then
-      echo "Creating fixed-response $path -> $fixed_response_code"
-      aws elbv2 create-rule --listener-arn "$LISTENER_ARN" --priority $priority \
-        --conditions Field=path-pattern,Values="$path" \
-        --actions "Type=fixed-response,FixedResponseConfig=$FIXED_RESPONSE_JSON"
-    else
-      echo "Updating fixed-response $path -> $fixed_response_code"
-      aws elbv2 modify-rule --rule-arn "$RULE_ARN" \
-        --conditions Field=path-pattern,Values="$path" \
-        --actions "Type=fixed-response,FixedResponseConfig=$FIXED_RESPONSE_JSON"
-    fi
+    echo "Updating rule $path -> TG $tg"
+    aws elbv2 modify-rule --rule-arn "$RULE_ARN" \
+      --conditions Field=path-pattern,Values="$path" \
+      --actions Type=forward,TargetGroupArn=$tg
   fi
 }
 
-# === DETERMINE CURRENT ACTIVE TG ===
+# === DETERMINE CURRENT ACTIVE TG BASED ON /api/aws/* RULE ===
 CURRENT_TG=$(aws elbv2 describe-rules \
   --listener-arn "$LISTENER_ARN" \
   --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'/api/aws/*')]].Actions[0].ForwardConfig.TargetGroups[0].TargetGroupArn" \
@@ -142,8 +124,7 @@ if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
     deploy_container "$instance" "$BACKEND_BLUE_PORT" "BLUE"
     aws elbv2 register-targets --target-group-arn "$BACKEND_BLUE_TG" --targets Id=$instance,Port=$BACKEND_BLUE_PORT
   done
-  create_or_update_rule 10 "/api/aws/costs" "$BACKEND_BLUE_TG"
-  create_or_update_rule 11 "/api/aws/status" "$BACKEND_BLUE_TG"
+  create_or_update_rule "$BACKEND_BLUE_TG"
   echo "Backend BLUE is live."
   exit 0
 fi
@@ -171,8 +152,7 @@ for instance in "${INSTANCES[@]}"; do
   aws elbv2 register-targets --target-group-arn "$NEW_TG" --targets Id=$instance,Port=$NEW_PORT
 done
 
-echo "Updating listener rules..."
-create_or_update_rule 10 "/api/aws/costs" "$NEW_TG"
-create_or_update_rule 11 "/api/aws/status" "$NEW_TG"
+echo "Updating listener rule for /api/aws/* → $NEXT_COLOR"
+create_or_update_rule "$NEW_TG"
 
 echo "Backend $NEXT_COLOR deployment complete."
