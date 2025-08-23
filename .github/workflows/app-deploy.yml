@@ -159,7 +159,7 @@ jobs:
           BACKEND_BLUE_TG=$(jq -r '.backend_blue_tg_arn' backend-outputs.json)
           BACKEND_GREEN_TG=$(jq -r '.backend_green_tg_arn' backend-outputs.json)
       
-          # Call the backend deploy script with all params including JSON file
+          # Call the backend deploy script with all params including AWS creds
           ./deploy/deploy-backend.sh \
             --outputs-json backend-outputs.json \
             --pem-path "$PEM_PATH" \
@@ -173,10 +173,12 @@ jobs:
             --image-repo "${IMAGE_REPO}" \
             --instance-ids "$INSTANCE_IDS" \
             --blue-tg "$BACKEND_BLUE_TG" \
-            --green-tg "$BACKEND_GREEN_TG"
+            --green-tg "$BACKEND_GREEN_TG" \
+            --aws-access-key-id "${AWS_ACCESS_KEY_ID}" \
+            --aws-secret-access-key "${AWS_SECRET_ACCESS_KEY}" \
+            --aws-region "${AWS_REGION}"
 
 
-      
       #########################################
       # Deploy Frontend (Blue-Green Deployment)
       #########################################
@@ -195,7 +197,7 @@ jobs:
           FRONTEND_BLUE_TG=$(jq -r '.frontend_blue_tg_arn' frontend-outputs.json)
           FRONTEND_GREEN_TG=$(jq -r '.frontend_green_tg_arn' frontend-outputs.json)
       
-          # Call the frontend deploy script with all params including JSON file
+          # Call the frontend deploy script with all params including AWS creds
           ./deploy/deploy-frontend.sh \
             --outputs-json frontend-outputs.json \
             --pem-path "$PEM_PATH" \
@@ -204,7 +206,11 @@ jobs:
             --image-repo "${IMAGE_REPO}" \
             --instance-ids "$INSTANCE_IDS" \
             --blue-tg "$FRONTEND_BLUE_TG" \
-            --green-tg "$FRONTEND_GREEN_TG"
+            --green-tg "$FRONTEND_GREEN_TG" \
+            --aws-access-key-id "${AWS_ACCESS_KEY_ID}" \
+            --aws-secret-access-key "${AWS_SECRET_ACCESS_KEY}" \
+            --aws-region "${AWS_REGION}"
+
       
 
 
