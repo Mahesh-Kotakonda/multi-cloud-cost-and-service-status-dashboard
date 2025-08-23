@@ -27,7 +27,6 @@ while [[ $# -gt 0 ]]; do
     --instance-ids)        INSTANCE_IDS="$2"; shift 2 ;;
     --blue-tg)             BACKEND_BLUE_TG="$2"; shift 2 ;;
     --green-tg)            BACKEND_GREEN_TG="$2"; shift 2 ;;
-    --listener-arn)        LISTENER_ARN="$2"; shift 2 ;;
     --aws-access-key-id)   AWS_ACCESS_KEY_ID="$2"; shift 2 ;;
     --aws-secret-access-key) AWS_SECRET_ACCESS_KEY="$2"; shift 2 ;;
     --aws-region)          AWS_REGION="$2"; shift 2 ;;
@@ -35,11 +34,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# === VALIDATE REQUIREMENTS ===
 if [[ -z "${OUTPUTS_JSON:-}" ]]; then
   echo "Must provide --outputs-json"; exit 1
 fi
 
-# === VALIDATE REQUIREMENTS ===
 if [[ -z "${INSTANCE_IDS:-}" ]]; then
   echo "Must provide --instance-ids"; exit 1
 fi
@@ -48,6 +47,12 @@ if [[ -z "${BACKEND_BLUE_TG:-}" || -z "${BACKEND_GREEN_TG:-}" ]]; then
 fi
 
 IFS=',' read -ra INSTANCES <<< "$INSTANCE_IDS"
+
+# === FETCH LISTENER ARN FROM JSON ===
+LISTENER_ARN=$(jq -r '.alb_listener_arn' "$OUTPUTS_JSON")
+if [[ -z "$LISTENER_ARN" || "$LISTENER_ARN" == "null" ]]; then
+  echo "Could not fetch alb_listener_arn from $OUTPUTS_JSON"; exit 1
+fi
 
 # === DEPLOY FUNCTION ===
 deploy_container() {
