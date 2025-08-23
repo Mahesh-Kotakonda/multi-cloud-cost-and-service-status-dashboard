@@ -42,7 +42,6 @@ fi
 
 # === EXPORT AWS CREDS ===
 export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION
-
 IFS=',' read -ra INSTANCES <<< "$INSTANCE_IDS"
 
 # === DEPLOY FUNCTION ===
@@ -71,57 +70,58 @@ deploy_container() {
 EOF
 }
 
-# === CREATE OR UPDATE SINGLE FRONTEND RULE ===
+# === CREATE OR UPDATE FRONTEND RULES ===
 create_or_update_frontend_rule() {
-  local priority=$1
-  local tg=$2
+  local tg=$1
+  local priority=500
 
-  RULE_ARN=$(aws elbv2 describe-rules \
+  # Paths to forward to frontend TG
+  declare -a paths=("/" "/favicon.ico" "/robots.txt" "/static/*")
+
+  for path in "${paths[@]}"; do
+    RULE_ARN=$(aws elbv2 describe-rules \
+      --listener-arn "$LISTENER_ARN" \
+      --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'$path')]].RuleArn" \
+      --output text || echo "")
+    
+    if [[ -z "$RULE_ARN" || "$RULE_ARN" == "None" ]]; then
+      echo "Creating rule for $path -> TG $tg"
+      aws elbv2 create-rule \
+        --listener-arn "$LISTENER_ARN" \
+        --priority $priority \
+        --conditions Field=path-pattern,Values="$path" \
+        --actions Type=forward,TargetGroupArn=$tg
+    else
+      echo "Updating rule for $path -> TG $tg"
+      aws elbv2 modify-rule \
+        --rule-arn "$RULE_ARN" \
+        --conditions Field=path-pattern,Values="$path" \
+        --actions Type=forward,TargetGroupArn=$tg
+    fi
+    ((priority++))
+  done
+
+  # Catch-all invalid paths -> 404
+  CATCH_ALL_ARN=$(aws elbv2 describe-rules \
     --listener-arn "$LISTENER_ARN" \
-    --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'/')]].RuleArn" \
+    --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'/*')]].RuleArn" \
     --output text || echo "")
-
-  if [[ -z "$RULE_ARN" || "$RULE_ARN" == "None" ]]; then
-    echo "Creating listener rule for / -> TG $tg"
+  if [[ -z "$CATCH_ALL_ARN" || "$CATCH_ALL_ARN" == "None" ]]; then
+    echo "Creating catch-all 404 for /*"
+    echo '{"MessageBody":"Not Found","StatusCode":"404","ContentType":"text/plain"}' > fixed-response.json
     aws elbv2 create-rule \
       --listener-arn "$LISTENER_ARN" \
-      --priority $priority \
-      --conditions Field=path-pattern,Values='/' \
-      --actions Type=forward,TargetGroupArn=$tg
+      --priority 1000 \
+      --conditions Field=path-pattern,Values='/*' \
+      --actions "Type=fixed-response,FixedResponseConfig=file://fixed-response.json"
+    rm -f fixed-response.json
   else
-    echo "Updating listener rule for / -> TG $tg"
+    echo "Updating catch-all 404 for /*"
     aws elbv2 modify-rule \
-      --rule-arn "$RULE_ARN" \
-      --conditions Field=path-pattern,Values='/' \
-      --actions Type=forward,TargetGroupArn=$tg
+      --rule-arn "$CATCH_ALL_ARN" \
+      --conditions Field=path-pattern,Values='/*' \
+      --actions "Type=fixed-response,FixedResponseConfig=file://fixed-response.json"
   fi
-
-  # # Ensure a catch-all 404 for anything else
-  # FIXED_404_ARN=$(aws elbv2 describe-rules \
-  #   --listener-arn "$LISTENER_ARN" \
-  #   --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'/*')]].RuleArn" \
-  #   --output text || echo "")
-  
-  # if [[ -z "$FIXED_404_ARN" || "$FIXED_404_ARN" == "None" ]]; then
-  #   echo "Creating catch-all 404 for /*"
-  
-  #   # Create temporary JSON file using echo instead of here-document
-  #   echo '{"MessageBody":"Not Found","StatusCode":"404","ContentType":"text/plain"}' > fixed-response.json
-  
-  #   aws elbv2 create-rule \
-  #     --listener-arn "$LISTENER_ARN" \
-  #     --priority 1000 \
-  #     --conditions Field=path-pattern,Values='/*' \
-  #     --actions "Type=fixed-response,FixedResponseConfig=file://fixed-response.json"
-  
-  #   # Clean up
-  #   rm -f fixed-response.json
-  # fi
-
-
-
-
-
 }
 
 # === DETERMINE CURRENT FRONTEND TG BASED ON / RULE ONLY ===
@@ -139,7 +139,7 @@ if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
     deploy_container "$instance" "$FRONTEND_BLUE_PORT" "BLUE"
     aws elbv2 register-targets --target-group-arn "$FRONTEND_BLUE_TG" --targets Id=$instance,Port=$FRONTEND_BLUE_PORT
   done
-  create_or_update_frontend_rule 500 "$FRONTEND_BLUE_TG"
+  create_or_update_frontend_rule "$FRONTEND_BLUE_TG"
   echo "Frontend BLUE is live."
   exit 0
 fi
@@ -167,7 +167,7 @@ for instance in "${INSTANCES[@]}"; do
   aws elbv2 register-targets --target-group-arn "$NEW_TG" --targets Id=$instance,Port=$NEW_PORT
 done
 
-echo "Updating listener rule for / -> $NEXT_COLOR"
-create_or_update_frontend_rule 500 "$NEW_TG"
+echo "Updating listener rules for $NEXT_COLOR"
+create_or_update_frontend_rule "$NEW_TG"
 
 echo "Frontend $NEXT_COLOR deployment complete!"
