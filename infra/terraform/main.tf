@@ -101,6 +101,7 @@ locals {
     frontend_green_tg_arn = module.alb.frontend_green_tg_arn
     backend_blue_tg_arn   = module.alb.backend_blue_tg_arn
     backend_green_tg_arn  = module.alb.backend_green_tg_arn
+    alb_listener_arn = module.alb.alb_listener_arn
 
     db = {
       endpoint = module.database.db_instance_endpoint
