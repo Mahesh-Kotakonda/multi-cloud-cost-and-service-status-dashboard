@@ -112,18 +112,18 @@ create_or_update_rule() {
         --actions Type=forward,TargetGroupArn=$tg
     fi
   else
-    # Fixed response (correct JSON format)
-    FIXED_RESPONSE_JSON="{\"StatusCode\":\"$fixed_response_code\",\"ContentType\":\"text/plain\",\"MessageBody\":\"Not Found\"}"
+    # Fixed response (correctly escaped for CLI)
+    FIXED_RESPONSE_JSON="{\\\"StatusCode\\\":\\\"$fixed_response_code\\\",\\\"ContentType\\\":\\\"text/plain\\\",\\\"MessageBody\\\":\\\"Not Found\\\"}"
     if [[ -z "$RULE_ARN" || "$RULE_ARN" == "None" ]]; then
       echo "Creating fixed-response $path -> $fixed_response_code"
       aws elbv2 create-rule --listener-arn "$LISTENER_ARN" --priority $priority \
         --conditions Field=path-pattern,Values="$path" \
-        --actions Type=fixed-response,FixedResponseConfig="$FIXED_RESPONSE_JSON"
+        --actions "Type=fixed-response,FixedResponseConfig=$FIXED_RESPONSE_JSON"
     else
       echo "Updating fixed-response $path -> $fixed_response_code"
       aws elbv2 modify-rule --rule-arn "$RULE_ARN" \
         --conditions Field=path-pattern,Values="$path" \
-        --actions Type=fixed-response,FixedResponseConfig="$FIXED_RESPONSE_JSON"
+        --actions "Type=fixed-response,FixedResponseConfig=$FIXED_RESPONSE_JSON"
     fi
   fi
 }
@@ -142,7 +142,6 @@ if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
     deploy_container "$instance" "$BACKEND_BLUE_PORT" "BLUE"
     aws elbv2 register-targets --target-group-arn "$BACKEND_BLUE_TG" --targets Id=$instance,Port=$BACKEND_BLUE_PORT
   done
-  # Blue-Green TG + fixed-response 404 for unknown paths
   create_or_update_rule 10 "/api/aws/costs" "$BACKEND_BLUE_TG"
   create_or_update_rule 11 "/api/aws/status" "$BACKEND_BLUE_TG"
   create_or_update_rule 30 "/api/*" "" "fixed-response" 404
