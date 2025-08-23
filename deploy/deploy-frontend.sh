@@ -1,0 +1,125 @@
+#!/bin/bash
+set -euo pipefail
+
+#########################################
+# deploy-frontend.sh
+# Blue-Green Deployment for Frontend
+#########################################
+
+# === DEFAULT CONFIG ===
+FRONTEND_BLUE_PORT=80
+FRONTEND_GREEN_PORT=81
+LISTENER_ARN=""
+
+# === ARG PARSING ===
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --outputs-json)      OUTPUTS_JSON="$2"; shift 2 ;;
+    --pem-path)          PEM_PATH="$2"; shift 2 ;;
+    --dockerhub-username) DOCKERHUB_USERNAME="$2"; shift 2 ;;
+    --dockerhub-token)    DOCKERHUB_TOKEN="$2"; shift 2 ;;
+    --image-repo)        IMAGE_REPO="$2"; shift 2 ;;
+    --instance-ids)      INSTANCE_IDS="$2"; shift 2 ;;
+    --blue-tg)           FRONTEND_BLUE_TG="$2"; shift 2 ;;
+    --green-tg)          FRONTEND_GREEN_TG="$2"; shift 2 ;;
+    --listener-arn)      LISTENER_ARN="$2"; shift 2 ;;
+    *) echo "Unknown argument: $1"; exit 1 ;;
+  esac
+done
+
+if [[ -z "${OUTPUTS_JSON:-}" ]]; then
+  echo "Must provide --outputs-json"; exit 1
+fi
+
+# === VALIDATE REQUIREMENTS ===
+if [[ -z "${INSTANCE_IDS:-}" ]]; then
+  echo "Must provide --instance-ids"; exit 1
+fi
+if [[ -z "${FRONTEND_BLUE_TG:-}" || -z "${FRONTEND_GREEN_TG:-}" ]]; then
+  echo "Must provide --blue-tg and --green-tg"; exit 1
+fi
+
+# === DETERMINE CURRENT ACTIVE COLOR ===
+CURRENT_TG=$(aws elbv2 describe-listeners \
+  --listener-arns "$LISTENER_ARN" \
+  --query "Listeners[0].DefaultActions[0].ForwardConfig.TargetGroups[0].TargetGroupArn" \
+  --output text 2>/dev/null || echo "")
+
+IFS=',' read -ra INSTANCES <<< "$INSTANCE_IDS"
+
+# === FUNCTION TO DEPLOY A CONTAINER OVER SSH ===
+deploy_container() {
+  local instance_id=$1
+  local port=$2
+  local color=$3
+
+  IP=$(aws ec2 describe-instances --instance-ids "$instance_id" \
+        --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
+
+  echo "Deploying frontend $color on $instance_id ($IP)"
+
+  ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" bash <<EOF
+    set -e
+    # Remove old container if exists
+    docker ps -q --filter "publish=$port" | xargs -r docker stop | xargs -r docker rm || true
+
+    # Login and pull
+    echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+    docker pull "$IMAGE_REPO:frontend-latest"
+
+    # Run new container
+    docker run -d -p $port:$port "$IMAGE_REPO:frontend-latest"
+EOF
+}
+
+# === FIRST-TIME DEPLOYMENT ===
+if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
+  echo "First-time deployment detected. Deploying BOTH blue and green..."
+
+  for instance in "${INSTANCES[@]}"; do
+    deploy_container "$instance" "$FRONTEND_BLUE_PORT" "BLUE"
+    aws elbv2 register-targets --target-group-arn "$FRONTEND_BLUE_TG" --targets Id=$instance,Port=$FRONTEND_BLUE_PORT
+
+    deploy_container "$instance" "$FRONTEND_GREEN_PORT" "GREEN"
+    aws elbv2 register-targets --target-group-arn "$FRONTEND_GREEN_TG" --targets Id=$instance,Port=$FRONTEND_GREEN_PORT
+  done
+
+  echo "Waiting for BLUE targets to be healthy..."
+  aws elbv2 wait target-in-service --target-group-arn "$FRONTEND_BLUE_TG"
+
+  echo "Switching ALB to frontend BLUE"
+  aws elbv2 modify-listener \
+    --listener-arn "$LISTENER_ARN" \
+    --default-actions "Type=forward,ForwardConfig={TargetGroups=[{TargetGroupArn=$FRONTEND_BLUE_TG,Weight=1}]}"
+
+  echo "First-time frontend deployment complete. BLUE is live!"
+  exit 0
+fi
+
+# === NORMAL BLUE/GREEN SWITCH ===
+if [[ "$CURRENT_TG" == "$FRONTEND_BLUE_TG" ]]; then
+  echo "BLUE active → deploying GREEN"
+  NEXT_COLOR="GREEN"
+  NEW_TG="$FRONTEND_GREEN_TG"
+  NEW_PORT=$FRONTEND_GREEN_PORT
+else
+  echo "GREEN active → deploying BLUE"
+  NEXT_COLOR="BLUE"
+  NEW_TG="$FRONTEND_BLUE_TG"
+  NEW_PORT=$FRONTEND_BLUE_PORT
+fi
+
+for instance in "${INSTANCES[@]}"; do
+  deploy_container "$instance" "$NEW_PORT" "$NEXT_COLOR"
+  aws elbv2 register-targets --target-group-arn "$NEW_TG" --targets Id=$instance,Port=$NEW_PORT
+done
+
+echo "Waiting for frontend $NEXT_COLOR targets to be healthy..."
+aws elbv2 wait target-in-service --target-group-arn "$NEW_TG"
+
+echo "Switching ALB to frontend $NEXT_COLOR"
+aws elbv2 modify-listener \
+  --listener-arn "$LISTENER_ARN" \
+  --default-actions "Type=forward,ForwardConfig={TargetGroups=[{TargetGroupArn=$NEW_TG,Weight=1}]}"
+
+echo "Frontend $NEXT_COLOR deployment complete!"
