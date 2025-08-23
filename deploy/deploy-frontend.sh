@@ -59,83 +59,76 @@ deploy_container() {
 
   ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" bash <<EOF
     set -e
-    # Stop and remove old container if exists
     if docker ps -a --format '{{.Names}}' | grep -q '^${container_name}\$'; then
       docker stop $container_name || true
       docker rm $container_name || true
     fi
 
-    # Docker login + pull
     echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
     docker pull "$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
 
-    # Run new container
     docker run -d -p $port:3000 --name $container_name "$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
 EOF
 }
 
-# === CREATE OR UPDATE FRONTEND RULE ===
+# === CREATE OR UPDATE SINGLE FRONTEND RULE ===
 create_or_update_frontend_rule() {
   local priority=$1
   local tg=$2
 
   RULE_ARN=$(aws elbv2 describe-rules \
     --listener-arn "$LISTENER_ARN" \
-    --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'/*')]].RuleArn" \
+    --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'/')]].RuleArn" \
     --output text || echo "")
 
   if [[ -z "$RULE_ARN" || "$RULE_ARN" == "None" ]]; then
-    echo "Creating new listener rule for /* -> TG $tg"
+    echo "Creating listener rule for / -> TG $tg"
     aws elbv2 create-rule \
       --listener-arn "$LISTENER_ARN" \
       --priority $priority \
-      --conditions Field=path-pattern,Values='/*' \
+      --conditions Field=path-pattern,Values='/' \
       --actions Type=forward,TargetGroupArn=$tg
   else
-    echo "Updating existing listener rule for /* -> TG $tg"
+    echo "Updating listener rule for / -> TG $tg"
     aws elbv2 modify-rule \
       --rule-arn "$RULE_ARN" \
-      --conditions Field=path-pattern,Values='/*' \
+      --conditions Field=path-pattern,Values='/' \
       --actions Type=forward,TargetGroupArn=$tg
+  fi
+
+  # Ensure a catch-all 404 for anything else
+  FIXED_404_ARN=$(aws elbv2 describe-rules \
+    --listener-arn "$LISTENER_ARN" \
+    --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'/*')]].RuleArn" \
+    --output text || echo "")
+  
+  if [[ -z "$FIXED_404_ARN" || "$FIXED_404_ARN" == "None" ]]; then
+    echo "Creating catch-all 404 for /*"
+    aws elbv2 create-rule \
+      --listener-arn "$LISTENER_ARN" \
+      --priority 1000 \
+      --conditions Field=path-pattern,Values='/*' \
+      --actions Type=fixed-response,FixedResponseConfig='{ "MessageBody": "Not Found", "StatusCode": "404", "ContentType": "text/plain" }'
   fi
 }
 
-# === DETERMINE CURRENT FRONTEND TG ===
-CURRENT_TG=$(aws elbv2 describe-listeners \
-  --listener-arns "$LISTENER_ARN" \
-  --query "Listeners[0].DefaultActions[0].TargetGroupArn" \
-  --output text 2>/dev/null || echo "")
-
-# fallback to rule
-if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
-  CURRENT_TG=$(aws elbv2 describe-rules \
-    --listener-arn "$LISTENER_ARN" \
-    --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'/*')]].Actions[0].ForwardConfig.TargetGroups[0].TargetGroupArn" \
-    --output text || echo "")
-fi
+# === DETERMINE CURRENT FRONTEND TG BASED ON / RULE ONLY ===
+CURRENT_TG=$(aws elbv2 describe-rules \
+  --listener-arn "$LISTENER_ARN" \
+  --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'/')]].Actions[0].ForwardConfig.TargetGroups[0].TargetGroupArn" \
+  --output text || echo "")
 
 echo "Current active frontend Target Group ARN: $CURRENT_TG"
 
 # === FIRST-TIME DEPLOYMENT ===
 if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
-  echo "First-time frontend deployment detected. Deploying FRONTEND BLUE only..."
+  echo "First-time frontend deployment. Deploying FRONTEND BLUE only..."
   for instance in "${INSTANCES[@]}"; do
     deploy_container "$instance" "$FRONTEND_BLUE_PORT" "BLUE"
     aws elbv2 register-targets --target-group-arn "$FRONTEND_BLUE_TG" --targets Id=$instance,Port=$FRONTEND_BLUE_PORT
   done
-
-  echo "Creating listener rule for /* -> FRONTEND BLUE"
   create_or_update_frontend_rule 500 "$FRONTEND_BLUE_TG"
-
-  # Optionally create catch-all fixed-response 404
-  echo "Creating catch-all fixed-response 404 rule for /*"
-  aws elbv2 create-rule \
-    --listener-arn "$LISTENER_ARN" \
-    --priority 1000 \
-    --conditions Field=path-pattern,Values='/*' \
-    --actions Type=fixed-response,FixedResponseConfig='{ "MessageBody": "Not Found", "StatusCode": "404", "ContentType": "text/plain" }' || true
-
-  echo "First-time frontend deployment complete. FRONTEND BLUE is live!"
+  echo "Frontend BLUE is live."
   exit 0
 fi
 
@@ -151,22 +144,18 @@ elif [[ "$CURRENT_TG" == *"green"* ]]; then
   NEW_TG="$FRONTEND_BLUE_TG"
   NEW_PORT=$FRONTEND_BLUE_PORT
 else
-  echo "Unknown current frontend Target Group. Exiting."
+  echo "Unknown current frontend TG. Exiting."
   exit 1
 fi
 
 echo "$CURRENT_COLOR active → deploying $NEXT_COLOR"
 
-# Remove old NEXT_COLOR container before deploying
 for instance in "${INSTANCES[@]}"; do
   deploy_container "$instance" "$NEW_PORT" "$NEXT_COLOR"
   aws elbv2 register-targets --target-group-arn "$NEW_TG" --targets Id=$instance,Port=$NEW_PORT
 done
 
-echo "Waiting for frontend $NEXT_COLOR targets to be healthy..."
-# aws elbv2 wait target-in-service --target-group-arn "$NEW_TG"
-
-echo "Updating listener rule for /* -> $NEXT_COLOR"
+echo "Updating listener rule for / -> $NEXT_COLOR"
 create_or_update_frontend_rule 500 "$NEW_TG"
 
 echo "Frontend $NEXT_COLOR deployment complete!"
