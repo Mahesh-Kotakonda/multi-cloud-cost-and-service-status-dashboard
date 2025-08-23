@@ -96,27 +96,27 @@ create_or_update_frontend_rule() {
       --actions Type=forward,TargetGroupArn=$tg
   fi
 
-  # Ensure a catch-all 404 for anything else
-  FIXED_404_ARN=$(aws elbv2 describe-rules \
-    --listener-arn "$LISTENER_ARN" \
-    --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'/*')]].RuleArn" \
-    --output text || echo "")
+  # # Ensure a catch-all 404 for anything else
+  # FIXED_404_ARN=$(aws elbv2 describe-rules \
+  #   --listener-arn "$LISTENER_ARN" \
+  #   --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'/*')]].RuleArn" \
+  #   --output text || echo "")
   
-  if [[ -z "$FIXED_404_ARN" || "$FIXED_404_ARN" == "None" ]]; then
-    echo "Creating catch-all 404 for /*"
+  # if [[ -z "$FIXED_404_ARN" || "$FIXED_404_ARN" == "None" ]]; then
+  #   echo "Creating catch-all 404 for /*"
   
-    # Create temporary JSON file using echo instead of here-document
-    echo '{"MessageBody":"Not Found","StatusCode":"404","ContentType":"text/plain"}' > fixed-response.json
+  #   # Create temporary JSON file using echo instead of here-document
+  #   echo '{"MessageBody":"Not Found","StatusCode":"404","ContentType":"text/plain"}' > fixed-response.json
   
-    aws elbv2 create-rule \
-      --listener-arn "$LISTENER_ARN" \
-      --priority 1000 \
-      --conditions Field=path-pattern,Values='/*' \
-      --actions "Type=fixed-response,FixedResponseConfig=file://fixed-response.json"
+  #   aws elbv2 create-rule \
+  #     --listener-arn "$LISTENER_ARN" \
+  #     --priority 1000 \
+  #     --conditions Field=path-pattern,Values='/*' \
+  #     --actions "Type=fixed-response,FixedResponseConfig=file://fixed-response.json"
   
-    # Clean up
-    rm -f fixed-response.json
-  fi
+  #   # Clean up
+  #   rm -f fixed-response.json
+  # fi
 
 
 
