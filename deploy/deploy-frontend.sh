@@ -101,27 +101,27 @@ create_or_update_frontend_rule() {
     ((priority++))
   done
 
-  # Catch-all invalid paths -> 404
-  CATCH_ALL_ARN=$(aws elbv2 describe-rules \
-    --listener-arn "$LISTENER_ARN" \
-    --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'/*')]].RuleArn" \
-    --output text || echo "")
-  if [[ -z "$CATCH_ALL_ARN" || "$CATCH_ALL_ARN" == "None" ]]; then
-    echo "Creating catch-all 404 for /*"
-    echo '{"MessageBody":"Not Found","StatusCode":"404","ContentType":"text/plain"}' > fixed-response.json
-    aws elbv2 create-rule \
-      --listener-arn "$LISTENER_ARN" \
-      --priority 1000 \
-      --conditions Field=path-pattern,Values='/*' \
-      --actions "Type=fixed-response,FixedResponseConfig=file://fixed-response.json"
-    rm -f fixed-response.json
-  else
-    echo "Updating catch-all 404 for /*"
-    aws elbv2 modify-rule \
-      --rule-arn "$CATCH_ALL_ARN" \
-      --conditions Field=path-pattern,Values='/*' \
-      --actions "Type=fixed-response,FixedResponseConfig=file://fixed-response.json"
-  fi
+  # # Catch-all invalid paths -> 404
+  # CATCH_ALL_ARN=$(aws elbv2 describe-rules \
+  #   --listener-arn "$LISTENER_ARN" \
+  #   --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'/*')]].RuleArn" \
+  #   --output text || echo "")
+  # if [[ -z "$CATCH_ALL_ARN" || "$CATCH_ALL_ARN" == "None" ]]; then
+  #   echo "Creating catch-all 404 for /*"
+  #   echo '{"MessageBody":"Not Found","StatusCode":"404","ContentType":"text/plain"}' > fixed-response.json
+  #   aws elbv2 create-rule \
+  #     --listener-arn "$LISTENER_ARN" \
+  #     --priority 1000 \
+  #     --conditions Field=path-pattern,Values='/*' \
+  #     --actions "Type=fixed-response,FixedResponseConfig=file://fixed-response.json"
+  #   rm -f fixed-response.json
+  # else
+  #   echo "Updating catch-all 404 for /*"
+  #   aws elbv2 modify-rule \
+  #     --rule-arn "$CATCH_ALL_ARN" \
+  #     --conditions Field=path-pattern,Values='/*' \
+  #     --actions "Type=fixed-response,FixedResponseConfig=file://fixed-response.json"
+  # fi
 }
 
 # === DETERMINE CURRENT FRONTEND TG BASED ON / RULE ONLY ===
