@@ -78,19 +78,25 @@ jobs:
           DB_PASS=$(echo $PARAM_VALUE | jq -r '.password')
           echo "DB_USER=$DB_USER" >> $GITHUB_ENV
           echo "DB_PASS=$DB_PASS" >> $GITHUB_ENV
-
-      - name: Download Docker image versions artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: image-versions
-          path: artifacts
-
-      - name: Print image versions
+          
+      - name: Print Docker image versions from payload
         run: |
-          cat artifacts/image_versions.json
-          echo "Backend image: $(jq -r '.backend' artifacts/image_versions.json)"
-          echo "Worker image: $(jq -r '.worker' artifacts/image_versions.json)"
-          echo "Frontend image: $(jq -r '.frontend' artifacts/image_versions.json)"
+          echo "Backend image: ${{ github.event.client_payload.backend }}"
+          echo "Worker image: ${{ github.event.client_payload.worker }}"
+          echo "Frontend image: ${{ github.event.client_payload.frontend }}"
+
+      # - name: Download Docker image versions artifact
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     name: image-versions
+      #     path: artifacts
+
+      # - name: Print image versions
+      #   run: |
+      #     cat artifacts/image_versions.json
+      #     echo "Backend image: $(jq -r '.backend' artifacts/image_versions.json)"
+      #     echo "Worker image: $(jq -r '.worker' artifacts/image_versions.json)"
+      #     echo "Frontend image: $(jq -r '.frontend' artifacts/image_versions.json)"
 
 
       # - name: Deploy Worker
