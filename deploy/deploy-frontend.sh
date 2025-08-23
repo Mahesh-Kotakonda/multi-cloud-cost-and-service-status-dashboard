@@ -7,8 +7,8 @@ set -euo pipefail
 #########################################
 
 # === DEFAULT CONFIG ===
-FRONTEND_BLUE_PORT=80
-FRONTEND_GREEN_PORT=81
+FRONTEND_BLUE_PORT=3000
+FRONTEND_GREEN_PORT=3001
 LISTENER_ARN=""
 
 # === ARG PARSING ===
