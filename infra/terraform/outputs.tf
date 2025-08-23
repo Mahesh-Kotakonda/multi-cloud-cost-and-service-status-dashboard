@@ -50,6 +50,11 @@ output "alb_dns" {
   value = module.alb.alb_dns
 }
 
+output "alb_listener_arn" {
+  value       = module.alb.alb_listener_arn
+  description = "ARN of the Application Load Balancer listener from the ALB module"
+}
+
 # Database outputs
 output "db_endpoint" {
   value = module.database.db_instance_endpoint
