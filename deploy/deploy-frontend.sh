@@ -120,9 +120,10 @@ create_or_update_frontend_rule() {
       --conditions Field=path-pattern,Values='/*' \
       --actions "Type=fixed-response,FixedResponseConfig=file://fixed-response.json"
   
-    # Remove temporary file
+    # Clean up
     rm -f fixed-response.json
   fi
+
 
 
 
