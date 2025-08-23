@@ -47,14 +47,9 @@ if [[ -z "${BACKEND_BLUE_TG:-}" || -z "${BACKEND_GREEN_TG:-}" ]]; then
   echo "Must provide --blue-tg and --green-tg"; exit 1
 fi
 
-# === DETERMINE CURRENT ACTIVE COLOR ===
-CURRENT_TG=$(aws elbv2 describe-listeners \
-  --listener-arns "$LISTENER_ARN" \
-  --query "Listeners[0].DefaultActions[0].ForwardConfig.TargetGroups[0].TargetGroupArn" \
-  --output text 2>/dev/null || echo "")
-
 IFS=',' read -ra INSTANCES <<< "$INSTANCE_IDS"
 
+# === DEPLOY FUNCTION ===
 deploy_container() {
   local instance_id=$1
   local port=$2
@@ -67,14 +62,11 @@ deploy_container() {
 
   ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" bash <<EOF
     set -e
-    # Remove old container if exists
     docker ps -q --filter "publish=$port" | xargs -r docker stop | xargs -r docker rm || true
 
-    # Login and pull
     echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
     docker pull "$DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest"
 
-    # Run new container with AWS + DB creds
     docker run -d -p $port:$port \
       --name backend_${color,,} \
       -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
@@ -89,6 +81,37 @@ deploy_container() {
 EOF
 }
 
+# === CREATE OR UPDATE LISTENER RULE ===
+create_or_update_backend_rule() {
+  local priority=$1
+  local tg=$2
+
+  RULE_ARN=$(aws elbv2 describe-rules \
+    --listener-arn "$LISTENER_ARN" \
+    --query "Rules[?Conditions[?Field=='path-pattern' && Values[0]=='/api/aws/*']].RuleArn" \
+    --output text || echo "")
+
+  if [[ -z "$RULE_ARN" || "$RULE_ARN" == "None" ]]; then
+    echo "Creating new listener rule for /api/aws/* -> TG $tg"
+    aws elbv2 create-rule \
+      --listener-arn "$LISTENER_ARN" \
+      --priority $priority \
+      --conditions Field=path-pattern,Values='/api/aws/*' \
+      --actions Type=forward,TargetGroupArn=$tg
+  else
+    echo "Updating existing listener rule for /api/aws/* -> TG $tg"
+    aws elbv2 modify-rule \
+      --rule-arn "$RULE_ARN" \
+      --conditions Field=path-pattern,Values='/api/aws/*' \
+      --actions Type=forward,TargetGroupArn=$tg
+  fi
+}
+
+# === DETERMINE CURRENT ACTIVE COLOR ===
+CURRENT_TG=$(aws elbv2 describe-listeners \
+  --listener-arns "$LISTENER_ARN" \
+  --query "Listeners[0].DefaultActions[0].ForwardConfig.TargetGroups[0].TargetGroupArn" \
+  --output text 2>/dev/null || echo "")
 
 # === FIRST-TIME DEPLOYMENT ===
 if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
@@ -105,10 +128,12 @@ if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
   echo "Waiting for BLUE targets to be healthy..."
   aws elbv2 wait target-in-service --target-group-arn "$BACKEND_BLUE_TG"
 
-  echo "Switching ALB to backend BLUE"
+  echo "Switching ALB to backend BLUE (default + rule)"
   aws elbv2 modify-listener \
     --listener-arn "$LISTENER_ARN" \
-    --default-actions "Type=forward,ForwardConfig={TargetGroups=[{TargetGroupArn=$BACKEND_BLUE_TG,Weight=1}]}"
+    --default-actions "Type=forward,TargetGroupArn=$BACKEND_BLUE_TG"
+
+  create_or_update_backend_rule 10 "$BACKEND_BLUE_TG"
 
   echo "First-time deployment complete. BLUE is live."
   exit 0
@@ -135,9 +160,11 @@ done
 echo "Waiting for backend $NEXT_COLOR targets to be healthy..."
 aws elbv2 wait target-in-service --target-group-arn "$NEW_TG"
 
-echo "Switching ALB to backend $NEXT_COLOR"
+echo "Switching ALB to backend $NEXT_COLOR (default + rule)"
 aws elbv2 modify-listener \
   --listener-arn "$LISTENER_ARN" \
-  --default-actions "Type=forward,ForwardConfig={TargetGroups=[{TargetGroupArn=$NEW_TG,Weight=1}]}"
+  --default-actions "Type=forward,TargetGroupArn=$NEW_TG"
+
+create_or_update_backend_rule 10 "$NEW_TG"
 
 echo "Backend $NEXT_COLOR deployment complete."
