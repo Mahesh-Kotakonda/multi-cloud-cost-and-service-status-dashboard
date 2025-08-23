@@ -34,31 +34,28 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# === VALIDATE REQUIREMENTS ===
-if [[ -z "${OUTPUTS_JSON:-}" ]]; then
-  echo "Must provide --outputs-json"; exit 1
-fi
-
-if [[ -z "${INSTANCE_IDS:-}" ]]; then
-  echo "Must provide --instance-ids"; exit 1
-fi
-if [[ -z "${BACKEND_BLUE_TG:-}" || -z "${BACKEND_GREEN_TG:-}" ]]; then
-  echo "Must provide --blue-tg and --green-tg"; exit 1
-fi
+# === VALIDATE ===
+if [[ -z "${OUTPUTS_JSON:-}" ]]; then echo "Must provide --outputs-json"; exit 1; fi
+if [[ -z "${INSTANCE_IDS:-}" ]]; then echo "Must provide --instance-ids"; exit 1; fi
+if [[ -z "${BACKEND_BLUE_TG:-}" || -z "${BACKEND_GREEN_TG:-}" ]]; then echo "Must provide --blue-tg and --green-tg"; exit 1; fi
 
 IFS=',' read -ra INSTANCES <<< "$INSTANCE_IDS"
 
-# === FETCH LISTENER ARN FROM JSON ===
+# === FETCH LISTENER ARN ===
 LISTENER_ARN=$(jq -r '.alb_listener_arn' "$OUTPUTS_JSON")
 if [[ -z "$LISTENER_ARN" || "$LISTENER_ARN" == "null" ]]; then
   echo "Could not fetch alb_listener_arn from $OUTPUTS_JSON"; exit 1
 fi
+
+# === EXPORT AWS CREDS ===
+export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION
 
 # === DEPLOY FUNCTION ===
 deploy_container() {
   local instance_id=$1
   local port=$2
   local color=$3
+  local container_name="backend_${color,,}"
 
   IP=$(aws ec2 describe-instances --instance-ids "$instance_id" \
         --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
@@ -67,13 +64,16 @@ deploy_container() {
 
   ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" bash <<EOF
     set -e
-    docker ps -q --filter "publish=$port" | xargs -r docker stop | xargs -r docker rm || true
+    if docker ps -a --format '{{.Names}}' | grep -q '^${container_name}\$'; then
+      docker stop $container_name || true
+      docker rm $container_name || true
+    fi
 
     echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
     docker pull "$DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest"
 
     docker run -d -p $port:$port \
-      --name backend_${color,,} \
+      --name $container_name \
       -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
       -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
       -e AWS_REGION=$AWS_REGION \
@@ -86,58 +86,60 @@ deploy_container() {
 EOF
 }
 
-# === CREATE OR UPDATE LISTENER RULE ===
-create_or_update_backend_rule() {
+# === CREATE OR UPDATE RULES ===
+create_or_update_rule() {
   local priority=$1
-  local tg=$2
+  local path=$2
+  local tg=$3
+  local action_type=${4:-forward}  # forward or fixed-response
+  local fixed_response_code=${5:-404}
 
   RULE_ARN=$(aws elbv2 describe-rules \
     --listener-arn "$LISTENER_ARN" \
-    --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'/api/aws/*')]].RuleArn" \
+    --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'$path')]].RuleArn" \
     --output text || echo "")
 
-  if [[ -z "$RULE_ARN" || "$RULE_ARN" == "None" ]]; then
-    echo "Creating new listener rule for /api/aws/* -> TG $tg"
-    aws elbv2 create-rule \
-      --listener-arn "$LISTENER_ARN" \
-      --priority $priority \
-      --conditions Field=path-pattern,Values='/api/aws/*' \
-      --actions Type=forward,TargetGroupArn=$tg
+  if [[ "$action_type" == "forward" ]]; then
+    if [[ -z "$RULE_ARN" || "$RULE_ARN" == "None" ]]; then
+      echo "Creating rule $path -> TG $tg"
+      aws elbv2 create-rule --listener-arn "$LISTENER_ARN" --priority $priority \
+        --conditions Field=path-pattern,Values="$path" \
+        --actions Type=forward,TargetGroupArn=$tg
+    else
+      echo "Updating rule $path -> TG $tg"
+      aws elbv2 modify-rule --rule-arn "$RULE_ARN" \
+        --conditions Field=path-pattern,Values="$path" \
+        --actions Type=forward,TargetGroupArn=$tg
+    fi
   else
-    echo "Updating existing listener rule for /api/aws/* -> TG $tg"
-    aws elbv2 modify-rule \
-      --rule-arn "$RULE_ARN" \
-      --conditions Field=path-pattern,Values='/api/aws/*' \
-      --actions Type=forward,TargetGroupArn=$tg
+    # Fixed response
+    if [[ -z "$RULE_ARN" || "$RULE_ARN" == "None" ]]; then
+      echo "Creating fixed-response $path -> $fixed_response_code"
+      aws elbv2 create-rule --listener-arn "$LISTENER_ARN" --priority $priority \
+        --conditions Field=path-pattern,Values="$path" \
+        --actions Type=fixed-response,FixedResponseConfig="{\"MessageBody\":\"Not Found\",\"StatusCode\":\"$fixed_response_code\",\"ContentType\":\"text/plain\"}"
+    fi
   fi
 }
 
-# === DETERMINE CURRENT ACTIVE BACKEND TG VIA RULE ===
+# === DETERMINE CURRENT ACTIVE TG ===
 CURRENT_TG=$(aws elbv2 describe-rules \
   --listener-arn "$LISTENER_ARN" \
   --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'/api/aws/*')]].Actions[0].ForwardConfig.TargetGroups[0].TargetGroupArn" \
-  --output text)
+  --output text || echo "")
 echo "Current active backend Target Group ARN: $CURRENT_TG"
 
 # === FIRST-TIME DEPLOYMENT ===
 if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
-  echo "First-time deployment detected. Deploying BOTH BLUE and GREEN..."
-
+  echo "First-time backend deployment. Deploying BLUE only..."
   for instance in "${INSTANCES[@]}"; do
     deploy_container "$instance" "$BACKEND_BLUE_PORT" "BLUE"
     aws elbv2 register-targets --target-group-arn "$BACKEND_BLUE_TG" --targets Id=$instance,Port=$BACKEND_BLUE_PORT
-
-    deploy_container "$instance" "$BACKEND_GREEN_PORT" "GREEN"
-    aws elbv2 register-targets --target-group-arn "$BACKEND_GREEN_TG" --targets Id=$instance,Port=$BACKEND_GREEN_PORT
   done
-
-  echo "Waiting for BLUE targets to be healthy..."
-  # aws elbv2 wait target-in-service --target-group-arn "$BACKEND_BLUE_TG"
-
-  echo "Creating listener rule for /api/aws/* -> BACKEND BLUE"
-  create_or_update_backend_rule 10 "$BACKEND_BLUE_TG"
-
-  echo "First-time backend deployment complete. BACKEND BLUE is live."
+  create_or_update_rule 10 "/api/aws/*" "$BACKEND_BLUE_TG"
+  create_or_update_rule 20 "/api/xyz/*" "another-backend-TG"
+  create_or_update_rule 30 "/api/*" "" "fixed-response" 404
+  echo "Backend BLUE is live."
   exit 0
 fi
 
@@ -153,7 +155,7 @@ elif [[ "$CURRENT_TG" == *"green"* ]]; then
   NEW_TG="$BACKEND_BLUE_TG"
   NEW_PORT=$BACKEND_BLUE_PORT
 else
-  echo "Unknown current backend Target Group. Exiting."
+  echo "Unknown current backend TG. Exiting."
   exit 1
 fi
 
@@ -164,10 +166,8 @@ for instance in "${INSTANCES[@]}"; do
   aws elbv2 register-targets --target-group-arn "$NEW_TG" --targets Id=$instance,Port=$NEW_PORT
 done
 
-echo "Waiting for backend $NEXT_COLOR targets to be healthy..."
-# aws elbv2 wait target-in-service --target-group-arn "$NEW_TG"
-
-echo "Updating listener rule for /api/aws/* -> $NEXT_COLOR"
-create_or_update_backend_rule 10 "$NEW_TG"
+echo "Updating listener rules..."
+create_or_update_rule 10 "/api/aws/*" "$NEW_TG"
+create_or_update_rule 30 "/api/*" "" "fixed-response" 404
 
 echo "Backend $NEXT_COLOR deployment complete."
