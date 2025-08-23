@@ -14,22 +14,22 @@ LISTENER_ARN=""
 # === ARG PARSING ===
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --outputs-json)        OUTPUTS_JSON="$2"; shift 2 ;;
-    --pem-path)            PEM_PATH="$2"; shift 2 ;;
-    --db-host)             DB_HOST="$2"; shift 2 ;;
-    --db-port)             DB_PORT="$2"; shift 2 ;;
-    --db-name)             DB_NAME="$2"; shift 2 ;;
-    --db-user)             DB_USER="$2"; shift 2 ;;
-    --db-pass)             DB_PASS="$2"; shift 2 ;;
-    --dockerhub-username)  DOCKERHUB_USERNAME="$2"; shift 2 ;;
-    --dockerhub-token)     DOCKERHUB_TOKEN="$2"; shift 2 ;;
-    --image-repo)          IMAGE_REPO="$2"; shift 2 ;;
-    --instance-ids)        INSTANCE_IDS="$2"; shift 2 ;;
-    --blue-tg)             BACKEND_BLUE_TG="$2"; shift 2 ;;
-    --green-tg)            BACKEND_GREEN_TG="$2"; shift 2 ;;
-    --aws-access-key-id)   AWS_ACCESS_KEY_ID="$2"; shift 2 ;;
+    --outputs-json)         OUTPUTS_JSON="$2"; shift 2 ;;
+    --pem-path)             PEM_PATH="$2"; shift 2 ;;
+    --db-host)              DB_HOST="$2"; shift 2 ;;
+    --db-port)              DB_PORT="$2"; shift 2 ;;
+    --db-name)              DB_NAME="$2"; shift 2 ;;
+    --db-user)              DB_USER="$2"; shift 2 ;;
+    --db-pass)              DB_PASS="$2"; shift 2 ;;
+    --dockerhub-username)   DOCKERHUB_USERNAME="$2"; shift 2 ;;
+    --dockerhub-token)      DOCKERHUB_TOKEN="$2"; shift 2 ;;
+    --image-repo)           IMAGE_REPO="$2"; shift 2 ;;
+    --instance-ids)         INSTANCE_IDS="$2"; shift 2 ;;
+    --blue-tg)              BACKEND_BLUE_TG="$2"; shift 2 ;;
+    --green-tg)             BACKEND_GREEN_TG="$2"; shift 2 ;;
+    --aws-access-key-id)    AWS_ACCESS_KEY_ID="$2"; shift 2 ;;
     --aws-secret-access-key) AWS_SECRET_ACCESS_KEY="$2"; shift 2 ;;
-    --aws-region)          AWS_REGION="$2"; shift 2 ;;
+    --aws-region)           AWS_REGION="$2"; shift 2 ;;
     *) echo "Unknown argument: $1"; exit 1 ;;
   esac
 done
@@ -91,7 +91,7 @@ create_or_update_rule() {
   local priority=$1
   local path=$2
   local tg=$3
-  local action_type=${4:-forward}  # forward or fixed-response
+  local action_type=${4:-forward}
   local fixed_response_code=${5:-404}
 
   RULE_ARN=$(aws elbv2 describe-rules \
@@ -112,12 +112,12 @@ create_or_update_rule() {
         --actions Type=forward,TargetGroupArn=$tg
     fi
   else
-    # Fixed response
+    # Fixed response (correct CLI syntax)
     if [[ -z "$RULE_ARN" || "$RULE_ARN" == "None" ]]; then
       echo "Creating fixed-response $path -> $fixed_response_code"
       aws elbv2 create-rule --listener-arn "$LISTENER_ARN" --priority $priority \
         --conditions Field=path-pattern,Values="$path" \
-        --actions Type=fixed-response,FixedResponseConfig="{\"MessageBody\":\"Not Found\",\"StatusCode\":\"$fixed_response_code\",\"ContentType\":\"text/plain\"}"
+        --actions Type=fixed-response,FixedResponseConfig={StatusCode=$fixed_response_code,ContentType=text/plain,MessageBody="Not Found"}
     fi
   fi
 }
@@ -136,8 +136,9 @@ if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
     deploy_container "$instance" "$BACKEND_BLUE_PORT" "BLUE"
     aws elbv2 register-targets --target-group-arn "$BACKEND_BLUE_TG" --targets Id=$instance,Port=$BACKEND_BLUE_PORT
   done
-  create_or_update_rule 10 "/api/aws/*" "$BACKEND_BLUE_TG"
-  create_or_update_rule 20 "/api/xyz/*" "another-backend-TG"
+  # Blue-Green TG + fixed-response 404 for unknown paths
+  create_or_update_rule 10 "/api/aws/costs" "$BACKEND_BLUE_TG"
+  create_or_update_rule 11 "/api/aws/status" "$BACKEND_BLUE_TG"
   create_or_update_rule 30 "/api/*" "" "fixed-response" 404
   echo "Backend BLUE is live."
   exit 0
@@ -167,7 +168,8 @@ for instance in "${INSTANCES[@]}"; do
 done
 
 echo "Updating listener rules..."
-create_or_update_rule 10 "/api/aws/*" "$NEW_TG"
+create_or_update_rule 10 "/api/aws/costs" "$NEW_TG"
+create_or_update_rule 11 "/api/aws/status" "$NEW_TG"
 create_or_update_rule 30 "/api/*" "" "fixed-response" 404
 
 echo "Backend $NEXT_COLOR deployment complete."
