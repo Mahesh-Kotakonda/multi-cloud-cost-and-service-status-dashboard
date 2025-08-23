@@ -14,29 +14,39 @@ LISTENER_ARN=""
 # === ARG PARSING ===
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --outputs-json)      OUTPUTS_JSON="$2"; shift 2 ;;
-    --pem-path)          PEM_PATH="$2"; shift 2 ;;
+    --outputs-json)       OUTPUTS_JSON="$2"; shift 2 ;;
+    --pem-path)           PEM_PATH="$2"; shift 2 ;;
     --dockerhub-username) DOCKERHUB_USERNAME="$2"; shift 2 ;;
     --dockerhub-token)    DOCKERHUB_TOKEN="$2"; shift 2 ;;
-    --image-repo)        IMAGE_REPO="$2"; shift 2 ;;
-    --instance-ids)      INSTANCE_IDS="$2"; shift 2 ;;
-    --blue-tg)           FRONTEND_BLUE_TG="$2"; shift 2 ;;
-    --green-tg)          FRONTEND_GREEN_TG="$2"; shift 2 ;;
-    --listener-arn)      LISTENER_ARN="$2"; shift 2 ;;
+    --image-repo)         IMAGE_REPO="$2"; shift 2 ;;
+    --instance-ids)       INSTANCE_IDS="$2"; shift 2 ;;
+    --blue-tg)            FRONTEND_BLUE_TG="$2"; shift 2 ;;
+    --green-tg)           FRONTEND_GREEN_TG="$2"; shift 2 ;;
+    --listener-arn)       LISTENER_ARN="$2"; shift 2 ;;
+    --aws-access-key-id)  AWS_ACCESS_KEY_ID="$2"; shift 2 ;;
+    --aws-secret-access-key) AWS_SECRET_ACCESS_KEY="$2"; shift 2 ;;
+    --aws-region)         AWS_REGION="$2"; shift 2 ;;
     *) echo "Unknown argument: $1"; exit 1 ;;
   esac
 done
 
+# === VALIDATE REQUIREMENTS ===
 if [[ -z "${OUTPUTS_JSON:-}" ]]; then
   echo "Must provide --outputs-json"; exit 1
 fi
-
-# === VALIDATE REQUIREMENTS ===
 if [[ -z "${INSTANCE_IDS:-}" ]]; then
   echo "Must provide --instance-ids"; exit 1
 fi
 if [[ -z "${FRONTEND_BLUE_TG:-}" || -z "${FRONTEND_GREEN_TG:-}" ]]; then
   echo "Must provide --blue-tg and --green-tg"; exit 1
+fi
+
+# === EXPORT AWS CREDS ===
+if [[ -n "${AWS_ACCESS_KEY_ID:-}" && -n "${AWS_SECRET_ACCESS_KEY:-}" && -n "${AWS_REGION:-}" ]]; then
+  export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION
+else
+  echo "AWS credentials must be provided with --aws-access-key-id, --aws-secret-access-key, --aws-region"
+  exit 1
 fi
 
 # === DETERMINE CURRENT ACTIVE COLOR ===
@@ -63,7 +73,7 @@ deploy_container() {
     # Remove old container if exists
     docker ps -q --filter "publish=$port" | xargs -r docker stop | xargs -r docker rm || true
 
-    # Login and pull
+    # Docker login + pull
     echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
     docker pull "$IMAGE_REPO:frontend-latest"
 
