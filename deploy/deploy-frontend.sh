@@ -57,7 +57,6 @@ CURRENT_TG=$(aws elbv2 describe-listeners \
 
 IFS=',' read -ra INSTANCES <<< "$INSTANCE_IDS"
 
-# === FUNCTION TO DEPLOY A CONTAINER OVER SSH ===
 deploy_container() {
   local instance_id=$1
   local port=$2
@@ -75,12 +74,15 @@ deploy_container() {
 
     # Docker login + pull
     echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
-    docker pull "$IMAGE_REPO:frontend-latest"
+    docker pull "$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
 
     # Run new container
-    docker run -d -p $port:$port "$IMAGE_REPO:frontend-latest"
+    docker run -d -p $port:$port \
+      --name frontend_${color,,} \
+      "$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
 EOF
 }
+
 
 # === FIRST-TIME DEPLOYMENT ===
 if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
