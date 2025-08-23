@@ -105,14 +105,8 @@ create_or_update_frontend_rule() {
   if [[ -z "$FIXED_404_ARN" || "$FIXED_404_ARN" == "None" ]]; then
     echo "Creating catch-all 404 for /*"
   
-    # Create temporary JSON file for FixedResponseConfig
-    cat > fixed-response.json <<'EOF'
-  {
-    "MessageBody": "Not Found",
-    "StatusCode": "404",
-    "ContentType": "text/plain"
-  }
-  EOF
+    # Create temporary JSON file using echo instead of here-document
+    echo '{"MessageBody":"Not Found","StatusCode":"404","ContentType":"text/plain"}' > fixed-response.json
   
     aws elbv2 create-rule \
       --listener-arn "$LISTENER_ARN" \
@@ -123,6 +117,7 @@ create_or_update_frontend_rule() {
     # Clean up
     rm -f fixed-response.json
   fi
+
 
 
 
