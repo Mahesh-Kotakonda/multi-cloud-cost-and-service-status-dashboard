@@ -3,7 +3,7 @@ set -euo pipefail
 
 #########################################
 # deploy-frontend.sh
-# Blue-Green Deployment for Frontend
+# Blue-Green Deployment for Frontend (Rule-Based)
 #########################################
 
 # === DEFAULT CONFIG ===
@@ -54,13 +54,6 @@ else
   exit 1
 fi
 
-# === DETERMINE CURRENT ACTIVE COLOR ===
-CURRENT_TG=$(aws elbv2 describe-listeners \
-  --listener-arns "$LISTENER_ARN" \
-  --query "Listeners[0].DefaultActions[0].ForwardConfig.TargetGroups[0].TargetGroupArn" \
-  --output text 2>/dev/null || echo "")
-echo "Current active frontend Target Group ARN: $CURRENT_TG"
-
 IFS=',' read -ra INSTANCES <<< "$INSTANCE_IDS"
 
 # === DEPLOY FUNCTION ===
@@ -76,23 +69,49 @@ deploy_container() {
 
   ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" bash <<EOF
     set -e
-    # Remove old container if exists
     docker ps -q --filter "publish=$port" | xargs -r docker stop | xargs -r docker rm || true
-
-    # Docker login + pull
     echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
     docker pull "$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
-
-    # Run new container
-    docker run -d -p $port:$port \
-      --name frontend_${color,,} \
-      "$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
+    docker run -d -p $port:$port --name frontend_${color,,} "$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
 EOF
 }
 
+# === CREATE OR UPDATE LISTENER RULE ===
+create_or_update_frontend_rule() {
+  local priority=$1
+  local tg=$2
+
+  RULE_ARN=$(aws elbv2 describe-rules \
+    --listener-arn "$LISTENER_ARN" \
+    --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'/*')]].RuleArn" \
+    --output text || echo "")
+
+  if [[ -z "$RULE_ARN" || "$RULE_ARN" == "None" ]]; then
+    echo "Creating new listener rule for /* -> TG $tg"
+    aws elbv2 create-rule \
+      --listener-arn "$LISTENER_ARN" \
+      --priority $priority \
+      --conditions Field=path-pattern,Values='/*' \
+      --actions Type=forward,TargetGroupArn=$tg
+  else
+    echo "Updating existing listener rule for /* -> TG $tg"
+    aws elbv2 modify-rule \
+      --rule-arn "$RULE_ARN" \
+      --conditions Field=path-pattern,Values='/*' \
+      --actions Type=forward,TargetGroupArn=$tg
+  fi
+}
+
+# === DETERMINE CURRENT ACTIVE FRONTEND TG ===
+CURRENT_TG=$(aws elbv2 describe-rules \
+  --listener-arn "$LISTENER_ARN" \
+  --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'/*')]].Actions[0].ForwardConfig.TargetGroups[0].TargetGroupArn" \
+  --output text || echo "")
+echo "Current active frontend Target Group ARN: $CURRENT_TG"
+
 # === FIRST-TIME DEPLOYMENT ===
 if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
-  echo "First-time deployment detected. Deploying BOTH blue and green..."
+  echo "First-time frontend deployment detected. Deploying BOTH BLUE and GREEN..."
 
   for instance in "${INSTANCES[@]}"; do
     deploy_container "$instance" "$FRONTEND_BLUE_PORT" "BLUE"
@@ -105,27 +124,30 @@ if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
   echo "Waiting for BLUE targets to be healthy..."
   # aws elbv2 wait target-in-service --target-group-arn "$FRONTEND_BLUE_TG"
 
-  echo "Switching ALB to frontend BLUE"
-  aws elbv2 modify-listener \
-    --listener-arn "$LISTENER_ARN" \
-    --default-actions Type=forward,TargetGroupArn=$FRONTEND_BLUE_TG
+  echo "Creating listener rule for /* -> FRONTEND BLUE"
+  create_or_update_frontend_rule 10 "$FRONTEND_BLUE_TG"
 
-  echo "First-time frontend deployment complete. BLUE is live!"
+  echo "First-time frontend deployment complete. FRONTEND BLUE is live!"
   exit 0
 fi
 
 # === NORMAL BLUE/GREEN SWITCH ===
-if [[ "$CURRENT_TG" == "$FRONTEND_BLUE_TG" ]]; then
-  echo "BLUE active → deploying GREEN"
+if [[ "$CURRENT_TG" == *"blue"* ]]; then
+  CURRENT_COLOR="BLUE"
   NEXT_COLOR="GREEN"
   NEW_TG="$FRONTEND_GREEN_TG"
   NEW_PORT=$FRONTEND_GREEN_PORT
-else
-  echo "GREEN active → deploying BLUE"
+elif [[ "$CURRENT_TG" == *"green"* ]]; then
+  CURRENT_COLOR="GREEN"
   NEXT_COLOR="BLUE"
   NEW_TG="$FRONTEND_BLUE_TG"
   NEW_PORT=$FRONTEND_BLUE_PORT
+else
+  echo "Unknown current frontend Target Group. Exiting."
+  exit 1
 fi
+
+echo "$CURRENT_COLOR active → deploying $NEXT_COLOR"
 
 for instance in "${INSTANCES[@]}"; do
   deploy_container "$instance" "$NEW_PORT" "$NEXT_COLOR"
@@ -135,9 +157,7 @@ done
 echo "Waiting for frontend $NEXT_COLOR targets to be healthy..."
 # aws elbv2 wait target-in-service --target-group-arn "$NEW_TG"
 
-echo "Switching ALB to frontend $NEXT_COLOR"
-aws elbv2 modify-listener \
-  --listener-arn "$LISTENER_ARN" \
-  --default-actions Type=forward,TargetGroupArn=$NEW_TG
+echo "Updating listener rule for /* -> $NEXT_COLOR"
+create_or_update_frontend_rule 10 "$NEW_TG"
 
 echo "Frontend $NEXT_COLOR deployment complete!"
