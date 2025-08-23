@@ -117,6 +117,7 @@ CURRENT_TG=$(aws elbv2 describe-listeners \
   --listener-arns "$LISTENER_ARN" \
   --query "Listeners[0].DefaultActions[0].ForwardConfig.TargetGroups[0].TargetGroupArn" \
   --output text 2>/dev/null || echo "")
+echo "Current active frontend Target Group ARN: $CURRENT_TG"
 
 # === FIRST-TIME DEPLOYMENT ===
 if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
