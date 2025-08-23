@@ -70,7 +70,7 @@ deploy_container() {
     docker pull "$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
 
     # Run new container
-    docker run -d -p $port:$port --name $container_name "$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
+    docker run -d -p $port:3000 --name $container_name "$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
 EOF
 }
 
