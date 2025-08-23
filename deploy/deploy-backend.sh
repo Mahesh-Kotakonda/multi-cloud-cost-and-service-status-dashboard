@@ -14,20 +14,23 @@ LISTENER_ARN=""
 # === ARG PARSING ===
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --outputs-json)      OUTPUTS_JSON="$2"; shift 2 ;;
-    --pem-path)          PEM_PATH="$2"; shift 2 ;;
-    --db-host)           DB_HOST="$2"; shift 2 ;;
-    --db-port)           DB_PORT="$2"; shift 2 ;;
-    --db-name)           DB_NAME="$2"; shift 2 ;;
-    --db-user)           DB_USER="$2"; shift 2 ;;
-    --db-pass)           DB_PASS="$2"; shift 2 ;;
-    --dockerhub-username) DOCKERHUB_USERNAME="$2"; shift 2 ;;
-    --dockerhub-token)    DOCKERHUB_TOKEN="$2"; shift 2 ;;
-    --image-repo)        IMAGE_REPO="$2"; shift 2 ;;
-    --instance-ids)      INSTANCE_IDS="$2"; shift 2 ;;
-    --blue-tg)           BACKEND_BLUE_TG="$2"; shift 2 ;;
-    --green-tg)          BACKEND_GREEN_TG="$2"; shift 2 ;;
-    --listener-arn)      LISTENER_ARN="$2"; shift 2 ;;
+    --outputs-json)        OUTPUTS_JSON="$2"; shift 2 ;;
+    --pem-path)            PEM_PATH="$2"; shift 2 ;;
+    --db-host)             DB_HOST="$2"; shift 2 ;;
+    --db-port)             DB_PORT="$2"; shift 2 ;;
+    --db-name)             DB_NAME="$2"; shift 2 ;;
+    --db-user)             DB_USER="$2"; shift 2 ;;
+    --db-pass)             DB_PASS="$2"; shift 2 ;;
+    --dockerhub-username)  DOCKERHUB_USERNAME="$2"; shift 2 ;;
+    --dockerhub-token)     DOCKERHUB_TOKEN="$2"; shift 2 ;;
+    --image-repo)          IMAGE_REPO="$2"; shift 2 ;;
+    --instance-ids)        INSTANCE_IDS="$2"; shift 2 ;;
+    --blue-tg)             BACKEND_BLUE_TG="$2"; shift 2 ;;
+    --green-tg)            BACKEND_GREEN_TG="$2"; shift 2 ;;
+    --listener-arn)        LISTENER_ARN="$2"; shift 2 ;;
+    --aws-access-key-id)   AWS_ACCESS_KEY_ID="$2"; shift 2 ;;
+    --aws-secret-access-key) AWS_SECRET_ACCESS_KEY="$2"; shift 2 ;;
+    --aws-region)          AWS_REGION="$2"; shift 2 ;;
     *) echo "Unknown argument: $1"; exit 1 ;;
   esac
 done
@@ -70,16 +73,20 @@ deploy_container() {
 
     # Login and pull
     echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
-    docker pull "$IMAGE_REPO:latest"
+    docker pull "$DOCKERHUB_USERNAME/$IMAGE_REPO:latest"
 
-    # Run new container
+    # Run new container with AWS + DB creds
     docker run -d -p $port:$port \
+      --name backend_${color,,} \
+      -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+      -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
+      -e AWS_REGION=$AWS_REGION \
       -e DB_HOST=$DB_HOST \
       -e DB_PORT=$DB_PORT \
       -e DB_NAME=$DB_NAME \
       -e DB_USER=$DB_USER \
       -e DB_PASS=$DB_PASS \
-      "$IMAGE_REPO:latest"
+      "$DOCKERHUB_USERNAME/$IMAGE_REPO:latest"
 EOF
 }
 
