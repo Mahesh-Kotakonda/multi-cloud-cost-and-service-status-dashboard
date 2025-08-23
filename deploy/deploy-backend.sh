@@ -72,7 +72,7 @@ deploy_container() {
     echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
     docker pull "$DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest"
 
-    docker run -d -p $port:$port \
+    docker run -d -p $port:8000 \
       --name $container_name \
       -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
       -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
