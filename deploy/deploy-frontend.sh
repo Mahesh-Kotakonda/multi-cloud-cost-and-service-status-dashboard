@@ -106,7 +106,7 @@ create_or_update_frontend_rule() {
     echo "Creating catch-all 404 for /*"
   
     # Create temporary JSON file for FixedResponseConfig
-    cat > fixed-response.json <<EOF
+    cat > fixed-response.json <<'EOF'
   {
     "MessageBody": "Not Found",
     "StatusCode": "404",
@@ -120,9 +120,10 @@ create_or_update_frontend_rule() {
       --conditions Field=path-pattern,Values='/*' \
       --actions "Type=fixed-response,FixedResponseConfig=file://fixed-response.json"
   
-    # Optional: remove temporary file
+    # Remove temporary file
     rm -f fixed-response.json
   fi
+
 
 
 }
