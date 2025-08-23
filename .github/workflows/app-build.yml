@@ -59,20 +59,7 @@ jobs:
           docker build -t $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest -t $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-${VERSION} -f docker/frontend/Dockerfile .
           docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest
           docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-${VERSION}
-      - name: Create image versions JSON
-        run: |
-          mkdir -p artifacts
-          echo '{
-            "backend": "${DOCKERHUB_USERNAME}/${IMAGE_REPO}:backend-'${VERSION}'",
-            "worker": "${DOCKERHUB_USERNAME}/${IMAGE_REPO}:worker-'${VERSION}'",
-            "frontend": "${DOCKERHUB_USERNAME}/${IMAGE_REPO}:frontend-'${VERSION}'"
-          }' > artifacts/image_versions.json
 
-      - name: Upload image versions JSON as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: image-versions
-          path: artifacts/image_versions.json
   # Trigger deployment workflow after build succeeds
   trigger-deployment:
     needs: build-and-push-dockerhub
@@ -81,7 +68,13 @@ jobs:
       - name: Trigger Deployment Workflow
         uses: peter-evans/repository-dispatch@v3
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}   # built-in token
+          token: ${{ secrets.GITHUB_TOKEN }}
           event-type: trigger-deployment
-          client-payload: '{"ref": "${{ github.ref }}", "run_number": "${{ github.run_number }}"}'
-
+          client-payload: |
+            {
+              "ref": "${{ github.ref }}",
+              "run_number": "${{ github.run_number }}",
+              "backend": "${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_REPO }}:backend-${{ github.run_number }}",
+              "worker": "${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_REPO }}:worker-${{ github.run_number }}",
+              "frontend": "${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_REPO }}:frontend-${{ github.run_number }}"
+            }
