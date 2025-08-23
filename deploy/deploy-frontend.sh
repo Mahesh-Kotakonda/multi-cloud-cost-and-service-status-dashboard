@@ -104,13 +104,14 @@ create_or_update_frontend_rule() {
   
   if [[ -z "$FIXED_404_ARN" || "$FIXED_404_ARN" == "None" ]]; then
     echo "Creating catch-all 404 for /*"
+    FIXED_RESPONSE_JSON="{\"MessageBody\":\"Not Found\",\"StatusCode\":\"404\",\"ContentType\":\"text/plain\"}"
     aws elbv2 create-rule \
       --listener-arn "$LISTENER_ARN" \
       --priority 1000 \
       --conditions Field=path-pattern,Values='/*' \
-      --actions Type=fixed-response,FixedResponseConfig='{ "MessageBody": "Not Found", "StatusCode": "404", "ContentType": "text/plain" }'
+      --actions "Type=fixed-response,FixedResponseConfig=$FIXED_RESPONSE_JSON"
   fi
-}
+
 
 # === DETERMINE CURRENT FRONTEND TG BASED ON / RULE ONLY ===
 CURRENT_TG=$(aws elbv2 describe-rules \
