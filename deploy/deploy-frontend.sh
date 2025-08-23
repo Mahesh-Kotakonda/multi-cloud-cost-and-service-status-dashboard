@@ -30,17 +30,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 # === VALIDATE REQUIREMENTS ===
-if [[ -z "${OUTPUTS_JSON:-}" ]]; then
-  echo "Must provide --outputs-json"; exit 1
-fi
-if [[ -z "${INSTANCE_IDS:-}" ]]; then
-  echo "Must provide --instance-ids"; exit 1
-fi
-if [[ -z "${FRONTEND_BLUE_TG:-}" || -z "${FRONTEND_GREEN_TG:-}" ]]; then
-  echo "Must provide --blue-tg and --green-tg"; exit 1
-fi
+if [[ -z "${OUTPUTS_JSON:-}" ]]; then echo "Must provide --outputs-json"; exit 1; fi
+if [[ -z "${INSTANCE_IDS:-}" ]]; then echo "Must provide --instance-ids"; exit 1; fi
+if [[ -z "${FRONTEND_BLUE_TG:-}" || -z "${FRONTEND_GREEN_TG:-}" ]]; then echo "Must provide --blue-tg and --green-tg"; exit 1; fi
 
-# === FETCH LISTENER ARN FROM JSON ===
+# === FETCH LISTENER ARN ===
 LISTENER_ARN=$(jq -r '.alb_listener_arn' "$OUTPUTS_JSON")
 if [[ -z "$LISTENER_ARN" || "$LISTENER_ARN" == "null" ]]; then
   echo "Could not fetch alb_listener_arn from $OUTPUTS_JSON"; exit 1
@@ -80,7 +74,7 @@ deploy_container() {
 EOF
 }
 
-# === CREATE OR UPDATE LISTENER RULE ===
+# === CREATE OR UPDATE FRONTEND RULE ===
 create_or_update_frontend_rule() {
   local priority=$1
   local tg=$2
@@ -106,14 +100,14 @@ create_or_update_frontend_rule() {
   fi
 }
 
-# === DETERMINE CURRENT ACTIVE FRONTEND TG ===
+# === DETERMINE CURRENT FRONTEND TG ===
 CURRENT_TG=$(aws elbv2 describe-listeners \
   --listener-arns "$LISTENER_ARN" \
   --query "Listeners[0].DefaultActions[0].TargetGroupArn" \
   --output text 2>/dev/null || echo "")
 
+# fallback to rule
 if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
-  # Try to fetch from rule if default action is empty
   CURRENT_TG=$(aws elbv2 describe-rules \
     --listener-arn "$LISTENER_ARN" \
     --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'/*')]].Actions[0].ForwardConfig.TargetGroups[0].TargetGroupArn" \
@@ -125,14 +119,21 @@ echo "Current active frontend Target Group ARN: $CURRENT_TG"
 # === FIRST-TIME DEPLOYMENT ===
 if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
   echo "First-time frontend deployment detected. Deploying FRONTEND BLUE only..."
-
   for instance in "${INSTANCES[@]}"; do
     deploy_container "$instance" "$FRONTEND_BLUE_PORT" "BLUE"
     aws elbv2 register-targets --target-group-arn "$FRONTEND_BLUE_TG" --targets Id=$instance,Port=$FRONTEND_BLUE_PORT
   done
 
   echo "Creating listener rule for /* -> FRONTEND BLUE"
-  create_or_update_frontend_rule 10 "$FRONTEND_BLUE_TG"
+  create_or_update_frontend_rule 500 "$FRONTEND_BLUE_TG"
+
+  # Optionally create catch-all fixed-response 404
+  echo "Creating catch-all fixed-response 404 rule for /*"
+  aws elbv2 create-rule \
+    --listener-arn "$LISTENER_ARN" \
+    --priority 1000 \
+    --conditions Field=path-pattern,Values='/*' \
+    --actions Type=fixed-response,FixedResponseConfig='{ "MessageBody": "Not Found", "StatusCode": "404", "ContentType": "text/plain" }' || true
 
   echo "First-time frontend deployment complete. FRONTEND BLUE is live!"
   exit 0
@@ -166,6 +167,6 @@ echo "Waiting for frontend $NEXT_COLOR targets to be healthy..."
 # aws elbv2 wait target-in-service --target-group-arn "$NEW_TG"
 
 echo "Updating listener rule for /* -> $NEXT_COLOR"
-create_or_update_frontend_rule 10 "$NEW_TG"
+create_or_update_frontend_rule 500 "$NEW_TG"
 
 echo "Frontend $NEXT_COLOR deployment complete!"
