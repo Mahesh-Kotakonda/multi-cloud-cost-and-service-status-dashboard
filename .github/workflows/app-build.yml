@@ -60,7 +60,7 @@ jobs:
           docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest
           docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-${VERSION}
 
-  # Trigger deployment workflow after build succeeds
+  # Trigger deployment workflow after Build succeeds
   trigger-deployment:
     needs: build-and-push-dockerhub
     runs-on: self-hosted
@@ -78,3 +78,4 @@ jobs:
               "worker": "${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_REPO }}:worker-${{ github.run_number }}",
               "frontend": "${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_REPO }}:frontend-${{ github.run_number }}"
             }
+
