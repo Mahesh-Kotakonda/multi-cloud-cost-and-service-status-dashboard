@@ -102,7 +102,7 @@ if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
   done
 
   echo "Waiting for BLUE targets to be healthy..."
-  aws elbv2 wait target-in-service --target-group-arn "$FRONTEND_BLUE_TG"
+  # aws elbv2 wait target-in-service --target-group-arn "$FRONTEND_BLUE_TG"
 
   echo "Switching ALB to frontend BLUE"
   aws elbv2 modify-listener \
@@ -132,7 +132,7 @@ for instance in "${INSTANCES[@]}"; do
 done
 
 echo "Waiting for frontend $NEXT_COLOR targets to be healthy..."
-aws elbv2 wait target-in-service --target-group-arn "$NEW_TG"
+# aws elbv2 wait target-in-service --target-group-arn "$NEW_TG"
 
 echo "Switching ALB to frontend $NEXT_COLOR"
 aws elbv2 modify-listener \
