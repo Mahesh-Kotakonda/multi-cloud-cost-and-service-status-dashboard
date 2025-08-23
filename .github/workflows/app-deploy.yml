@@ -160,7 +160,7 @@ jobs:
           BACKEND_GREEN_TG=$(jq -r '.backend_green_tg_arn' backend-outputs.json)
       
           # Call the backend deploy script with all params including JSON file
-          ./deploy-backend.sh \
+          ./deploy/deploy-backend.sh \
             --outputs-json backend-outputs.json \
             --pem-path "$PEM_PATH" \
             --db-host "$DB_HOST" \
@@ -196,7 +196,7 @@ jobs:
           FRONTEND_GREEN_TG=$(jq -r '.frontend_green_tg_arn' frontend-outputs.json)
       
           # Call the frontend deploy script with all params including JSON file
-          ./deploy-frontend.sh \
+          ./deploy/deploy-frontend.sh \
             --outputs-json frontend-outputs.json \
             --pem-path "$PEM_PATH" \
             --dockerhub-username "${DOCKERHUB_USERNAME}" \
