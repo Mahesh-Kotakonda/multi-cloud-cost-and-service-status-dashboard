@@ -14,18 +14,18 @@ LISTENER_ARN=""
 # === ARG PARSING ===
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --outputs-json)       OUTPUTS_JSON="$2"; shift 2 ;;
-    --pem-path)           PEM_PATH="$2"; shift 2 ;;
-    --dockerhub-username) DOCKERHUB_USERNAME="$2"; shift 2 ;;
-    --dockerhub-token)    DOCKERHUB_TOKEN="$2"; shift 2 ;;
-    --image-repo)         IMAGE_REPO="$2"; shift 2 ;;
-    --instance-ids)       INSTANCE_IDS="$2"; shift 2 ;;
-    --blue-tg)            FRONTEND_BLUE_TG="$2"; shift 2 ;;
-    --green-tg)           FRONTEND_GREEN_TG="$2"; shift 2 ;;
-    --listener-arn)       LISTENER_ARN="$2"; shift 2 ;;
-    --aws-access-key-id)  AWS_ACCESS_KEY_ID="$2"; shift 2 ;;
+    --outputs-json)         OUTPUTS_JSON="$2"; shift 2 ;;
+    --pem-path)             PEM_PATH="$2"; shift 2 ;;
+    --dockerhub-username)   DOCKERHUB_USERNAME="$2"; shift 2 ;;
+    --dockerhub-token)      DOCKERHUB_TOKEN="$2"; shift 2 ;;
+    --image-repo)           IMAGE_REPO="$2"; shift 2 ;;
+    --instance-ids)         INSTANCE_IDS="$2"; shift 2 ;;
+    --blue-tg)              FRONTEND_BLUE_TG="$2"; shift 2 ;;
+    --green-tg)             FRONTEND_GREEN_TG="$2"; shift 2 ;;
+    --listener-arn)         LISTENER_ARN="$2"; shift 2 ;;
+    --aws-access-key-id)    AWS_ACCESS_KEY_ID="$2"; shift 2 ;;
     --aws-secret-access-key) AWS_SECRET_ACCESS_KEY="$2"; shift 2 ;;
-    --aws-region)         AWS_REGION="$2"; shift 2 ;;
+    --aws-region)           AWS_REGION="$2"; shift 2 ;;
     *) echo "Unknown argument: $1"; exit 1 ;;
   esac
 done
@@ -57,6 +57,7 @@ CURRENT_TG=$(aws elbv2 describe-listeners \
 
 IFS=',' read -ra INSTANCES <<< "$INSTANCE_IDS"
 
+# === DEPLOY FUNCTION ===
 deploy_container() {
   local instance_id=$1
   local port=$2
@@ -82,7 +83,6 @@ deploy_container() {
       "$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
 EOF
 }
-
 
 # === FIRST-TIME DEPLOYMENT ===
 if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
