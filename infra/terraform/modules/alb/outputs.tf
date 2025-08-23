@@ -37,5 +37,9 @@ output "backend_green_tg_arn" {
   value       = aws_lb_target_group.backend_green_tg.arn
   description = "ARN of the backend green target group (port 8081)"
 }
+output "alb_listener_arn" {
+  value       = aws_lb_listener.app_listener.arn
+  description = "ARN of the Application Load Balancer listener"
+}
 
 
