@@ -22,7 +22,6 @@ while [[ $# -gt 0 ]]; do
     --instance-ids)         INSTANCE_IDS="$2"; shift 2 ;;
     --blue-tg)              FRONTEND_BLUE_TG="$2"; shift 2 ;;
     --green-tg)             FRONTEND_GREEN_TG="$2"; shift 2 ;;
-    --listener-arn)         LISTENER_ARN="$2"; shift 2 ;;
     --aws-access-key-id)    AWS_ACCESS_KEY_ID="$2"; shift 2 ;;
     --aws-secret-access-key) AWS_SECRET_ACCESS_KEY="$2"; shift 2 ;;
     --aws-region)           AWS_REGION="$2"; shift 2 ;;
@@ -39,6 +38,12 @@ if [[ -z "${INSTANCE_IDS:-}" ]]; then
 fi
 if [[ -z "${FRONTEND_BLUE_TG:-}" || -z "${FRONTEND_GREEN_TG:-}" ]]; then
   echo "Must provide --blue-tg and --green-tg"; exit 1
+fi
+
+# === FETCH LISTENER ARN FROM JSON ===
+LISTENER_ARN=$(jq -r '.alb_listener_arn' "$OUTPUTS_JSON")
+if [[ -z "$LISTENER_ARN" || "$LISTENER_ARN" == "null" ]]; then
+  echo "Could not fetch alb_listener_arn from $OUTPUTS_JSON"; exit 1
 fi
 
 # === EXPORT AWS CREDS ===
@@ -102,7 +107,7 @@ if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
   echo "Switching ALB to frontend BLUE"
   aws elbv2 modify-listener \
     --listener-arn "$LISTENER_ARN" \
-    --default-actions "Type=forward,ForwardConfig={TargetGroups=[{TargetGroupArn=$FRONTEND_BLUE_TG,Weight=1}]}"
+    --default-actions Type=forward,TargetGroupArn=$FRONTEND_BLUE_TG
 
   echo "First-time frontend deployment complete. BLUE is live!"
   exit 0
@@ -132,6 +137,6 @@ aws elbv2 wait target-in-service --target-group-arn "$NEW_TG"
 echo "Switching ALB to frontend $NEXT_COLOR"
 aws elbv2 modify-listener \
   --listener-arn "$LISTENER_ARN" \
-  --default-actions "Type=forward,ForwardConfig={TargetGroups=[{TargetGroupArn=$NEW_TG,Weight=1}]}"
+  --default-actions Type=forward,TargetGroupArn=$NEW_TG
 
 echo "Frontend $NEXT_COLOR deployment complete!"
