@@ -119,44 +119,8 @@ resource "aws_lb_listener" "app_listener" {
     type = "fixed-response"
     fixed_response {
       content_type = "text/plain"
-      message_body = "Listener not configured yet - switch via workflow"
+      message_body = "Service not ready - switch target group via workflow"
       status_code  = "503"
     }
   }
-}
-
-#########################################
-# Attach EC2 Instances to All Target Groups
-#########################################
-
-# Frontend Blue TG (3000)
-resource "aws_lb_target_group_attachment" "frontend_blue_attach" {
-  count            = length(var.target_instance_ids)
-  target_group_arn = aws_lb_target_group.frontend_blue_tg.arn
-  target_id        = var.target_instance_ids[count.index]
-  port             = 3000
-}
-
-# Frontend Green TG (3001)
-resource "aws_lb_target_group_attachment" "frontend_green_attach" {
-  count            = length(var.target_instance_ids)
-  target_group_arn = aws_lb_target_group.frontend_green_tg.arn
-  target_id        = var.target_instance_ids[count.index]
-  port             = 3001
-}
-
-# Backend Blue TG (8080)
-resource "aws_lb_target_group_attachment" "backend_blue_attach" {
-  count            = length(var.target_instance_ids)
-  target_group_arn = aws_lb_target_group.backend_blue_tg.arn
-  target_id        = var.target_instance_ids[count.index]
-  port             = 8080
-}
-
-# Backend Green TG (8081)
-resource "aws_lb_target_group_attachment" "backend_green_attach" {
-  count            = length(var.target_instance_ids)
-  target_group_arn = aws_lb_target_group.backend_green_tg.arn
-  target_id        = var.target_instance_ids[count.index]
-  port             = 8081
 }
