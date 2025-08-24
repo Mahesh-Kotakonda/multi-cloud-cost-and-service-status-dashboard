@@ -246,23 +246,42 @@ jobs:
         uses: actions/checkout@v4
 
       
-      - name: Run Deployment Metadata Script
+      - name: Download infra outputs JSON
         run: |
-          python3 ./deploy/metadata.py \
-            --pem-path "~/ssh-keys/multi-cloud-cost-and-service-status-key.pem" \
-            --worker-current-image "${{ needs.deploy_worker.outputs.worker_current_image }}" \
-            --worker-previous-image "${{ needs.deploy_worker.outputs.worker_previous_image }}" \
-            --worker-status "${{ needs.deploy_worker.outputs.worker_status }}" \
-            --backend-current-image "${{ needs.deploy_backend.outputs.current_image }}" \
-            --backend-previous-image "${{ needs.deploy_backend.outputs.previous_image }}" \
-            --frontend-current-image "${{ needs.deploy_frontend.outputs.current_image }}" \
-            --frontend-previous-image "${{ needs.deploy_frontend.outputs.previous_image }}" \
-            --s3-bucket "${{ env.DEPLOY_METADATA_S3_BUCKET }}" \
-            --dockerhub-username "${{ env.DOCKERHUB_USERNAME }}" \
-            --dockerhub-token "${{ env.DOCKERHUB_TOKEN }}" \
-            --aws-access-key-id "${{ env.AWS_ACCESS_KEY_ID }}" \
-            --aws-secret-access-key "${{ env.AWS_SECRET_ACCESS_KEY }}" \
-            --aws-region "${{ env.AWS_REGION }}" \
-            --image-repo "${{ env.IMAGE_REPO }}" \
-            --github-actor "${{ github.actor }}"
+          S3_JSON_PATH="s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json"
+          aws s3 cp "$S3_JSON_PATH" infra-outputs.json
+          echo "infra_outputs_json=infra-outputs.json" >> $GITHUB_ENV
+
+          # Extract instance IDs and export
+          INSTANCE_IDS=$(jq -r '.ec2_instance_ids | join(",")' infra-outputs.json)
+          echo "instance_ids=$INSTANCE_IDS" >> $GITHUB_ENV
+
+      - name: Run metadata.py
+        run: |
+          python metadata.py \
+            --pem-path ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem \
+            --worker-current-image $WORKER_CURRENT_IMAGE \
+            --worker-previous-image $WORKER_PREVIOUS_IMAGE \
+            --worker-status $WORKER_STATUS \
+            --backend-current-image $BACKEND_CURRENT_IMAGE \
+            --backend-previous-image $BACKEND_PREVIOUS_IMAGE \
+            --frontend-current-image $FRONTEND_CURRENT_IMAGE \
+            --frontend-previous-image $FRONTEND_PREVIOUS_IMAGE \
+            --instance-ids ${{ env.instance_ids }} \
+            --backend-blue-tg $BACKEND_BLUE_TG \
+            --backend-green-tg $BACKEND_GREEN_TG \
+            --backend-active-env $CURRENT_COLOR \
+            --frontend-blue-tg $FRONTEND_BLUE_TG \
+            --frontend-green-tg $FRONTEND_GREEN_TG \
+            --frontend-active-env $CURRENT_COLOR \
+            --infra-outputs-json ${{ env.infra_outputs_json }} \
+            --dockerhub-username $DOCKERHUB_USERNAME \
+            --dockerhub-token $DOCKERHUB_TOKEN \
+            --aws-access-key-id $AWS_ACCESS_KEY_ID \
+            --aws-secret-access-key $AWS_SECRET_ACCESS_KEY \
+            --aws-region $AWS_REGION \
+            --image-repo $IMAGE_REPO \
+            --listener-arn $LISTENER_ARN \
+            --s3-bucket $S3_BUCKET \
+            --github-actor $GITHUB_ACTOR
 
