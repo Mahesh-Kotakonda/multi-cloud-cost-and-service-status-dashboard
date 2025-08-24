@@ -123,6 +123,17 @@ if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
     done
 
     DEPLOYED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+    echo "REFERENCE CHECK VALUE = 1000"
+    echo "backend_active_env=BLUE"
+    echo "backend_current_image=$IMAGE_TAG"
+    echo "backend_previous_image=$IMAGE_TAG"
+    echo "backend_blue_tg=$BACKEND_BLUE_TG"
+    echo "backend_green_tg=$BACKEND_GREEN_TG"
+    echo "backend_deployed_at=$DEPLOYED_AT"
+    echo "backend_deployed_by=$GITHUB_ACTOR"
+    echo "backend_status=success"
+
     echo "backend_active_env=BLUE" >> $GITHUB_OUTPUT
     echo "backend_current_image=$IMAGE_TAG" >> $GITHUB_OUTPUT
     echo "backend_previous_image=$IMAGE_TAG" >> $GITHUB_OUTPUT
@@ -131,6 +142,7 @@ if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
     echo "backend_deployed_at=$DEPLOYED_AT" >> $GITHUB_OUTPUT
     echo "backend_deployed_by=$GITHUB_ACTOR" >> $GITHUB_OUTPUT
     echo "backend_status=success" >> $GITHUB_OUTPUT
+
     echo "Backend BLUE is live."
     exit 0
 fi
@@ -164,11 +176,19 @@ done
 # === PUBLISH OUTPUTS ===
 DEPLOYED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-# set current/previous image consistently
+echo "REFERENCE CHECK VALUE = 1000"
+echo "backend_current_image=$NEW_IMAGE"
+echo "backend_previous_image=$CURRENT_IMAGE"
+echo "backend_active_env=$NEXT_COLOR"
+echo "backend_blue_tg=$BACKEND_BLUE_TG"
+echo "backend_green_tg=$BACKEND_GREEN_TG"
+echo "backend_deployed_at=$DEPLOYED_AT"
+echo "backend_deployed_by=$GITHUB_ACTOR"
+echo "backend_status=success"
+
 echo "backend_current_image=$NEW_IMAGE" >> $GITHUB_OUTPUT
 echo "backend_previous_image=$CURRENT_IMAGE" >> $GITHUB_OUTPUT
-
-echo "backend_active_env=$CURRENT_COLOR" >> $GITHUB_OUTPUT
+echo "backend_active_env=$NEXT_COLOR" >> $GITHUB_OUTPUT
 echo "backend_blue_tg=$BACKEND_BLUE_TG" >> $GITHUB_OUTPUT
 echo "backend_green_tg=$BACKEND_GREEN_TG" >> $GITHUB_OUTPUT
 echo "backend_deployed_at=$DEPLOYED_AT" >> $GITHUB_OUTPUT
