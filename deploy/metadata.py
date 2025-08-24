@@ -1,5 +1,3 @@
-
-
 import argparse
 import json
 import boto3
@@ -17,6 +15,9 @@ def run_command(cmd):
 
 def create_or_update_rule(listener_arn, path, target_group_arn, priority):
     """Create or update ALB listener rule for a given path."""
+    if not target_group_arn:
+        raise ValueError(f"Empty TargetGroupArn for path '{path}' (priority {priority}).")
+
     print(f"Processing ALB rule: path='{path}' -> TG='{target_group_arn}'")
     try:
         rule_arn = run_command(
@@ -114,16 +115,24 @@ if __name__ == "__main__":
     # Worker deployment
     deploy_worker(args.worker_current_image, args.worker_previous_image)
 
-    # Backend deployment
-    backend_tg = args.backend_green_tg if args.backend_active_env == "blue" else args.backend_blue_tg
+    # Normalize env names to uppercase
+    backend_env = args.backend_active_env.strip().upper()
+    frontend_env = args.frontend_active_env.strip().upper()
+
+    # Backend deployment (switch TG based on active env)
+    backend_tg = args.backend_green_tg if backend_env == "BLUE" else args.backend_blue_tg
+    if not backend_tg:
+        raise ValueError("Resolved backend target group ARN is empty. Check --backend-* arguments and backend_active_env.")
     backend_paths = ["/api/aws/*"]
-    print(f"Deploying backend with active environment: {args.backend_active_env}")
+    print(f"Deploying backend with active environment: {backend_env}")
     deploy_service(args.listener_arn, backend_tg, backend_paths, starting_priority=10)
 
-    # Frontend deployment
-    frontend_tg = args.frontend_green_tg if args.frontend_active_env == "blue" else args.frontend_blue_tg
+    # Frontend deployment (switch TG based on active env)
+    frontend_tg = args.frontend_green_tg if frontend_env == "BLUE" else args.frontend_blue_tg
+    if not frontend_tg:
+        raise ValueError("Resolved frontend target group ARN is empty. Check --frontend-* arguments and frontend_active_env.")
     frontend_paths = ["/", "/favicon.ico", "/robots.txt", "/static/*"]
-    print(f"Deploying frontend with active environment: {args.frontend_active_env}")
+    print(f"Deploying frontend with active environment: {frontend_env}")
     deploy_service(args.listener_arn, frontend_tg, frontend_paths, starting_priority=500)
 
     # Prepare deployment outputs
@@ -138,7 +147,7 @@ if __name__ == "__main__":
         "backend": {
             "current_image": args.backend_current_image,
             "previous_image": args.backend_previous_image,
-            "active_env": args.backend_active_env,
+            "active_env": backend_env,
             "blue_tg": args.backend_blue_tg,
             "green_tg": args.backend_green_tg,
             "deployed_at": deployed_at,
@@ -148,7 +157,7 @@ if __name__ == "__main__":
         "frontend": {
             "current_image": args.frontend_current_image,
             "previous_image": args.frontend_previous_image,
-            "active_env": args.frontend_active_env,
+            "active_env": frontend_env,
             "blue_tg": args.frontend_blue_tg,
             "green_tg": args.frontend_green_tg,
             "deployed_at": deployed_at,
