@@ -188,90 +188,61 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Fetch DB credentials and instance info
+        id: fetch_db
+        run: |
+          PEM_PATH=~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
   
-##########################
-# Deploy Backend
-##########################
-deploy_backend:
-  needs: deploy_worker
-  runs-on: self-hosted
-  env:
-    AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-    AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-    AWS_REGION: us-east-1
-    DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-    DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-    IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
-    S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
-    SSM_PARAM_NAME: myapp_database_credentials
-  outputs:
-    backend_status: ${{ steps.deploy_backend.outputs.backend_status }}
-    backend_active_env: ${{ steps.deploy_backend.outputs.backend_active_env }}
-    backend_current_image: ${{ steps.deploy_backend.outputs.backend_current_image }}
-    backend_previous_image: ${{ steps.deploy_backend.outputs.backend_previous_image }}
-    backend_blue_tg: ${{ steps.deploy_backend.outputs.backend_blue_tg }}
-    backend_green_tg: ${{ steps.deploy_backend.outputs.backend_green_tg }}
-    backend_deployed_at: ${{ steps.deploy_backend.outputs.backend_deployed_at }}
-    backend_deployed_by: ${{ steps.deploy_backend.outputs.backend_deployed_by }}
-
-  steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Fetch DB credentials and instance info
-      id: fetch_db
-      run: |
-        PEM_PATH=~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
-
-        echo "Downloading backend JSON from S3..."
-        aws s3 cp "$S3_JSON_PATH" backend-outputs.json
-
-        # Fetch DB host, port, and name from JSON
-        DB_ENDPOINT=$(jq -r '.db.endpoint' backend-outputs.json)
-        DB_HOST=$(echo $DB_ENDPOINT | cut -d':' -f1)
-        DB_PORT=$(echo $DB_ENDPOINT | cut -d':' -f2)
-        DB_NAME=$(jq -r '.db.name' backend-outputs.json)
-
-        INSTANCE_IDS=$(jq -r '.ec2_instance_ids | join(",")' backend-outputs.json)
-        BLUE_TG=$(jq -r '.backend_blue_tg_arn' backend-outputs.json)
-        GREEN_TG=$(jq -r '.backend_green_tg_arn' backend-outputs.json)
-
-        # Fetch DB credentials from SSM
-        PARAM_VALUE=$(aws ssm get-parameter --name "$SSM_PARAM_NAME" --with-decryption --query "Parameter.Value" --output text)
-        DB_USER=$(echo $PARAM_VALUE | jq -r '.username')
-        DB_PASS=$(echo $PARAM_VALUE | jq -r '.password')
-
-        # Export to GitHub environment
-        echo "DB_HOST=$DB_HOST" >> $GITHUB_ENV
-        echo "DB_PORT=$DB_PORT" >> $GITHUB_ENV
-        echo "DB_NAME=$DB_NAME" >> $GITHUB_ENV
-        echo "DB_USER=$DB_USER" >> $GITHUB_ENV
-        echo "DB_PASS=$DB_PASS" >> $GITHUB_ENV
-        echo "INSTANCE_IDS=$INSTANCE_IDS" >> $GITHUB_ENV
-        echo "BACKEND_BLUE_TG=$BLUE_TG" >> $GITHUB_ENV
-        echo "BACKEND_GREEN_TG=$GREEN_TG" >> $GITHUB_ENV
-
-    - name: Deploy Backend (Blue-Green)
-      id: deploy_backend
-      run: |
-        PEM_PATH=~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
-        ./deploy/deploy-backend.sh \
-          --outputs-json backend-outputs.json \
-          --pem-path "$PEM_PATH" \
-          --db-host "$DB_HOST" \
-          --db-port "$DB_PORT" \
-          --db-name "$DB_NAME" \
-          --db-user "$DB_USER" \
-          --db-pass "$DB_PASS" \
-          --dockerhub-username "$DOCKERHUB_USERNAME" \
-          --dockerhub-token "$DOCKERHUB_TOKEN" \
-          --image-tag "${{ github.event.client_payload.backend }}" \
-          --instance-ids "$INSTANCE_IDS" \
-          --blue-tg "$BACKEND_BLUE_TG" \
-          --green-tg "$BACKEND_GREEN_TG" \
-          --aws-access-key-id "$AWS_ACCESS_KEY_ID" \
-          --aws-secret-access-key "$AWS_SECRET_ACCESS_KEY" \
-          --aws-region "$AWS_REGION"
+          echo "Downloading backend JSON from S3..."
+          aws s3 cp "$S3_JSON_PATH" backend-outputs.json
+  
+          # Fetch DB host, port, and name from JSON
+          DB_ENDPOINT=$(jq -r '.db.endpoint' backend-outputs.json)
+          DB_HOST=$(echo $DB_ENDPOINT | cut -d':' -f1)
+          DB_PORT=$(echo $DB_ENDPOINT | cut -d':' -f2)
+          DB_NAME=$(jq -r '.db.name' backend-outputs.json)
+  
+          INSTANCE_IDS=$(jq -r '.ec2_instance_ids | join(",")' backend-outputs.json)
+          BLUE_TG=$(jq -r '.backend_blue_tg_arn' backend-outputs.json)
+          GREEN_TG=$(jq -r '.backend_green_tg_arn' backend-outputs.json)
+  
+          # Fetch DB credentials from SSM
+          PARAM_VALUE=$(aws ssm get-parameter --name "$SSM_PARAM_NAME" --with-decryption --query "Parameter.Value" --output text)
+          DB_USER=$(echo $PARAM_VALUE | jq -r '.username')
+          DB_PASS=$(echo $PARAM_VALUE | jq -r '.password')
+  
+          # Export to GitHub environment
+          echo "DB_HOST=$DB_HOST" >> $GITHUB_ENV
+          echo "DB_PORT=$DB_PORT" >> $GITHUB_ENV
+          echo "DB_NAME=$DB_NAME" >> $GITHUB_ENV
+          echo "DB_USER=$DB_USER" >> $GITHUB_ENV
+          echo "DB_PASS=$DB_PASS" >> $GITHUB_ENV
+          echo "INSTANCE_IDS=$INSTANCE_IDS" >> $GITHUB_ENV
+          echo "BACKEND_BLUE_TG=$BLUE_TG" >> $GITHUB_ENV
+          echo "BACKEND_GREEN_TG=$GREEN_TG" >> $GITHUB_ENV
+  
+      - name: Deploy Backend (Blue-Green)
+        id: deploy_backend
+        run: |
+          PEM_PATH=~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
+          ./deploy/deploy-backend.sh \
+            --outputs-json backend-outputs.json \
+            --pem-path "$PEM_PATH" \
+            --db-host "$DB_HOST" \
+            --db-port "$DB_PORT" \
+            --db-name "$DB_NAME" \
+            --db-user "$DB_USER" \
+            --db-pass "$DB_PASS" \
+            --dockerhub-username "$DOCKERHUB_USERNAME" \
+            --dockerhub-token "$DOCKERHUB_TOKEN" \
+            --image-tag "${{ github.event.client_payload.backend }}" \
+            --instance-ids "$INSTANCE_IDS" \
+            --blue-tg "$BACKEND_BLUE_TG" \
+            --green-tg "$BACKEND_GREEN_TG" \
+            --aws-access-key-id "$AWS_ACCESS_KEY_ID" \
+            --aws-secret-access-key "$AWS_SECRET_ACCESS_KEY" \
+            --aws-region "$AWS_REGION"
 
 
 
