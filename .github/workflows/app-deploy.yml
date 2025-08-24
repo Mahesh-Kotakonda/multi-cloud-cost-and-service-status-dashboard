@@ -245,10 +245,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Python dependencies
-        run: |
-          python3 -m pip install --upgrade pip
-          pip3 install boto3
       
       - name: Run Deployment Metadata Script
         run: |
