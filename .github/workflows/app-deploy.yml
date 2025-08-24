@@ -256,6 +256,32 @@ jobs:
 
           LISTENER_ARN=$(jq -r '.alb_listener_arn' infra-outputs.json)
           echo "listener_arn=$LISTENER_ARN" >> $GITHUB_ENV
+          
+      - name: Print job outputs for debugging
+        run: |
+          echo "Worker Current Image: ${{ needs.deploy_worker.outputs.worker_current_image }}"
+          echo "Worker Previous Image: ${{ needs.deploy_worker.outputs.worker_previous_image }}"
+          echo "Worker Status: ${{ needs.deploy_worker.outputs.worker_status }}"
+          echo "Backend Current Image: ${{ needs.deploy_backend.outputs.backend_current_image }}"
+          echo "Backend Previous Image: ${{ needs.deploy_backend.outputs.backend_previous_image }}"
+          echo "Backend Blue TG: ${{ needs.deploy_backend.outputs.backend_blue_tg }}"
+          echo "Backend Green TG: ${{ needs.deploy_backend.outputs.backend_green_tg }}"
+          echo "Backend Active Env: ${{ needs.deploy_backend.outputs.backend_active_env }}"
+          echo "Frontend Current Image: ${{ needs.deploy_frontend.outputs.frontend_current_image }}"
+          echo "Frontend Previous Image: ${{ needs.deploy_frontend.outputs.frontend_previous_image }}"
+          echo "Frontend Blue TG: ${{ needs.deploy_frontend.outputs.frontend_blue_tg }}"
+          echo "Frontend Green TG: ${{ needs.deploy_frontend.outputs.frontend_green_tg }}"
+          echo "Frontend Active Env: ${{ needs.deploy_frontend.outputs.frontend_active_env }}"
+          echo "Instance IDs: ${{ env.instance_ids }}"
+          echo "Listener ARN: ${{ env.listener_arn }}"
+          echo "Infra Outputs JSON: ${{ env.infra_outputs_json }}"
+          echo "DockerHub Username: ${{ env.DOCKERHUB_USERNAME }}"
+          echo "AWS Access Key: ${{ env.AWS_ACCESS_KEY_ID }}"
+          echo "AWS Region: ${{ env.AWS_REGION }}"
+          echo "Image Repo: ${{ env.IMAGE_REPO }}"
+          echo "S3 Bucket: ${{ env.DEPLOY_METADATA_S3_BUCKET }}"
+          echo "GitHub Actor: ${{ github.actor }}"
+
 
       - name: Run metadata.py
         run: |
