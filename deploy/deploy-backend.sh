@@ -33,7 +33,6 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-
 # === VALIDATE INPUTS ===
 if [[ -z "${OUTPUTS_JSON:-}" ]]; then echo "Must provide --outputs-json"; exit 1; fi
 if [[ -z "${INSTANCE_IDS:-}" ]]; then echo "Must provide --instance-ids"; exit 1; fi
@@ -125,10 +124,10 @@ if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
 
     DEPLOYED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
     echo "backend_active_env=BLUE" >> $GITHUB_OUTPUT
-    echo "backend_versions_blue=$IMAGE_TAG" >> $GITHUB_OUTPUT
-    echo "backend_versions_green=$IMAGE_TAG" >> $GITHUB_OUTPUT
-    echo "backend_target_group_blue=$BACKEND_BLUE_TG" >> $GITHUB_OUTPUT
-    echo "backend_target_group_green=$BACKEND_GREEN_TG" >> $GITHUB_OUTPUT
+    echo "backend_current_image=$IMAGE_TAG" >> $GITHUB_OUTPUT
+    echo "backend_previous_image=$IMAGE_TAG" >> $GITHUB_OUTPUT
+    echo "backend_blue_tg=$BACKEND_BLUE_TG" >> $GITHUB_OUTPUT
+    echo "backend_green_tg=$BACKEND_GREEN_TG" >> $GITHUB_OUTPUT
     echo "backend_deployed_at=$DEPLOYED_AT" >> $GITHUB_OUTPUT
     echo "backend_deployed_by=$GITHUB_ACTOR" >> $GITHUB_OUTPUT
     echo "backend_status=success" >> $GITHUB_OUTPUT
@@ -165,17 +164,13 @@ done
 # === PUBLISH OUTPUTS ===
 DEPLOYED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-if [[ "$NEXT_COLOR" == "BLUE" ]]; then
-    echo "backend_versions_blue=$NEW_IMAGE" >> $GITHUB_OUTPUT
-    echo "backend_versions_green=$CURRENT_IMAGE" >> $GITHUB_OUTPUT
-else
-    echo "backend_versions_green=$NEW_IMAGE" >> $GITHUB_OUTPUT
-    echo "backend_versions_blue=$CURRENT_IMAGE" >> $GITHUB_OUTPUT
-fi
+# set current/previous image consistently
+echo "backend_current_image=$NEW_IMAGE" >> $GITHUB_OUTPUT
+echo "backend_previous_image=$CURRENT_IMAGE" >> $GITHUB_OUTPUT
 
 echo "backend_active_env=$CURRENT_COLOR" >> $GITHUB_OUTPUT
-echo "backend_target_group_blue=$BACKEND_BLUE_TG" >> $GITHUB_OUTPUT
-echo "backend_target_group_green=$BACKEND_GREEN_TG" >> $GITHUB_OUTPUT
+echo "backend_blue_tg=$BACKEND_BLUE_TG" >> $GITHUB_OUTPUT
+echo "backend_green_tg=$BACKEND_GREEN_TG" >> $GITHUB_OUTPUT
 echo "backend_deployed_at=$DEPLOYED_AT" >> $GITHUB_OUTPUT
 echo "backend_deployed_by=$GITHUB_ACTOR" >> $GITHUB_OUTPUT
 echo "backend_status=success" >> $GITHUB_OUTPUT
