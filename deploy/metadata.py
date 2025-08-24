@@ -6,17 +6,19 @@ import boto3
 import subprocess
 import datetime
 import os
-from pathlib import Path
 
 def run_command(cmd):
-    """Run shell command and capture output."""
+    """Run shell command and return output."""
+    print(f"Running command: {cmd}")
     result = subprocess.run(cmd, shell=True, text=True, capture_output=True)
     if result.returncode != 0:
-        raise RuntimeError(f"Command failed: {cmd}\n{result.stderr}")
+        print(f"Command failed: {cmd}\n{result.stderr}")
+        raise RuntimeError(f"Command failed: {cmd}")
     return result.stdout.strip()
 
 def create_or_update_rule(listener_arn, path, target_group_arn, priority):
     """Create or update ALB listener rule for a given path."""
+    print(f"Processing ALB rule for path '{path}' -> Target Group '{target_group_arn}'")
     try:
         rule_arn = run_command(
             f"aws elbv2 describe-rules --listener-arn {listener_arn} "
@@ -27,14 +29,14 @@ def create_or_update_rule(listener_arn, path, target_group_arn, priority):
         rule_arn = ""
 
     if not rule_arn or rule_arn == "None":
-        print(f"Creating rule {path} -> TG {target_group_arn}")
+        print(f"Creating new rule for {path}")
         run_command(
             f"aws elbv2 create-rule --listener-arn {listener_arn} --priority {priority} "
             f"--conditions Field=path-pattern,Values={path} "
             f"--actions Type=forward,TargetGroupArn={target_group_arn}"
         )
     else:
-        print(f"Updating rule {path} -> TG {target_group_arn}")
+        print(f"Updating existing rule for {path}")
         run_command(
             f"aws elbv2 modify-rule --rule-arn {rule_arn} "
             f"--conditions Field=path-pattern,Values={path} "
@@ -42,48 +44,41 @@ def create_or_update_rule(listener_arn, path, target_group_arn, priority):
         )
 
 def deploy_worker(current_image, previous_image, pem_path):
-    """Simulate worker deployment logic."""
-    # Assuming Docker is used to run the container
-    print(f"Deploying worker container {current_image}...")
-    # Remove previous container if exists
+    """Deploy worker container: remove old and rename new container."""
+    print(f"Deploying worker container: {current_image}")
     try:
         run_command("docker rm -f worker || true")
     except RuntimeError:
-        pass
-    # Rename new container to 'worker'
-    run_command(f"docker rename worker_new worker || true")
-    print("Worker deployment completed.")
+        print("No existing worker container to remove.")
+    run_command("docker rename worker_new worker || true")
+    print("Worker deployment completed successfully.")
 
-def deploy_backend(frontend=False):
-    """Deploy backend or frontend ALB rules."""
-    rules = [
-        ("/api/aws/*", args.backend_tg)
-    ] if not frontend else [
-        ("/", args.frontend_tg),
-        ("/favicon.ico", args.frontend_tg),
-        ("/robots.txt", args.frontend_tg),
-        ("/static/*", args.frontend_tg)
-    ]
-
-    priority = 10 if not frontend else 500
-    for path, tg in rules:
-        create_or_update_rule(args.listener_arn, path, tg, priority)
+def deploy_service(listener_arn, target_group_arn, paths, starting_priority=10):
+    """
+    Deploy backend or frontend by creating/updating ALB rules for multiple paths.
+    """
+    priority = starting_priority
+    for path in paths:
+        create_or_update_rule(listener_arn, path, target_group_arn, priority)
         priority += 1
 
-def save_outputs_to_s3(outputs, bucket_name, prefix="deployments"):
-    """Save deployment outputs JSON to S3 with timestamp."""
+def save_outputs_to_s3(outputs, aws_access_key, aws_secret_key, aws_region, bucket_name, prefix="deployments"):
+    """Save deployment metadata JSON to S3 with a timestamped filename."""
     timestamp = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
     filename = f"{prefix}/deploy_metadata_{timestamp}.json"
-    with open("/tmp/deploy_metadata.json", "w") as f:
+    local_file = f"/tmp/deploy_metadata.json"
+
+    with open(local_file, "w") as f:
         json.dump(outputs, f, indent=2)
 
+    print(f"Uploading deployment metadata to S3 bucket: {bucket_name}")
     s3 = boto3.client(
         "s3",
-        aws_access_key_id=args.aws_access_key_id,
-        aws_secret_access_key=args.aws_secret_access_key,
-        region_name=args.aws_region
+        aws_access_key_id=aws_access_key,
+        aws_secret_access_key=aws_secret_key,
+        region_name=aws_region
     )
-    s3.upload_file("/tmp/deploy_metadata.json", bucket_name, filename)
+    s3.upload_file(local_file, bucket_name, filename)
     print(f"Deployment metadata uploaded to s3://{bucket_name}/{filename}")
 
 if __name__ == "__main__":
@@ -92,6 +87,10 @@ if __name__ == "__main__":
     parser.add_argument("--worker-current-image", required=True)
     parser.add_argument("--worker-previous-image", required=True)
     parser.add_argument("--worker-status", required=True)
+    parser.add_argument("--backend-current-image", required=True)
+    parser.add_argument("--backend-previous-image", required=True)
+    parser.add_argument("--frontend-current-image", required=True)
+    parser.add_argument("--frontend-previous-image", required=True)
     parser.add_argument("--instance-ids", required=True)
     parser.add_argument("--backend-blue-tg", required=True)
     parser.add_argument("--backend-green-tg", required=True)
@@ -108,47 +107,72 @@ if __name__ == "__main__":
     parser.add_argument("--image-repo", required=True)
     parser.add_argument("--listener-arn", required=True)
     parser.add_argument("--s3-bucket", required=True)
+    parser.add_argument("--github-actor", required=True)
     args = parser.parse_args()
 
-    # Deploy worker container
+    print("Starting deployment process...")
+
+    deployed_at = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # Deploy worker
     deploy_worker(args.worker_current_image, args.worker_previous_image, args.pem_path)
 
-    # Deploy backend rules
+    # Deploy backend
     backend_tg = args.backend_green_tg if args.backend_active_env == "blue" else args.backend_blue_tg
-    args.backend_tg = backend_tg
-    deploy_backend(frontend=False)
+    backend_paths = ["/api/aws/*"]
+    print(f"Deploying backend with active environment: {args.backend_active_env}")
+    deploy_service(args.listener_arn, backend_tg, backend_paths, starting_priority=10)
 
-    # Deploy frontend rules
+    # Deploy frontend
     frontend_tg = args.frontend_green_tg if args.frontend_active_env == "blue" else args.frontend_blue_tg
-    args.frontend_tg = frontend_tg
-    deploy_backend(frontend=True)
+    frontend_paths = ["/", "/favicon.ico", "/robots.txt", "/static/*"]
+    print(f"Deploying frontend with active environment: {args.frontend_active_env}")
+    deploy_service(args.listener_arn, frontend_tg, frontend_paths, starting_priority=500)
 
-    # Prepare outputs
-    deployed_at = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    # Prepare deployment outputs
     outputs = {
         "worker": {
             "current_image": args.worker_current_image,
             "previous_image": args.worker_previous_image,
             "deployed_at": deployed_at,
-            "status": "success"
+            "deployed_by": args.github_actor,
+            "status": args.worker_status
         },
         "backend": {
+            "current_image": args.backend_current_image,
+            "previous_image": args.backend_previous_image,
             "active_env": args.backend_active_env,
             "blue_tg": args.backend_blue_tg,
             "green_tg": args.backend_green_tg,
             "deployed_at": deployed_at,
+            "deployed_by": args.github_actor,
             "status": "success"
         },
         "frontend": {
+            "current_image": args.frontend_current_image,
+            "previous_image": args.frontend_previous_image,
             "active_env": args.frontend_active_env,
             "blue_tg": args.frontend_blue_tg,
             "green_tg": args.frontend_green_tg,
             "deployed_at": deployed_at,
+            "deployed_by": args.github_actor,
             "status": "success"
         }
     }
 
-    # Save outputs to S3
-    save_outputs_to_s3(outputs, args.s3_bucket)
+    # Upload deployment outputs to S3
+    save_outputs_to_s3(
+        outputs,
+        args.aws_access_key_id,
+        args.aws_secret_access_key,
+        args.aws_region,
+        args.s3_bucket
+    )
 
+    # Print GitHub Actions compatible outputs
+    for svc in ["worker", "backend", "frontend"]:
+        for key, value in outputs[svc].items():
+            print(f"::set-output name={svc}_{key}::{value}")
+
+    print("Deployment process completed successfully!")
     print(json.dumps(outputs, indent=2))
