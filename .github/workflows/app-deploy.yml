@@ -154,7 +154,6 @@ jobs:
   deploy_backend:
     needs: pre-check
     runs-on: self-hosted
-    environment: production
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -197,7 +196,6 @@ jobs:
   deploy_frontend:
     needs: deploy_backend
     runs-on: self-hosted
-    environment: production
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -220,7 +218,6 @@ jobs:
             --pem-path "$PEM_PATH" \
             --dockerhub-username "${DOCKERHUB_USERNAME}" \
             --dockerhub-token "${DOCKERHUB_TOKEN}" \
-            --image-repo "${IMAGE_REPO}" \
             --image-tag "${{ github.event.client_payload.frontend }}" \
             --instance-ids "$(jq -r '.ec2_instance_ids | join(",")' frontend-outputs.json)" \
             --blue-tg "$(jq -r '.frontend_blue_tg_arn' frontend-outputs.json)" \
@@ -229,13 +226,13 @@ jobs:
             --aws-secret-access-key "${AWS_SECRET_ACCESS_KEY}" \
             --aws-region "${AWS_REGION}"
 
+
   ##########################
   # Deploy Metadata
   ##########################
   deploy_metadata:
     needs: deploy_frontend
     runs-on: self-hosted
-    environment: production
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
