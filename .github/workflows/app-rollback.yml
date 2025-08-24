@@ -77,6 +77,7 @@ jobs:
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: us-east-1
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
       IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
@@ -128,7 +129,6 @@ jobs:
             --s3-bucket $S3_BUCKET \
             --pem-path ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem \
             --reason "${{ github.event.inputs.reason }}"
-  
 
 
 
