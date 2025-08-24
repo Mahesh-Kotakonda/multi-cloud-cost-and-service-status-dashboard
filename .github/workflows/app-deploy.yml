@@ -71,7 +71,6 @@ jobs:
         run: |
           PEM_PATH=~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
           WORKER_IMAGE="${{ github.event.client_payload.worker }}"
-          S3_JSON_PATH="worker-outputs.json"
       
           aws s3 cp "$S3_JSON_PATH" worker-outputs.json
           DB_HOST=$(jq -r '.db.endpoint | split(":")[0]' worker-outputs.json)
