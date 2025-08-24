@@ -24,14 +24,13 @@ concurrency:
 
 jobs:
   build-and-push-dockerhub:
-    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/blue_green_deployment')
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/blue_green_deployment'
     runs-on: self-hosted
     env:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
       IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
       VERSION: v${{ github.run_number }}
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -66,22 +65,20 @@ jobs:
           docker push "$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
           docker push "$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-${VERSION}"
 
-trigger-deployment:
-  needs: build-and-push-dockerhub
-  runs-on: self-hosted
-  steps:
-    - name: Trigger Deployment Workflow
-      uses: peter-evans/repository-dispatch@v3
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        event-type: trigger-deployment
-        client-payload: |
-          {
-            "ref": "${{ github.ref }}",
-            "run_number": "${{ github.run_number }}",
-            "backend": "${{ secrets.DOCKERHUB_USERNAME }}/multi-cloud-cost-and-service-status-dashboard-repo:backend-v${{ github.run_number }}",
-            "worker": "${{ secrets.DOCKERHUB_USERNAME }}/multi-cloud-cost-and-service-status-dashboard-repo:worker-v${{ github.run_number }}",
-            "frontend": "${{ secrets.DOCKERHUB_USERNAME }}/multi-cloud-cost-and-service-status-dashboard-repo:frontend-v${{ github.run_number }}"
-          }
-
-
+  trigger-deployment:
+    needs: build-and-push-dockerhub
+    runs-on: self-hosted
+    steps:
+      - name: Trigger Deployment Workflow
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          event-type: trigger-deployment
+          client-payload: |
+            {
+              "ref": "${{ github.ref }}",
+              "run_number": "${{ github.run_number }}",
+              "backend": "${{ secrets.DOCKERHUB_USERNAME }}/multi-cloud-cost-and-service-status-dashboard-repo:backend-v${{ github.run_number }}",
+              "worker": "${{ secrets.DOCKERHUB_USERNAME }}/multi-cloud-cost-and-service-status-dashboard-repo:worker-v${{ github.run_number }}",
+              "frontend": "${{ secrets.DOCKERHUB_USERNAME }}/multi-cloud-cost-and-service-status-dashboard-repo:frontend-v${{ github.run_number }}"
+            }
