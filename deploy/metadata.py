@@ -5,7 +5,6 @@ import json
 import boto3
 import subprocess
 import datetime
-import os
 
 def run_command(cmd):
     """Run shell command and return output."""
@@ -18,7 +17,7 @@ def run_command(cmd):
 
 def create_or_update_rule(listener_arn, path, target_group_arn, priority):
     """Create or update ALB listener rule for a given path."""
-    print(f"Processing ALB rule for path '{path}' -> Target Group '{target_group_arn}'")
+    print(f"Processing ALB rule: path='{path}' -> TG='{target_group_arn}'")
     try:
         rule_arn = run_command(
             f"aws elbv2 describe-rules --listener-arn {listener_arn} "
@@ -43,30 +42,28 @@ def create_or_update_rule(listener_arn, path, target_group_arn, priority):
             f"--actions Type=forward,TargetGroupArn={target_group_arn}"
         )
 
-def deploy_worker(current_image, previous_image, pem_path):
-    """Deploy worker container: remove old and rename new container."""
+def deploy_worker(current_image, previous_image):
+    """Deploy worker container: remove old and rename new."""
     print(f"Deploying worker container: {current_image}")
     try:
         run_command("docker rm -f worker || true")
     except RuntimeError:
         print("No existing worker container to remove.")
     run_command("docker rename worker_new worker || true")
-    print("Worker deployment completed successfully.")
+    print("Worker deployment completed.")
 
 def deploy_service(listener_arn, target_group_arn, paths, starting_priority=10):
-    """
-    Deploy backend or frontend by creating/updating ALB rules for multiple paths.
-    """
+    """Deploy backend/frontend ALB rules."""
     priority = starting_priority
     for path in paths:
         create_or_update_rule(listener_arn, path, target_group_arn, priority)
         priority += 1
 
-def save_outputs_to_s3(outputs, aws_access_key, aws_secret_key, aws_region, bucket_name, prefix="deployments"):
-    """Save deployment metadata JSON to S3 with a timestamped filename."""
+def save_outputs_to_s3(outputs, aws_access_key, aws_secret_key, aws_region, bucket_name):
+    """Save deployment metadata JSON to S3 with timestamped filename."""
     timestamp = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-    filename = f"{prefix}/deploy_metadata_{timestamp}.json"
-    local_file = f"/tmp/deploy_metadata.json"
+    local_file = "/tmp/deploy_metadata.json"
+    s3_file = f"deployments/deploy_metadata_{timestamp}.json"
 
     with open(local_file, "w") as f:
         json.dump(outputs, f, indent=2)
@@ -78,8 +75,8 @@ def save_outputs_to_s3(outputs, aws_access_key, aws_secret_key, aws_region, buck
         aws_secret_access_key=aws_secret_key,
         region_name=aws_region
     )
-    s3.upload_file(local_file, bucket_name, filename)
-    print(f"Deployment metadata uploaded to s3://{bucket_name}/{filename}")
+    s3.upload_file(local_file, bucket_name, s3_file)
+    print(f"Deployment metadata uploaded to s3://{bucket_name}/{s3_file}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Deploy Metadata Script")
@@ -114,16 +111,16 @@ if __name__ == "__main__":
 
     deployed_at = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    # Deploy worker
-    deploy_worker(args.worker_current_image, args.worker_previous_image, args.pem_path)
+    # Worker deployment
+    deploy_worker(args.worker_current_image, args.worker_previous_image)
 
-    # Deploy backend
+    # Backend deployment
     backend_tg = args.backend_green_tg if args.backend_active_env == "blue" else args.backend_blue_tg
     backend_paths = ["/api/aws/*"]
     print(f"Deploying backend with active environment: {args.backend_active_env}")
     deploy_service(args.listener_arn, backend_tg, backend_paths, starting_priority=10)
 
-    # Deploy frontend
+    # Frontend deployment
     frontend_tg = args.frontend_green_tg if args.frontend_active_env == "blue" else args.frontend_blue_tg
     frontend_paths = ["/", "/favicon.ico", "/robots.txt", "/static/*"]
     print(f"Deploying frontend with active environment: {args.frontend_active_env}")
@@ -160,16 +157,10 @@ if __name__ == "__main__":
         }
     }
 
-    # Upload deployment outputs to S3
-    save_outputs_to_s3(
-        outputs,
-        args.aws_access_key_id,
-        args.aws_secret_access_key,
-        args.aws_region,
-        args.s3_bucket
-    )
+    # Upload to S3
+    save_outputs_to_s3(outputs, args.aws_access_key_id, args.aws_secret_access_key, args.aws_region, args.s3_bucket)
 
-    # Print GitHub Actions compatible outputs
+    # GitHub Actions outputs
     for svc in ["worker", "backend", "frontend"]:
         for key, value in outputs[svc].items():
             print(f"::set-output name={svc}_{key}::{value}")
