@@ -238,7 +238,6 @@ jobs:
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_REGION: us-east-1
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
       IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
@@ -246,17 +245,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
+  
       - name: Apply Rollback Metadata
         run: |
           python3 ./deploy/rollback.py metadata \
             --deployment-json-path ${{ needs.fetch_json.outputs.deployment_json_path }} \
+            --infra-json-path ${{ needs.fetch_json.outputs.infra_json_path }} \
             --aws-access-key-id $AWS_ACCESS_KEY_ID \
             --aws-secret-access-key $AWS_SECRET_ACCESS_KEY \
-            --aws-region $AWS_REGION \
             --docker-username $DOCKERHUB_USERNAME \
             --docker-password $DOCKERHUB_TOKEN \
             --image-repo $IMAGE_REPO \
             --s3-bucket $S3_BUCKET \
             --pem-path ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem \
             --reason "${{ github.event.inputs.reason }}"
+
