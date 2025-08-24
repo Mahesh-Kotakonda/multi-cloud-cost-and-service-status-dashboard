@@ -92,6 +92,9 @@ echo "Current active frontend Target Group ARN: $CURRENT_TG"
 
 DOCKER_IMAGE="$IMAGE_TAG"
 
+# Strip username from image for outputs
+IMAGE_CLEAN=$(echo "$DOCKER_IMAGE" | cut -d'/' -f2)
+
 # === FIRST-TIME DEPLOYMENT ===
 if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
   echo "First-time frontend deployment. Deploying FRONTEND BLUE + GREEN (but only registering BLUE)..."
@@ -103,19 +106,9 @@ if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
 
   DEPLOYED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-  echo "REFERENCE CHECK VALUE = 1000"
-  echo "frontend_active_env=BLUE"
-  echo "frontend_current_image=$DOCKER_IMAGE"
-  echo "frontend_previous_image=$DOCKER_IMAGE"
-  echo "frontend_blue_tg=$FRONTEND_BLUE_TG"
-  echo "frontend_green_tg=$FRONTEND_GREEN_TG"
-  echo "frontend_deployed_at=$DEPLOYED_AT"
-  echo "frontend_deployed_by=$GITHUB_ACTOR"
-  echo "frontend_status=success"
-
   echo "frontend_active_env=BLUE" >> $GITHUB_OUTPUT
-  echo "frontend_current_image=$DOCKER_IMAGE" >> $GITHUB_OUTPUT
-  echo "frontend_previous_image=$DOCKER_IMAGE" >> $GITHUB_OUTPUT
+  echo "frontend_current_image=$IMAGE_CLEAN" >> $GITHUB_OUTPUT
+  echo "frontend_previous_image=$IMAGE_CLEAN" >> $GITHUB_OUTPUT
   echo "frontend_blue_tg=$FRONTEND_BLUE_TG" >> $GITHUB_OUTPUT
   echo "frontend_green_tg=$FRONTEND_GREEN_TG" >> $GITHUB_OUTPUT
   echo "frontend_deployed_at=$DEPLOYED_AT" >> $GITHUB_OUTPUT
@@ -142,6 +135,10 @@ echo "$CURRENT_COLOR active → deploying $NEXT_COLOR"
 CURRENT_IMAGE=$(get_current_container_image "${INSTANCES[0]}" "$CURRENT_COLOR")
 NEW_IMAGE="$DOCKER_IMAGE"
 
+# Strip username for outputs
+NEW_IMAGE_CLEAN=$(echo "$NEW_IMAGE" | cut -d'/' -f2)
+CURRENT_IMAGE_CLEAN=$(echo "$CURRENT_IMAGE" | cut -d'/' -f2)
+
 for instance in "${INSTANCES[@]}"; do
   deploy_container "$instance" "$NEW_PORT" "$NEXT_COLOR" "$NEW_IMAGE"
   aws elbv2 register-targets --target-group-arn "$NEW_TG" --targets Id=$instance,Port=$NEW_PORT
@@ -149,18 +146,8 @@ done
 
 DEPLOYED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-echo "REFERENCE CHECK VALUE = 1000"
-echo "frontend_current_image=$NEW_IMAGE"
-echo "frontend_previous_image=$CURRENT_IMAGE"
-echo "frontend_active_env=$NEXT_COLOR"
-echo "frontend_blue_tg=$FRONTEND_BLUE_TG"
-echo "frontend_green_tg=$FRONTEND_GREEN_TG"
-echo "frontend_deployed_at=$DEPLOYED_AT"
-echo "frontend_deployed_by=$GITHUB_ACTOR"
-echo "frontend_status=success"
-
-echo "frontend_current_image=$NEW_IMAGE" >> $GITHUB_OUTPUT
-echo "frontend_previous_image=$CURRENT_IMAGE" >> $GITHUB_OUTPUT
+echo "frontend_current_image=$NEW_IMAGE_CLEAN" >> $GITHUB_OUTPUT
+echo "frontend_previous_image=$CURRENT_IMAGE_CLEAN" >> $GITHUB_OUTPUT
 echo "frontend_active_env=$NEXT_COLOR" >> $GITHUB_OUTPUT
 echo "frontend_blue_tg=$FRONTEND_BLUE_TG" >> $GITHUB_OUTPUT
 echo "frontend_green_tg=$FRONTEND_GREEN_TG" >> $GITHUB_OUTPUT
