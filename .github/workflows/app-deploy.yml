@@ -10,7 +10,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Guard job to check branch and username
+  ##########################
+  # Pre-check deployment
+  ##########################
   pre-check:
     runs-on: self-hosted
     outputs:
@@ -25,32 +27,27 @@ jobs:
 
           CAN_DEPLOY=false
 
-          # Condition 1: Deployments from main branch
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            echo "✅ Allowed: main branch"
             CAN_DEPLOY=true
           fi
 
-          # Condition 2: Manual trigger + correct actor
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.actor }}" = "Mahesh-Kotakonda" ]; then
-            echo "✅ Allowed: manual trigger by Mahesh-Kotakonda"
             CAN_DEPLOY=true
           fi
 
           if [ "$CAN_DEPLOY" = true ]; then
             echo "can_deploy=true" >> $GITHUB_OUTPUT
           else
-            echo "⚠️ Not allowed to deploy (must be main branch OR manual trigger by Mahesh-Kotakonda)"
             echo "can_deploy=false" >> $GITHUB_OUTPUT
-          fi
 
-  deploy:
+  ##########################
+  # Deploy Worker
+  ##########################
+  deploy_worker:
     needs: pre-check
     if: needs.pre-check.outputs.can_deploy == 'true'
     runs-on: self-hosted
-    environment:
-      name: production
-
+    environment: production
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -60,7 +57,6 @@ jobs:
       IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
       SSM_PARAM_NAME: myapp_database_credentials
       S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -78,14 +74,6 @@ jobs:
           DB_PASS=$(echo $PARAM_VALUE | jq -r '.password')
           echo "DB_USER=$DB_USER" >> $GITHUB_ENV
           echo "DB_PASS=$DB_PASS" >> $GITHUB_ENV
-          
-      - name: Print Docker image versions from payload
-        run: |
-          echo "Backend image: ${{ github.event.client_payload.backend }}"
-          echo "Worker image: ${{ github.event.client_payload.worker }}"
-          echo "Frontend image: ${{ github.event.client_payload.frontend }}"
-
-
 
       - name: Deploy Worker and Publish Metadata
         id: deploy_worker
@@ -94,7 +82,6 @@ jobs:
           WORKER_IMAGE="${{ github.event.client_payload.worker }}"
           S3_JSON_PATH="worker-outputs.json"
       
-          # Download instance info
           aws s3 cp "$S3_JSON_PATH" worker-outputs.json
           DB_HOST=$(jq -r '.db.endpoint | split(":")[0]' worker-outputs.json)
           DB_NAME=$(jq -r '.db.name' worker-outputs.json)
@@ -102,25 +89,19 @@ jobs:
       
           for ID in $INSTANCE_IDS; do
             IP=$(aws ec2 describe-instances --instance-ids $ID --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
-      
-            # Check if old container exists
             OLD_CONTAINER_PRESENT=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
               "sudo docker ps -a --filter 'name=worker' --format '{{.Names}}' | grep -w worker || true")
       
             if [ -z "$OLD_CONTAINER_PRESENT" ]; then
-              echo "No previous worker container found on $IP. Deploying new container..."
               PREV_IMAGE="$WORKER_IMAGE"
             else
-              # Get previous image from running container
               PREV_IMAGE=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
                 "sudo docker inspect --format='{{.Config.Image}}' worker || echo '$WORKER_IMAGE'")
             fi
       
-            # Remove previous failed container if exists
             ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
               "sudo docker rm -f worker_new >/dev/null 2>&1 || true"
       
-            # Deploy new container
             ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
               "echo '$DOCKERHUB_TOKEN' | docker login -u '$DOCKERHUB_USERNAME' --password-stdin; \
                docker pull $WORKER_IMAGE; \
@@ -137,157 +118,142 @@ jobs:
       
             sleep 30
       
-            # Check container health
             STATUS=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
               "sudo docker ps --filter 'name=worker_new' --filter 'status=running' | grep worker_new >/dev/null 2>&1; echo \$?")
       
             if [ "$STATUS" -ne 0 ]; then
-              echo "New worker failed on $IP. Printing logs..."
               ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-                "echo '--- Worker Logs (last 200 lines) ---'; \
-                 sudo docker logs --tail=200 worker_new || true; \
-                 echo '--- Worker Inspect Info ---'; \
-                 sudo docker inspect worker_new --format='Status: {{.State.Status}}, ExitCode: {{.State.ExitCode}}, Error: {{.State.Error}}' || true; \
-                 sudo docker rm -f worker_new || true"
-              echo "Rollout stopped. Old worker kept on $IP."
+                "sudo docker logs --tail=200 worker_new || true; sudo docker rm -f worker_new || true"
+              echo "Worker rollout failed. Old worker kept on $IP."
               exit 1
             else
-              echo "New worker is healthy on $IP."
-      
-              # Publish standalone outputs
               echo "worker_current_image=$WORKER_IMAGE" >> $GITHUB_OUTPUT
               echo "worker_previous_image=$PREV_IMAGE" >> $GITHUB_OUTPUT
-              echo "worker_deployed_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_OUTPUT
-              echo "worker_deployed_by=$GITHUB_ACTOR" >> $GITHUB_OUTPUT
               echo "worker_status=success" >> $GITHUB_OUTPUT
             fi
           done
 
+  ##########################
+  # Deploy Backend
+  ##########################
+  deploy_backend:
+    needs: deploy_worker
+    runs-on: self-hosted
+    environment: production
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: us-east-1
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
+      S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-
-
-
-      #########################################
-      # Deploy Backend (Blue-Green Deployment)
-      #########################################
       - name: Deploy Backend (Blue-Green)
+        id: deploy_backend
         run: |
-          set -euo pipefail
-      
           PEM_PATH=~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
-      
-          # Download Terraform backend outputs
           aws s3 cp "$S3_JSON_PATH" backend-outputs.json
-      
-          # Extract DB details
-          DB_ENDPOINT=$(jq -r '.db.endpoint' backend-outputs.json)
-          DB_HOST=$(echo "$DB_ENDPOINT" | cut -d: -f1)
-          DB_PORT=$(echo "$DB_ENDPOINT" | cut -d: -f2)
-          DB_NAME=$(jq -r '.db.name' backend-outputs.json)
-      
-          # Extract infra details
-          INSTANCE_IDS=$(jq -r '.ec2_instance_ids | join(",")' backend-outputs.json)
-          BACKEND_BLUE_TG=$(jq -r '.backend_blue_tg_arn' backend-outputs.json)
-          BACKEND_GREEN_TG=$(jq -r '.backend_green_tg_arn' backend-outputs.json)
-      
-          # Pass backend image from payload
-          BACKEND_IMAGE="${{ github.event.client_payload.backend }}"
-      
-          # Call the backend deploy script with all params including AWS creds
           ./deploy/deploy-backend.sh \
             --outputs-json backend-outputs.json \
             --pem-path "$PEM_PATH" \
-            --db-host "$DB_HOST" \
-            --db-port "$DB_PORT" \
-            --db-name "$DB_NAME" \
+            --db-host "${DB_HOST}" \
+            --db-port "${DB_PORT}" \
+            --db-name "${DB_NAME}" \
             --db-user "${DB_USER}" \
             --db-pass "${DB_PASS}" \
             --dockerhub-username "${DOCKERHUB_USERNAME}" \
             --dockerhub-token "${DOCKERHUB_TOKEN}" \
             --image-repo "${IMAGE_REPO}" \
-            --image-tag "$BACKEND_IMAGE" \
-            --instance-ids "$INSTANCE_IDS" \
-            --blue-tg "$BACKEND_BLUE_TG" \
-            --green-tg "$BACKEND_GREEN_TG" \
+            --image-tag "${{ github.event.client_payload.backend }}" \
+            --instance-ids "$(jq -r '.ec2_instance_ids | join(",")' backend-outputs.json)" \
+            --blue-tg "$(jq -r '.backend_blue_tg_arn' backend-outputs.json)" \
+            --green-tg "$(jq -r '.backend_green_tg_arn' backend-outputs.json)" \
             --aws-access-key-id "${AWS_ACCESS_KEY_ID}" \
             --aws-secret-access-key "${AWS_SECRET_ACCESS_KEY}" \
             --aws-region "${AWS_REGION}"
-      
-      
-      #########################################
-      # Deploy Frontend (Blue-Green Deployment)
-      #########################################
+
+  ##########################
+  # Deploy Frontend
+  ##########################
+  deploy_frontend:
+    needs: deploy_backend
+    runs-on: self-hosted
+    environment: production
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: us-east-1
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
+      S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Deploy Frontend (Blue-Green)
+        id: deploy_frontend
         run: |
-          set -euo pipefail
-      
           PEM_PATH=~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
-      
-          # Download Terraform frontend outputs
           aws s3 cp "$S3_JSON_PATH" frontend-outputs.json
-      
-          # Extract frontend details
-          INSTANCE_IDS=$(jq -r '.ec2_instance_ids | join(",")' frontend-outputs.json)
-          FRONTEND_BLUE_TG=$(jq -r '.frontend_blue_tg_arn' frontend-outputs.json)
-          FRONTEND_GREEN_TG=$(jq -r '.frontend_green_tg_arn' frontend-outputs.json)
-      
-          # Pass frontend image from payload
-          FRONTEND_IMAGE="${{ github.event.client_payload.frontend }}"
-      
-          # Call the frontend deploy script with all params including AWS creds
           ./deploy/deploy-frontend.sh \
             --outputs-json frontend-outputs.json \
             --pem-path "$PEM_PATH" \
             --dockerhub-username "${DOCKERHUB_USERNAME}" \
             --dockerhub-token "${DOCKERHUB_TOKEN}" \
             --image-repo "${IMAGE_REPO}" \
-            --image-tag "$FRONTEND_IMAGE" \
-            --instance-ids "$INSTANCE_IDS" \
-            --blue-tg "$FRONTEND_BLUE_TG" \
-            --green-tg "$FRONTEND_GREEN_TG" \
+            --image-tag "${{ github.event.client_payload.frontend }}" \
+            --instance-ids "$(jq -r '.ec2_instance_ids | join(",")' frontend-outputs.json)" \
+            --blue-tg "$(jq -r '.frontend_blue_tg_arn' frontend-outputs.json)" \
+            --green-tg "$(jq -r '.frontend_green_tg_arn' frontend-outputs.json)" \
             --aws-access-key-id "${AWS_ACCESS_KEY_ID}" \
             --aws-secret-access-key "${AWS_SECRET_ACCESS_KEY}" \
             --aws-region "${AWS_REGION}"
 
-      metadata:
-        needs: [deploy_worker, deploy_backend, deploy_frontend]
-        runs-on: self-hosted
-        environment:
-          name: production
-        steps:
-          - name: Checkout repository
-            uses: actions/checkout@v4
-      
-          - name: Install Python dependencies
-            run: |
-              python -m pip install --upgrade pip
-              pip install boto3
-      
-          - name: Run Deployment Metadata Script
-            run: |
-              python ./deploy/deploy_metadata.py \
-                --pem-path "~/ssh-keys/multi-cloud-cost-and-service-status-key.pem" \
-                --worker-current-image "${{ needs.deploy_worker.outputs.worker_current_image }}" \
-                --worker-previous-image "${{ needs.deploy_worker.outputs.worker_previous_image }}" \
-                --worker-status "${{ needs.deploy_worker.outputs.worker_status }}" \
-                --instance-ids "$(jq -r '.ec2_instance_ids | join(",")' infra-outputs.json)" \
-                --backend-blue-tg "$(jq -r '.backend_blue_tg_arn' infra-outputs.json)" \
-                --backend-green-tg "$(jq -r '.backend_green_tg_arn' infra-outputs.json)" \
-                --backend-active-env "${{ needs.deploy_backend.outputs.active_env }}" \
-                --frontend-blue-tg "$(jq -r '.frontend_blue_tg_arn' infra-outputs.json)" \
-                --frontend-green-tg "$(jq -r '.frontend_green_tg_arn' infra-outputs.json)" \
-                --frontend-active-env "${{ needs.deploy_frontend.outputs.active_env }}" \
-                --infra-outputs-json "infra-outputs.json" \
-                --dockerhub-username "${{ env.DOCKERHUB_USERNAME }}" \
-                --dockerhub-token "${{ env.DOCKERHUB_TOKEN }}" \
-                --aws-access-key-id "${{ env.AWS_ACCESS_KEY_ID }}" \
-                --aws-secret-access-key "${{ env.AWS_SECRET_ACCESS_KEY }}" \
-                --aws-region "${{ env.AWS_REGION }}" \
-                --image-repo "${{ env.IMAGE_REPO }}"
- 
+  ##########################
+  # Deploy Metadata
+  ##########################
+  deploy_metadata:
+    needs: deploy_frontend
+    runs-on: self-hosted
+    environment: production
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: us-east-1
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
+      DEPLOY_METADATA_S3_BUCKET: multi-cloud-cost-and-service-status-dashboard
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install boto3
 
-
-
-
-
+      - name: Run Deployment Metadata Script
+        run: |
+          python ./deploy/deploy_metadata.py \
+            --pem-path "~/ssh-keys/multi-cloud-cost-and-service-status-key.pem" \
+            --worker-current-image "${{ needs.deploy_worker.outputs.worker_current_image }}" \
+            --worker-previous-image "${{ needs.deploy_worker.outputs.worker_previous_image }}" \
+            --worker-status "${{ needs.deploy_worker.outputs.worker_status }}" \
+            --backend-current-image "${{ needs.deploy_backend.outputs.current_image }}" \
+            --backend-previous-image "${{ needs.deploy_backend.outputs.previous_image }}" \
+            --frontend-current-image "${{ needs.deploy_frontend.outputs.current_image }}" \
+            --frontend-previous-image "${{ needs.deploy_frontend.outputs.previous_image }}" \
+            --s3-bucket "${{ env.DEPLOY_METADATA_S3_BUCKET }}" \
+            --dockerhub-username "${{ env.DOCKERHUB_USERNAME }}" \
+            --dockerhub-token "${{ env.DOCKERHUB_TOKEN }}" \
+            --aws-access-key-id "${{ env.AWS_ACCESS_KEY_ID }}" \
+            --aws-secret-access-key "${{ env.AWS_SECRET_ACCESS_KEY }}" \
+            --aws-region "${{ env.AWS_REGION }}" \
+            --image-repo "${{ env.IMAGE_REPO }}" \
+            --github-actor "${{ github.actor }}"
