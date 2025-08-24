@@ -65,8 +65,14 @@ jobs:
           DB_PASS=$(echo $PARAM_VALUE | jq -r '.password')
           echo "DB_USER=$DB_USER" >> $GITHUB_ENV
           echo "DB_PASS=$DB_PASS" >> $GITHUB_ENV
+      - name: Print payload for debugging
+        run: |
+          echo "Backend: ${{ github.event.client_payload.backend }}"
+          echo "Worker: ${{ github.event.client_payload.worker }}"
+          echo "Frontend: ${{ github.event.client_payload.frontend }}"
 
-      - name: Deploy Worker and Publish Metadata
+
+      - name: Deploy Worker
         id: deploy_worker
         run: |
           PEM_PATH=~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
