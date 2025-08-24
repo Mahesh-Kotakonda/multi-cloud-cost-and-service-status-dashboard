@@ -13,25 +13,26 @@ BACKEND_GREEN_PORT=8081
 # === ARG PARSING ===
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --outputs-json) OUTPUTS_JSON="$2"; shift 2 ;;
-        --pem-path) PEM_PATH="$2"; shift 2 ;;
-        --db-host) DB_HOST="$2"; shift 2 ;;
-        --db-port) DB_PORT="$2"; shift 2 ;;
-        --db-name) DB_NAME="$2"; shift 2 ;;
-        --db-user) DB_USER="$2"; shift 2 ;;
-        --db-pass) DB_PASS="$2"; shift 2 ;;
-        --dockerhub-username) DOCKERHUB_USERNAME="$2"; shift 2 ;;
-        --dockerhub-token) DOCKERHUB_TOKEN="$2"; shift 2 ;;
-        --image-tag) IMAGE_TAG="$2"; shift 2 ;;  # Full image string
-        --instance-ids) INSTANCE_IDS="$2"; shift 2 ;;
-        --blue-tg) BACKEND_BLUE_TG="$2"; shift 2 ;;
-        --green-tg) BACKEND_GREEN_TG="$2"; shift 2 ;;
-        --aws-access-key-id) AWS_ACCESS_KEY_ID="$2"; shift 2 ;;
+        --outputs-json)          OUTPUTS_JSON="$2"; shift 2 ;;
+        --pem-path)              PEM_PATH="$2"; shift 2 ;;
+        --db-host)               DB_HOST="$2"; shift 2 ;;
+        --db-port)               DB_PORT="$2"; shift 2 ;;
+        --db-name)               DB_NAME="$2"; shift 2 ;;
+        --db-user)               DB_USER="$2"; shift 2 ;;
+        --db-pass)               DB_PASS="$2"; shift 2 ;;
+        --dockerhub-username)    DOCKERHUB_USERNAME="$2"; shift 2 ;;
+        --dockerhub-token)       DOCKERHUB_TOKEN="$2"; shift 2 ;;
+        --image-tag)             IMAGE_TAG="$2"; shift 2 ;;   # full image ref (username/repo:tag)
+        --instance-ids)          INSTANCE_IDS="$2"; shift 2 ;;
+        --blue-tg)               BACKEND_BLUE_TG="$2"; shift 2 ;;
+        --green-tg)              BACKEND_GREEN_TG="$2"; shift 2 ;;
+        --aws-access-key-id)     AWS_ACCESS_KEY_ID="$2"; shift 2 ;;
         --aws-secret-access-key) AWS_SECRET_ACCESS_KEY="$2"; shift 2 ;;
-        --aws-region) AWS_REGION="$2"; shift 2 ;;
+        --aws-region)            AWS_REGION="$2"; shift 2 ;;
         *) echo "Unknown argument: $1"; exit 1 ;;
     esac
 done
+
 
 # === VALIDATE INPUTS ===
 if [[ -z "${OUTPUTS_JSON:-}" ]]; then echo "Must provide --outputs-json"; exit 1; fi
