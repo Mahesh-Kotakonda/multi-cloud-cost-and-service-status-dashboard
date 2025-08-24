@@ -81,6 +81,7 @@ jobs:
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
       IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
       S3_BUCKET: multi-cloud-cost-and-service-status-dashboard
+      SSM_PARAM_NAME: myapp_database_credentials
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -95,12 +96,13 @@ jobs:
         run: |
           INFRA_JSON="infra.json"
   
+          # DB endpoint and name from infra JSON
           DB_HOST=$(jq -r '.db.endpoint' $INFRA_JSON | cut -d':' -f1)
           DB_PORT=$(jq -r '.db.endpoint' $INFRA_JSON | cut -d':' -f2)
           DB_NAME=$(jq -r '.db.name' $INFRA_JSON)
   
-          SSM_PARAM_NAME=$(jq -r '.db.ssm_param_name' $INFRA_JSON)
-          PARAM_VALUE=$(aws ssm get-parameter --name "$SSM_PARAM_NAME" --with-decryption --query "Parameter.Value" --output text)
+          # Fetch DB credentials from SSM using the fixed parameter name
+          PARAM_VALUE=$(aws ssm get-parameter --name "$SSM_PARAM_NAME" --with-decryption --region $AWS_REGION --query "Parameter.Value" --output text)
           DB_USER=$(echo $PARAM_VALUE | jq -r '.username')
           DB_PASS=$(echo $PARAM_VALUE | jq -r '.password')
   
@@ -126,6 +128,7 @@ jobs:
             --s3-bucket $S3_BUCKET \
             --pem-path ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem \
             --reason "${{ github.event.inputs.reason }}"
+  
 
 
 
