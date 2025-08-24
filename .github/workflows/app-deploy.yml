@@ -152,7 +152,7 @@ jobs:
   # Deploy Backend
   ##########################
   deploy_backend:
-    needs: pre-check
+    needs: deploy_worker
     runs-on: self-hosted
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
