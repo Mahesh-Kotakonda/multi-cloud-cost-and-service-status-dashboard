@@ -21,24 +21,15 @@ jobs:
       - name: Check if deployment should run
         id: set-output
         run: |
-          echo "ref=${{ github.ref }}"
-          echo "event_name=${{ github.event_name }}"
-          echo "actor=${{ github.actor }}"
-
           CAN_DEPLOY=false
-
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
             CAN_DEPLOY=true
           fi
-
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.actor }}" = "Mahesh-Kotakonda" ]; then
             CAN_DEPLOY=true
           fi
+          echo "can_deploy=$CAN_DEPLOY" >> $GITHUB_OUTPUT
 
-          if [ "$CAN_DEPLOY" = true ]; then
-            echo "can_deploy=true" >> $GITHUB_OUTPUT
-          else
-            echo "can_deploy=false" >> $GITHUB_OUTPUT
 
   ##########################
   # Deploy Worker
