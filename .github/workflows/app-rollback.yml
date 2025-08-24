@@ -23,14 +23,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ##########################
-  # Fetch Deployment & Infra JSONs
-  ##########################
   fetch_json:
     runs-on: self-hosted
     outputs:
-      deployment_json_path: ${{ steps.set_output.outputs.deployment_json_path }}
-      infra_json_path: ${{ steps.set_output.outputs.infra_json_path }}
+      deployment_s3_key: ${{ steps.set_output.outputs.deployment_s3_key }}
+      infra_s3_path: ${{ steps.set_output.outputs.infra_s3_path }}
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -40,49 +37,38 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
+  
       - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-
-      - name: Fetch deployment JSON and infra JSON from S3
+  
+      - name: Determine JSON keys
         id: set_output
         run: |
-          # Determine deployment JSON key
           MODE="${{ github.event.inputs.mode }}"
           if [ "$MODE" = "latest" ]; then
             DEPLOY_KEY=$(aws s3api list-objects-v2 --bucket $S3_BUCKET --prefix "deployments/" \
                           --query 'reverse(sort_by(Contents,&LastModified))[0].Key' --output text)
           else
             DEPLOY_KEY="${{ github.event.inputs.s3_key }}"
-            # Check if the specific key exists
             EXISTS=$(aws s3api head-object --bucket $S3_BUCKET --key "$DEPLOY_KEY" 2>/dev/null || echo "notfound")
             if [ "$EXISTS" = "notfound" ]; then
               echo "Deployment JSON key '$DEPLOY_KEY' does not exist in S3 bucket $S3_BUCKET"
               exit 1
             fi
           fi
-
+  
           if [ -z "$DEPLOY_KEY" ] || [ "$DEPLOY_KEY" = "None" ]; then
             echo "No deployment JSON found"; exit 1
           fi
-
-          echo "Downloading deployment JSON from S3: $DEPLOY_KEY"
-          aws s3 cp "s3://$S3_BUCKET/$DEPLOY_KEY" deployment.json
-
-          echo "Downloading infra JSON from S3: $S3_JSON_PATH"
-          aws s3 cp "${S3_JSON_PATH}" infra.json
-
-          # Export GitHub Actions outputs
-          echo "deployment_json_path=deployment.json" >> $GITHUB_OUTPUT
-          echo "infra_json_path=infra.json" >> $GITHUB_OUTPUT
+  
+          echo "deployment_s3_key=$DEPLOY_KEY" >> $GITHUB_OUTPUT
+          echo "infra_s3_path=${S3_JSON_PATH}" >> $GITHUB_OUTPUT
+  
 
 
-  ##########################
-  # Worker Rollback
-  ##########################
   rollback_worker:
     needs: fetch_json
     if: contains(fromJSON('["all","worker"]'), github.event.inputs.component)
@@ -99,10 +85,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
   
+      - name: Download deployment & infra JSON
+        run: |
+          aws s3 cp "s3://$S3_BUCKET/${{ needs.fetch_json.outputs.deployment_s3_key }}" deployment.json
+          aws s3 cp "${{ needs.fetch_json.outputs.infra_s3_path }}" infra.json
+  
       - name: Fetch DB info from infra JSON and SSM
         id: db_info
         run: |
-          INFRA_JSON="${{ needs.fetch_json.outputs.infra_json_path }}"
+          INFRA_JSON="infra.json"
   
           DB_HOST=$(jq -r '.db.endpoint' $INFRA_JSON | cut -d':' -f1)
           DB_PORT=$(jq -r '.db.endpoint' $INFRA_JSON | cut -d':' -f2)
@@ -123,7 +114,7 @@ jobs:
       - name: Run Worker Rollback
         run: |
           python3 ./deploy/rollback.py worker \
-            --deployment-json-path ${{ needs.fetch_json.outputs.deployment_json_path }} \
+            --deployment-json-path deployment.json \
             --infra-json-path $INFRA_JSON \
             --docker-username $DOCKERHUB_USERNAME \
             --docker-password $DOCKERHUB_TOKEN \
@@ -137,11 +128,12 @@ jobs:
             --reason "${{ github.event.inputs.reason }}"
 
 
+
   ##########################
   # Backend Rollback
   ##########################
   rollback_backend:
-    needs: fetch_json
+    needs: rollback_worker
     if: contains(fromJSON('["all","backend"]'), github.event.inputs.component)
     runs-on: self-hosted
     environment: production
