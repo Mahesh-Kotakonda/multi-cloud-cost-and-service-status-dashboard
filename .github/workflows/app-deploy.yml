@@ -85,72 +85,84 @@ jobs:
           echo "Worker image: ${{ github.event.client_payload.worker }}"
           echo "Frontend image: ${{ github.event.client_payload.frontend }}"
 
-      # - name: Download Docker image versions artifact
-      #   uses: actions/download-artifact@v4
-      #   with:
-      #     name: image-versions
-      #     path: artifacts
-
-      # - name: Print image versions
-      #   run: |
-      #     cat artifacts/image_versions.json
-      #     echo "Backend image: $(jq -r '.backend' artifacts/image_versions.json)"
-      #     echo "Worker image: $(jq -r '.worker' artifacts/image_versions.json)"
-      #     echo "Frontend image: $(jq -r '.frontend' artifacts/image_versions.json)"
 
 
-      # - name: Deploy Worker
-      #   run: |
-      #     PEM_PATH=~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
-      #     aws s3 cp "$S3_JSON_PATH" worker-outputs.json
-      #     DB_HOST=$(jq -r '.db.endpoint | split(":")[0]' worker-outputs.json)
-      #     DB_NAME=$(jq -r '.db.name' worker-outputs.json)
-      #     INSTANCE_IDS=$(jq -r '.ec2_instance_ids[]' worker-outputs.json)
+      - name: Deploy Worker and Publish Metadata
+        id: deploy_worker
+        run: |
+          PEM_PATH=~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
+          WORKER_IMAGE="${{ github.event.client_payload.worker }}"
+          S3_JSON_PATH="worker-outputs.json"
       
-      #     for ID in $INSTANCE_IDS; do
-      #       IP=$(aws ec2 describe-instances --instance-ids $ID --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
+          # Download instance info
+          aws s3 cp "$S3_JSON_PATH" worker-outputs.json
+          DB_HOST=$(jq -r '.db.endpoint | split(":")[0]' worker-outputs.json)
+          DB_NAME=$(jq -r '.db.name' worker-outputs.json)
+          INSTANCE_IDS=$(jq -r '.ec2_instance_ids[]' worker-outputs.json)
       
-      #       # Remove previous failed container
-      #       ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-      #         "sudo docker rm -f worker_new >/dev/null 2>&1 || true"
+          for ID in $INSTANCE_IDS; do
+            IP=$(aws ec2 describe-instances --instance-ids $ID --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
       
-      #       # Deploy new container with explicit AWS and DB credentials
-      #       ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-      #         "docker login -u '$DOCKERHUB_USERNAME' --password-stdin <<< '$DOCKERHUB_TOKEN'; \
-      #          docker pull $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest; \
-      #          docker run -d --name worker_new \
-      #            -e AWS_ACCESS_KEY_ID='$AWS_ACCESS_KEY_ID' \
-      #            -e AWS_SECRET_ACCESS_KEY='$AWS_SECRET_ACCESS_KEY' \
-      #            -e AWS_REGION='$AWS_REGION' \
-      #            -e DB_HOST='$DB_HOST' \
-      #            -e DB_NAME='$DB_NAME' \
-      #            -e DB_USER='$DB_USER' \
-      #            -e DB_PASS='$DB_PASS' \
-      #            -e POLL_INTERVAL_SECONDS=60000 \
-      #            $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest"
+            # Check if old container exists
+            OLD_CONTAINER_PRESENT=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
+              "sudo docker ps -a --filter 'name=worker' --format '{{.Names}}' | grep -w worker || true")
       
-      #       echo "⏳ Waiting for worker_new to stabilize on $IP ..."
-      #       sleep 30
+            if [ -z "$OLD_CONTAINER_PRESENT" ]; then
+              echo "No previous worker container found on $IP. Deploying new container..."
+              PREV_IMAGE="$WORKER_IMAGE"
+            else
+              # Get previous image from running container
+              PREV_IMAGE=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
+                "sudo docker inspect --format='{{.Config.Image}}' worker || echo '$WORKER_IMAGE'")
+            fi
       
-      #       STATUS=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-      #         "sudo docker ps --filter 'name=worker_new' --filter 'status=running' | grep worker_new >/dev/null 2>&1; echo \$?")
+            # Remove previous failed container if exists
+            ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
+              "sudo docker rm -f worker_new >/dev/null 2>&1 || true"
       
-      #       if [ "$STATUS" -eq 0 ]; then
-      #         echo "✅ New worker is healthy on $IP. Replacing old worker..."
-      #         ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-      #           "sudo docker rm -f worker || true; sudo docker rename worker_new worker"
-      #       else
-      #         echo "❌ New worker failed on $IP. Printing logs..."
-      #         ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-      #           "echo '--- Worker Logs (last 200 lines) ---'; \
-      #            sudo docker logs --tail=200 worker_new || true; \
-      #            echo '--- Worker Inspect Info ---'; \
-      #            sudo docker inspect worker_new --format='Status: {{.State.Status}}, ExitCode: {{.State.ExitCode}}, Error: {{.State.Error}}' || true; \
-      #            sudo docker rm -f worker_new || true"
-      #         echo "⚠️ Rollout stopped. Old worker kept on $IP."
-      #         exit 1
-      #       fi
-      #     done
+            # Deploy new container
+            ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
+              "echo '$DOCKERHUB_TOKEN' | docker login -u '$DOCKERHUB_USERNAME' --password-stdin; \
+               docker pull $WORKER_IMAGE; \
+               docker run -d --name worker_new \
+                 -e AWS_ACCESS_KEY_ID='$AWS_ACCESS_KEY_ID' \
+                 -e AWS_SECRET_ACCESS_KEY='$AWS_SECRET_ACCESS_KEY' \
+                 -e AWS_REGION='$AWS_REGION' \
+                 -e DB_HOST='$DB_HOST' \
+                 -e DB_NAME='$DB_NAME' \
+                 -e DB_USER='$DB_USER' \
+                 -e DB_PASS='$DB_PASS' \
+                 -e POLL_INTERVAL_SECONDS=60000 \
+                 $WORKER_IMAGE"
+      
+            sleep 30
+      
+            # Check container health
+            STATUS=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
+              "sudo docker ps --filter 'name=worker_new' --filter 'status=running' | grep worker_new >/dev/null 2>&1; echo \$?")
+      
+            if [ "$STATUS" -ne 0 ]; then
+              echo "New worker failed on $IP. Printing logs..."
+              ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
+                "echo '--- Worker Logs (last 200 lines) ---'; \
+                 sudo docker logs --tail=200 worker_new || true; \
+                 echo '--- Worker Inspect Info ---'; \
+                 sudo docker inspect worker_new --format='Status: {{.State.Status}}, ExitCode: {{.State.ExitCode}}, Error: {{.State.Error}}' || true; \
+                 sudo docker rm -f worker_new || true"
+              echo "Rollout stopped. Old worker kept on $IP."
+              exit 1
+            else
+              echo "New worker is healthy on $IP."
+      
+              # Publish standalone outputs
+              echo "worker_current_image=$WORKER_IMAGE" >> $GITHUB_OUTPUT
+              echo "worker_previous_image=$PREV_IMAGE" >> $GITHUB_OUTPUT
+              echo "worker_deployed_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_OUTPUT
+              echo "worker_deployed_by=$GITHUB_ACTOR" >> $GITHUB_OUTPUT
+              echo "worker_status=success" >> $GITHUB_OUTPUT
+            fi
+          done
+
 
 
 
@@ -162,7 +174,6 @@ jobs:
         run: |
           set -euo pipefail
       
-          # Path to SSH key
           PEM_PATH=~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
       
           # Download Terraform backend outputs
@@ -179,6 +190,9 @@ jobs:
           BACKEND_BLUE_TG=$(jq -r '.backend_blue_tg_arn' backend-outputs.json)
           BACKEND_GREEN_TG=$(jq -r '.backend_green_tg_arn' backend-outputs.json)
       
+          # Pass backend image from payload
+          BACKEND_IMAGE="${{ github.event.client_payload.backend }}"
+      
           # Call the backend deploy script with all params including AWS creds
           ./deploy/deploy-backend.sh \
             --outputs-json backend-outputs.json \
@@ -191,14 +205,15 @@ jobs:
             --dockerhub-username "${DOCKERHUB_USERNAME}" \
             --dockerhub-token "${DOCKERHUB_TOKEN}" \
             --image-repo "${IMAGE_REPO}" \
+            --image-tag "$BACKEND_IMAGE" \
             --instance-ids "$INSTANCE_IDS" \
             --blue-tg "$BACKEND_BLUE_TG" \
             --green-tg "$BACKEND_GREEN_TG" \
             --aws-access-key-id "${AWS_ACCESS_KEY_ID}" \
             --aws-secret-access-key "${AWS_SECRET_ACCESS_KEY}" \
             --aws-region "${AWS_REGION}"
-
-
+      
+      
       #########################################
       # Deploy Frontend (Blue-Green Deployment)
       #########################################
@@ -206,7 +221,6 @@ jobs:
         run: |
           set -euo pipefail
       
-          # Path to SSH key
           PEM_PATH=~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
       
           # Download Terraform frontend outputs
@@ -217,6 +231,9 @@ jobs:
           FRONTEND_BLUE_TG=$(jq -r '.frontend_blue_tg_arn' frontend-outputs.json)
           FRONTEND_GREEN_TG=$(jq -r '.frontend_green_tg_arn' frontend-outputs.json)
       
+          # Pass frontend image from payload
+          FRONTEND_IMAGE="${{ github.event.client_payload.frontend }}"
+      
           # Call the frontend deploy script with all params including AWS creds
           ./deploy/deploy-frontend.sh \
             --outputs-json frontend-outputs.json \
@@ -224,6 +241,7 @@ jobs:
             --dockerhub-username "${DOCKERHUB_USERNAME}" \
             --dockerhub-token "${DOCKERHUB_TOKEN}" \
             --image-repo "${IMAGE_REPO}" \
+            --image-tag "$FRONTEND_IMAGE" \
             --instance-ids "$INSTANCE_IDS" \
             --blue-tg "$FRONTEND_BLUE_TG" \
             --green-tg "$FRONTEND_GREEN_TG" \
@@ -231,7 +249,42 @@ jobs:
             --aws-secret-access-key "${AWS_SECRET_ACCESS_KEY}" \
             --aws-region "${AWS_REGION}"
 
+      metadata:
+        needs: [deploy_worker, deploy_backend, deploy_frontend]
+        runs-on: self-hosted
+        environment:
+          name: production
+        steps:
+          - name: Checkout repository
+            uses: actions/checkout@v4
       
+          - name: Install Python dependencies
+            run: |
+              python -m pip install --upgrade pip
+              pip install boto3
+      
+          - name: Run Deployment Metadata Script
+            run: |
+              python ./deploy/deploy_metadata.py \
+                --pem-path "~/ssh-keys/multi-cloud-cost-and-service-status-key.pem" \
+                --worker-current-image "${{ needs.deploy_worker.outputs.worker_current_image }}" \
+                --worker-previous-image "${{ needs.deploy_worker.outputs.worker_previous_image }}" \
+                --worker-status "${{ needs.deploy_worker.outputs.worker_status }}" \
+                --instance-ids "$(jq -r '.ec2_instance_ids | join(",")' infra-outputs.json)" \
+                --backend-blue-tg "$(jq -r '.backend_blue_tg_arn' infra-outputs.json)" \
+                --backend-green-tg "$(jq -r '.backend_green_tg_arn' infra-outputs.json)" \
+                --backend-active-env "${{ needs.deploy_backend.outputs.active_env }}" \
+                --frontend-blue-tg "$(jq -r '.frontend_blue_tg_arn' infra-outputs.json)" \
+                --frontend-green-tg "$(jq -r '.frontend_green_tg_arn' infra-outputs.json)" \
+                --frontend-active-env "${{ needs.deploy_frontend.outputs.active_env }}" \
+                --infra-outputs-json "infra-outputs.json" \
+                --dockerhub-username "${{ env.DOCKERHUB_USERNAME }}" \
+                --dockerhub-token "${{ env.DOCKERHUB_TOKEN }}" \
+                --aws-access-key-id "${{ env.AWS_ACCESS_KEY_ID }}" \
+                --aws-secret-access-key "${{ env.AWS_SECRET_ACCESS_KEY }}" \
+                --aws-region "${{ env.AWS_REGION }}" \
+                --image-repo "${{ env.IMAGE_REPO }}"
+ 
 
 
 
