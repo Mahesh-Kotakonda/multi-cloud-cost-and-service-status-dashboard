@@ -122,6 +122,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Deploy Metadata Script")
     parser.add_argument("--pem-path", required=True)
     parser.add_argument("--worker-status", required=True)
+    parser.add_argument("--worker-current-image", required=True)
+    parser.add_argument("--worker-previous-image", required=True)
     parser.add_argument("--instance-ids", required=True)
     parser.add_argument("--backend-current-image", required=True)
     parser.add_argument("--backend-previous-image", required=True)
@@ -168,6 +170,8 @@ if __name__ == "__main__":
     # Prepare deployment outputs
     outputs = {
         "worker": {
+            "current_image": args.worker_current_image,
+            "previous_image": args.worker_previous_image,
             "deployed_at": deployed_at,
             "deployed_by": args.github_actor,
             "status": args.worker_status
