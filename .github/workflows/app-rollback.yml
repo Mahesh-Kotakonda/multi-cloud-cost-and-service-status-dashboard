@@ -1,0 +1,173 @@
+name: Rollback Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'latest or specific'
+        required: true
+        default: 'latest'
+      s3_key:
+        description: 'S3 key of specific deployment JSON (required if mode=specific)'
+        required: false
+      reason:
+        description: 'Reason for rollback'
+        required: false
+      component:
+        description: 'Component(s) to rollback: worker, backend, frontend, comma-separated or all'
+        required: false
+        default: 'all'
+
+concurrency:
+  group: rollback-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ##########################
+  # Fetch Deployment JSON
+  ##########################
+  fetch_json:
+    runs-on: self-hosted
+    outputs:
+      deployment_json_path: ${{ steps.set_output.outputs.deployment_json_path }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: us-east-1
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+
+      - name: Fetch deployment JSON from S3
+        id: set_output
+        run: |
+          MODE="${{ github.event.inputs.mode }}"
+          BUCKET="multi-cloud-cost-and-service-status-dashboard"
+          if [ "$MODE" = "latest" ]; then
+            KEY=$(aws s3api list-objects-v2 --bucket $BUCKET --prefix "deployments/" \
+                  --query 'reverse(sort_by(Contents,&LastModified))[0].Key' --output text)
+          else
+            KEY="${{ github.event.inputs.s3_key }}"
+          fi
+          if [ -z "$KEY" ] || [ "$KEY" = "None" ]; then
+            echo "No deployment JSON found"; exit 1
+          fi
+          aws s3 cp "s3://$BUCKET/$KEY" deployment.json
+          echo "deployment_json_path=deployment.json" >> $GITHUB_OUTPUT
+
+  ##########################
+  # Worker Rollback
+  ##########################
+  rollback_worker:
+    needs: fetch_json
+    if: contains(fromJSON('["all","worker"]'), github.event.inputs.component)
+    runs-on: self-hosted
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Worker Rollback
+        run: |
+          python3 ./rollback/rollback.py worker \
+            --deployment-json-path ${{ needs.fetch_json.outputs.deployment_json_path }} \
+            --aws-access-key-id ${{ secrets.AWS_ACCESS_KEY_ID }} \
+            --aws-secret-access-key ${{ secrets.AWS_SECRET_ACCESS_KEY }} \
+            --aws-region us-east-1 \
+            --docker-username ${{ secrets.DOCKERHUB_USERNAME }} \
+            --docker-password ${{ secrets.DOCKERHUB_TOKEN }} \
+            --image-repo multi-cloud-cost-and-service-status-dashboard-repo \
+            --db-host ${{ secrets.DB_HOST }} \
+            --db-port ${{ secrets.DB_PORT }} \
+            --db-user ${{ secrets.DB_USER }} \
+            --db-pass ${{ secrets.DB_PASS }} \
+            --s3-bucket multi-cloud-cost-and-service-status-dashboard \
+            --pem-path ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem \
+            --reason "${{ github.event.inputs.reason }}"
+
+  ##########################
+  # Backend Rollback
+  ##########################
+  rollback_backend:
+    needs: rollback_worker
+    if: contains(fromJSON('["all","backend"]'), github.event.inputs.component)
+    runs-on: self-hosted
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Backend Rollback
+        run: |
+          python3 ./rollback/rollback.py backend \
+            --deployment-json-path ${{ needs.fetch_json.outputs.deployment_json_path }} \
+            --aws-access-key-id ${{ secrets.AWS_ACCESS_KEY_ID }} \
+            --aws-secret-access-key ${{ secrets.AWS_SECRET_ACCESS_KEY }} \
+            --aws-region us-east-1 \
+            --docker-username ${{ secrets.DOCKERHUB_USERNAME }} \
+            --docker-password ${{ secrets.DOCKERHUB_TOKEN }} \
+            --image-repo multi-cloud-cost-and-service-status-dashboard-repo \
+            --db-host ${{ secrets.DB_HOST }} \
+            --db-port ${{ secrets.DB_PORT }} \
+            --db-user ${{ secrets.DB_USER }} \
+            --db-pass ${{ secrets.DB_PASS }} \
+            --s3-bucket multi-cloud-cost-and-service-status-dashboard \
+            --pem-path ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem \
+            --reason "${{ github.event.inputs.reason }}"
+
+  ##########################
+  # Frontend Rollback
+  ##########################
+  rollback_frontend:
+    needs: rollback_backend
+    if: contains(fromJSON('["all","frontend"]'), github.event.inputs.component)
+    runs-on: self-hosted
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Frontend Rollback
+        run: |
+          python3 ./rollback/rollback.py frontend \
+            --deployment-json-path ${{ needs.fetch_json.outputs.deployment_json_path }} \
+            --aws-access-key-id ${{ secrets.AWS_ACCESS_KEY_ID }} \
+            --aws-secret-access-key ${{ secrets.AWS_SECRET_ACCESS_KEY }} \
+            --aws-region us-east-1 \
+            --docker-username ${{ secrets.DOCKERHUB_USERNAME }} \
+            --docker-password ${{ secrets.DOCKERHUB_TOKEN }} \
+            --image-repo multi-cloud-cost-and-service-status-dashboard-repo \
+            --db-host ${{ secrets.DB_HOST }} \
+            --db-port ${{ secrets.DB_PORT }} \
+            --db-user ${{ secrets.DB_USER }} \
+            --db-pass ${{ secrets.DB_PASS }} \
+            --s3-bucket multi-cloud-cost-and-service-status-dashboard \
+            --pem-path ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem \
+            --reason "${{ github.event.inputs.reason }}"
+
+  ##########################
+  # Metadata / Switch Targets
+  ##########################
+  rollback_metadata:
+    needs: [rollback_worker, rollback_backend, rollback_frontend]
+    runs-on: self-hosted
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Apply Rollback Metadata
+        run: |
+          python3 ./rollback/rollback.py metadata \
+            --deployment-json-path ${{ needs.fetch_json.outputs.deployment_json_path }} \
+            --aws-access-key-id ${{ secrets.AWS_ACCESS_KEY_ID }} \
+            --aws-secret-access-key ${{ secrets.AWS_SECRET_ACCESS_KEY }} \
+            --aws-region us-east-1 \
+            --docker-username ${{ secrets.DOCKERHUB_USERNAME }} \
+            --docker-password ${{ secrets.DOCKERHUB_TOKEN }} \
+            --image-repo multi-cloud-cost-and-service-status-dashboard-repo \
+            --s3-bucket multi-cloud-cost-and-service-status-dashboard \
+            --pem-path ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem \
+            --reason "${{ github.event.inputs.reason }}"
