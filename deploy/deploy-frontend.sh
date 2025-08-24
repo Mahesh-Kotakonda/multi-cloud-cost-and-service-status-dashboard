@@ -29,7 +29,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-
 # === VALIDATE REQUIREMENTS ===
 if [[ -z "${OUTPUTS_JSON:-}" ]]; then echo "Must provide --outputs-json"; exit 1; fi
 if [[ -z "${INSTANCE_IDS:-}" ]]; then echo "Must provide --instance-ids"; exit 1; fi
@@ -84,36 +83,6 @@ get_current_container_image() {
       "docker inspect --format '{{.Config.Image}}' $container_name" 2>/dev/null || echo ""
 }
 
-# === CREATE OR UPDATE FRONTEND RULES ===
-create_or_update_frontend_rule() {
-  local tg=$1
-  local priority=500
-  declare -a paths=("/" "/favicon.ico" "/robots.txt" "/static/*")
-
-  for path in "${paths[@]}"; do
-    RULE_ARN=$(aws elbv2 describe-rules \
-      --listener-arn "$LISTENER_ARN" \
-      --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'$path')]].RuleArn" \
-      --output text || echo "")
-    
-    if [[ -z "$RULE_ARN" || "$RULE_ARN" == "None" ]]; then
-      echo "Creating rule for $path -> TG $tg"
-      aws elbv2 create-rule \
-        --listener-arn "$LISTENER_ARN" \
-        --priority $priority \
-        --conditions Field=path-pattern,Values="$path" \
-        --actions Type=forward,TargetGroupArn=$tg
-    else
-      echo "Updating rule for $path -> TG $tg"
-      aws elbv2 modify-rule \
-        --rule-arn "$RULE_ARN" \
-        --conditions Field=path-pattern,Values="$path" \
-        --actions Type=forward,TargetGroupArn=$tg
-    fi
-    ((priority++))
-  done
-}
-
 # === DETERMINE CURRENT FRONTEND TG BASED ON / RULE ONLY ===
 CURRENT_TG=$(aws elbv2 describe-rules \
   --listener-arn "$LISTENER_ARN" \
@@ -121,7 +90,6 @@ CURRENT_TG=$(aws elbv2 describe-rules \
   --output text || echo "")
 echo "Current active frontend Target Group ARN: $CURRENT_TG"
 
-# === DOCKER IMAGE STRING ===
 DOCKER_IMAGE="$IMAGE_TAG"
 
 # === FIRST-TIME DEPLOYMENT ===
@@ -132,17 +100,43 @@ if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
     deploy_container "$instance" "$FRONTEND_GREEN_PORT" "GREEN" "$DOCKER_IMAGE"
     aws elbv2 register-targets --target-group-arn "$FRONTEND_BLUE_TG" --targets Id=$instance,Port=$FRONTEND_BLUE_PORT
   done
-  # create_or_update_frontend_rule "$FRONTEND_BLUE_TG"
 
   DEPLOYED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
   echo "frontend_active_env=BLUE" >> $GITHUB_OUTPUT
-  echo "frontend_versions_blue=$DOCKER_IMAGE" >> $GITHUB_OUTPUT
-  echo "frontend_versions_green=$DOCKER_IMAGE" >> $GITHUB_OUTPUT
-  echo "frontend_target_group_blue=$FRONTEND_BLUE_TG" >> $GITHUB_OUTPUT
-  echo "frontend_target_group_green=$FRONTEND_GREEN_TG" >> $GITHUB_OUTPUT
+  echo "frontend_current_image=$DOCKER_IMAGE" >> $GITHUB_OUTPUT
+  echo "frontend_previous_image=$DOCKER_IMAGE" >> $GITHUB_OUTPUT
+  echo "frontend_blue_tg=$FRONTEND_BLUE_TG" >> $GITHUB_OUTPUT
+  echo "frontend_green_tg=$FRONTEND_GREEN_TG" >> $GITHUB_OUTPUT
   echo "frontend_deployed_at=$DEPLOYED_AT" >> $GITHUB_OUTPUT
   echo "frontend_deployed_by=$GITHUB_ACTOR" >> $GITHUB_OUTPUT
   echo "frontend_status=success" >> $GITHUB_OUTPUT
+
+  python3 ./deploy/metadata.py \
+    --pem-path ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem \
+    --worker-current-image "${{ needs.deploy_worker.outputs.worker_current_image }}" \
+    --worker-previous-image "${{ needs.deploy_worker.outputs.worker_previous_image }}" \
+    --worker-status "${{ needs.deploy_worker.outputs.worker_status }}" \
+    --backend-current-image "${{ needs.deploy_backend.outputs.backend_current_image }}" \
+    --backend-previous-image "${{ needs.deploy_backend.outputs.backend_previous_image }}" \
+    --frontend-current-image "${{ needs.deploy_frontend.outputs.frontend_current_image }}" \
+    --frontend-previous-image "${{ needs.deploy_frontend.outputs.frontend_previous_image }}" \
+    --instance-ids "${{ env.instance_ids }}" \
+    --backend-blue-tg "${{ needs.deploy_backend.outputs.backend_blue_tg }}" \
+    --backend-green-tg "${{ needs.deploy_backend.outputs.backend_green_tg }}" \
+    --backend-active-env "${{ needs.deploy_backend.outputs.backend_active_env }}" \
+    --frontend-blue-tg "${{ needs.deploy_frontend.outputs.frontend_blue_tg }}" \
+    --frontend-green-tg "${{ needs.deploy_frontend.outputs.frontend_green_tg }}" \
+    --frontend-active-env "${{ needs.deploy_frontend.outputs.frontend_active_env }}" \
+    --infra-outputs-json "${{ env.infra_outputs_json }}" \
+    --dockerhub-username "${{ env.DOCKERHUB_USERNAME }}" \
+    --dockerhub-token "${{ env.DOCKERHUB_TOKEN }}" \
+    --aws-access-key-id "${{ env.AWS_ACCESS_KEY_ID }}" \
+    --aws-secret-access-key "${{ env.AWS_SECRET_ACCESS_KEY }}" \
+    --aws-region "${{ env.AWS_REGION }}" \
+    --image-repo "${{ env.IMAGE_REPO }}" \
+    --listener-arn "${{ env.listener_arn }}" \
+    --s3-bucket "${{ env.DEPLOY_METADATA_S3_BUCKET }}" \
+    --github-actor "${{ github.actor }}"
 
   echo "Frontend BLUE is live."
   exit 0
@@ -163,32 +157,20 @@ fi
 
 echo "$CURRENT_COLOR active → deploying $NEXT_COLOR"
 
-# Fetch current image of active color
 CURRENT_IMAGE=$(get_current_container_image "${INSTANCES[0]}" "$CURRENT_COLOR")
 NEW_IMAGE="$DOCKER_IMAGE"
 
-# Deploy new image to inactive color
 for instance in "${INSTANCES[@]}"; do
   deploy_container "$instance" "$NEW_PORT" "$NEXT_COLOR" "$NEW_IMAGE"
   aws elbv2 register-targets --target-group-arn "$NEW_TG" --targets Id=$instance,Port=$NEW_PORT
 done
 
-# Update listener rules
-# create_or_update_frontend_rule "$NEW_TG"
-
-# === PUBLISH OUTPUTS ===
 DEPLOYED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-if [[ "$NEXT_COLOR" == "BLUE" ]]; then
-  echo "frontend_versions_blue=$NEW_IMAGE" >> $GITHUB_OUTPUT
-  echo "frontend_versions_green=$CURRENT_IMAGE" >> $GITHUB_OUTPUT
-else
-  echo "frontend_versions_green=$NEW_IMAGE" >> $GITHUB_OUTPUT
-  echo "frontend_versions_blue=$CURRENT_IMAGE" >> $GITHUB_OUTPUT
-fi
-
+echo "frontend_current_image=$NEW_IMAGE" >> $GITHUB_OUTPUT
+echo "frontend_previous_image=$CURRENT_IMAGE" >> $GITHUB_OUTPUT
 echo "frontend_active_env=$CURRENT_COLOR" >> $GITHUB_OUTPUT
-echo "frontend_target_group_blue=$FRONTEND_BLUE_TG" >> $GITHUB_OUTPUT
-echo "frontend_target_group_green=$FRONTEND_GREEN_TG" >> $GITHUB_OUTPUT
+echo "frontend_blue_tg=$FRONTEND_BLUE_TG" >> $GITHUB_OUTPUT
+echo "frontend_green_tg=$FRONTEND_GREEN_TG" >> $GITHUB_OUTPUT
 echo "frontend_deployed_at=$DEPLOYED_AT" >> $GITHUB_OUTPUT
 echo "frontend_deployed_by=$GITHUB_ACTOR" >> $GITHUB_OUTPUT
 echo "frontend_status=success" >> $GITHUB_OUTPUT
