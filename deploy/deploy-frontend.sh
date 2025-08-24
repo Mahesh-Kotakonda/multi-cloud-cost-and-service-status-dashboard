@@ -102,6 +102,17 @@ if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
   done
 
   DEPLOYED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+  echo "REFERENCE CHECK VALUE = 1000"
+  echo "frontend_active_env=BLUE"
+  echo "frontend_current_image=$DOCKER_IMAGE"
+  echo "frontend_previous_image=$DOCKER_IMAGE"
+  echo "frontend_blue_tg=$FRONTEND_BLUE_TG"
+  echo "frontend_green_tg=$FRONTEND_GREEN_TG"
+  echo "frontend_deployed_at=$DEPLOYED_AT"
+  echo "frontend_deployed_by=$GITHUB_ACTOR"
+  echo "frontend_status=success"
+
   echo "frontend_active_env=BLUE" >> $GITHUB_OUTPUT
   echo "frontend_current_image=$DOCKER_IMAGE" >> $GITHUB_OUTPUT
   echo "frontend_previous_image=$DOCKER_IMAGE" >> $GITHUB_OUTPUT
@@ -137,6 +148,17 @@ for instance in "${INSTANCES[@]}"; do
 done
 
 DEPLOYED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+echo "REFERENCE CHECK VALUE = 1000"
+echo "frontend_current_image=$NEW_IMAGE"
+echo "frontend_previous_image=$CURRENT_IMAGE"
+echo "frontend_active_env=$NEXT_COLOR"
+echo "frontend_blue_tg=$FRONTEND_BLUE_TG"
+echo "frontend_green_tg=$FRONTEND_GREEN_TG"
+echo "frontend_deployed_at=$DEPLOYED_AT"
+echo "frontend_deployed_by=$GITHUB_ACTOR"
+echo "frontend_status=success"
+
 echo "frontend_current_image=$NEW_IMAGE" >> $GITHUB_OUTPUT
 echo "frontend_previous_image=$CURRENT_IMAGE" >> $GITHUB_OUTPUT
 echo "frontend_active_env=$NEXT_COLOR" >> $GITHUB_OUTPUT
