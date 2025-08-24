@@ -106,7 +106,7 @@ if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
 
   DEPLOYED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-  echo "frontend_active_env=BLUE" >> $GITHUB_OUTPUT
+  echo "frontend_active_env=GREEN" >> $GITHUB_OUTPUT
   echo "frontend_current_image=$IMAGE_CLEAN" >> $GITHUB_OUTPUT
   echo "frontend_previous_image=$IMAGE_CLEAN" >> $GITHUB_OUTPUT
   echo "frontend_blue_tg=$FRONTEND_BLUE_TG" >> $GITHUB_OUTPUT
