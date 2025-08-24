@@ -14,17 +14,17 @@ LISTENER_ARN=""
 # === ARG PARSING ===
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --outputs-json)         OUTPUTS_JSON="$2"; shift 2 ;;
-    --pem-path)             PEM_PATH="$2"; shift 2 ;;
-    --dockerhub-username)   DOCKERHUB_USERNAME="$2"; shift 2 ;;
-    --dockerhub-token)      DOCKERHUB_TOKEN="$2"; shift 2 ;;
-    --image-repo)           IMAGE_REPO="$2"; shift 2 ;;
-    --instance-ids)         INSTANCE_IDS="$2"; shift 2 ;;
-    --blue-tg)              FRONTEND_BLUE_TG="$2"; shift 2 ;;
-    --green-tg)             FRONTEND_GREEN_TG="$2"; shift 2 ;;
-    --aws-access-key-id)    AWS_ACCESS_KEY_ID="$2"; shift 2 ;;
+    --outputs-json)          OUTPUTS_JSON="$2"; shift 2 ;;
+    --pem-path)              PEM_PATH="$2"; shift 2 ;;
+    --dockerhub-username)    DOCKERHUB_USERNAME="$2"; shift 2 ;;
+    --dockerhub-token)       DOCKERHUB_TOKEN="$2"; shift 2 ;;
+    --image-tag)             IMAGE_TAG="$2"; shift 2 ;;   # full image ref (username/repo:tag)
+    --instance-ids)          INSTANCE_IDS="$2"; shift 2 ;;
+    --blue-tg)               FRONTEND_BLUE_TG="$2"; shift 2 ;;
+    --green-tg)              FRONTEND_GREEN_TG="$2"; shift 2 ;;
+    --aws-access-key-id)     AWS_ACCESS_KEY_ID="$2"; shift 2 ;;
     --aws-secret-access-key) AWS_SECRET_ACCESS_KEY="$2"; shift 2 ;;
-    --aws-region)           AWS_REGION="$2"; shift 2 ;;
+    --aws-region)            AWS_REGION="$2"; shift 2 ;;
     *) echo "Unknown argument: $1"; exit 1 ;;
   esac
 done
@@ -33,6 +33,7 @@ done
 if [[ -z "${OUTPUTS_JSON:-}" ]]; then echo "Must provide --outputs-json"; exit 1; fi
 if [[ -z "${INSTANCE_IDS:-}" ]]; then echo "Must provide --instance-ids"; exit 1; fi
 if [[ -z "${FRONTEND_BLUE_TG:-}" || -z "${FRONTEND_GREEN_TG:-}" ]]; then echo "Must provide --blue-tg and --green-tg"; exit 1; fi
+if [[ -z "${IMAGE_TAG:-}" ]]; then echo "Must provide --image-tag (full image ref)"; exit 1; fi
 
 # === FETCH LISTENER ARN ===
 LISTENER_ARN=$(jq -r '.alb_listener_arn' "$OUTPUTS_JSON")
@@ -119,8 +120,10 @@ CURRENT_TG=$(aws elbv2 describe-rules \
   --output text || echo "")
 echo "Current active frontend Target Group ARN: $CURRENT_TG"
 
+# === DOCKER IMAGE STRING ===
+DOCKER_IMAGE="$IMAGE_TAG"
+
 # === FIRST-TIME DEPLOYMENT ===
-DOCKER_IMAGE="$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
 if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
   echo "First-time frontend deployment. Deploying FRONTEND BLUE only..."
   for instance in "${INSTANCES[@]}"; do
@@ -161,7 +164,7 @@ echo "$CURRENT_COLOR active → deploying $NEXT_COLOR"
 
 # Fetch current image of active color
 CURRENT_IMAGE=$(get_current_container_image "${INSTANCES[0]}" "$CURRENT_COLOR")
-NEW_IMAGE="$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
+NEW_IMAGE="$DOCKER_IMAGE"
 
 # Deploy new image to inactive color
 for instance in "${INSTANCES[@]}"; do
@@ -182,7 +185,6 @@ else
   echo "frontend_versions_blue=$CURRENT_IMAGE" >> $GITHUB_OUTPUT
 fi
 
-# Active env is always current color
 echo "frontend_active_env=$CURRENT_COLOR" >> $GITHUB_OUTPUT
 echo "frontend_target_group_blue=$FRONTEND_BLUE_TG" >> $GITHUB_OUTPUT
 echo "frontend_target_group_green=$FRONTEND_GREEN_TG" >> $GITHUB_OUTPUT
