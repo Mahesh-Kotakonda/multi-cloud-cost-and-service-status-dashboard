@@ -132,7 +132,7 @@ if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
     deploy_container "$instance" "$FRONTEND_GREEN_PORT" "GREEN" "$DOCKER_IMAGE"
     aws elbv2 register-targets --target-group-arn "$FRONTEND_BLUE_TG" --targets Id=$instance,Port=$FRONTEND_BLUE_PORT
   done
-  create_or_update_frontend_rule "$FRONTEND_BLUE_TG"
+  # create_or_update_frontend_rule "$FRONTEND_BLUE_TG"
 
   DEPLOYED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
   echo "frontend_active_env=BLUE" >> $GITHUB_OUTPUT
@@ -174,7 +174,7 @@ for instance in "${INSTANCES[@]}"; do
 done
 
 # Update listener rules
-create_or_update_frontend_rule "$NEW_TG"
+# create_or_update_frontend_rule "$NEW_TG"
 
 # === PUBLISH OUTPUTS ===
 DEPLOYED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
