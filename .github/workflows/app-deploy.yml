@@ -182,7 +182,6 @@ jobs:
             --db-pass "${DB_PASS}" \
             --dockerhub-username "${DOCKERHUB_USERNAME}" \
             --dockerhub-token "${DOCKERHUB_TOKEN}" \
-            --image-repo "${IMAGE_REPO}" \
             --image-tag "${{ github.event.client_payload.backend }}" \
             --instance-ids "$(jq -r '.ec2_instance_ids | join(",")' backend-outputs.json)" \
             --blue-tg "$(jq -r '.backend_blue_tg_arn' backend-outputs.json)" \
@@ -190,6 +189,7 @@ jobs:
             --aws-access-key-id "${AWS_ACCESS_KEY_ID}" \
             --aws-secret-access-key "${AWS_SECRET_ACCESS_KEY}" \
             --aws-region "${AWS_REGION}"
+
 
   ##########################
   # Deploy Frontend
