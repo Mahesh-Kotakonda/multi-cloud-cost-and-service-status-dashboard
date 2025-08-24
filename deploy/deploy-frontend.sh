@@ -83,7 +83,7 @@ get_current_container_image() {
       "docker inspect --format '{{.Config.Image}}' $container_name" 2>/dev/null || echo ""
 }
 
-# === DETERMINE CURRENT FRONTEND TG BASED ON / RULE ONLY ===
+# === DETERMINE CURRENT FRONTEND TG BASED ON "/" RULE ===
 CURRENT_TG=$(aws elbv2 describe-rules \
   --listener-arn "$LISTENER_ARN" \
   --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'/')]].Actions[0].ForwardConfig.TargetGroups[0].TargetGroupArn" \
@@ -94,7 +94,7 @@ DOCKER_IMAGE="$IMAGE_TAG"
 
 # === FIRST-TIME DEPLOYMENT ===
 if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
-  echo "First-time frontend deployment. Deploying FRONTEND BLUE only..."
+  echo "First-time frontend deployment. Deploying FRONTEND BLUE + GREEN (but only registering BLUE)..."
   for instance in "${INSTANCES[@]}"; do
     deploy_container "$instance" "$FRONTEND_BLUE_PORT" "BLUE" "$DOCKER_IMAGE"
     deploy_container "$instance" "$FRONTEND_GREEN_PORT" "GREEN" "$DOCKER_IMAGE"
@@ -110,35 +110,6 @@ if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
   echo "frontend_deployed_at=$DEPLOYED_AT" >> $GITHUB_OUTPUT
   echo "frontend_deployed_by=$GITHUB_ACTOR" >> $GITHUB_OUTPUT
   echo "frontend_status=success" >> $GITHUB_OUTPUT
-
-  python3 ./deploy/metadata.py \
-    --pem-path ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem \
-    --worker-current-image "${{ needs.deploy_worker.outputs.worker_current_image }}" \
-    --worker-previous-image "${{ needs.deploy_worker.outputs.worker_previous_image }}" \
-    --worker-status "${{ needs.deploy_worker.outputs.worker_status }}" \
-    --backend-current-image "${{ needs.deploy_backend.outputs.backend_current_image }}" \
-    --backend-previous-image "${{ needs.deploy_backend.outputs.backend_previous_image }}" \
-    --frontend-current-image "${{ needs.deploy_frontend.outputs.frontend_current_image }}" \
-    --frontend-previous-image "${{ needs.deploy_frontend.outputs.frontend_previous_image }}" \
-    --instance-ids "${{ env.instance_ids }}" \
-    --backend-blue-tg "${{ needs.deploy_backend.outputs.backend_blue_tg }}" \
-    --backend-green-tg "${{ needs.deploy_backend.outputs.backend_green_tg }}" \
-    --backend-active-env "${{ needs.deploy_backend.outputs.backend_active_env }}" \
-    --frontend-blue-tg "${{ needs.deploy_frontend.outputs.frontend_blue_tg }}" \
-    --frontend-green-tg "${{ needs.deploy_frontend.outputs.frontend_green_tg }}" \
-    --frontend-active-env "${{ needs.deploy_frontend.outputs.frontend_active_env }}" \
-    --infra-outputs-json "${{ env.infra_outputs_json }}" \
-    --dockerhub-username "${{ env.DOCKERHUB_USERNAME }}" \
-    --dockerhub-token "${{ env.DOCKERHUB_TOKEN }}" \
-    --aws-access-key-id "${{ env.AWS_ACCESS_KEY_ID }}" \
-    --aws-secret-access-key "${{ env.AWS_SECRET_ACCESS_KEY }}" \
-    --aws-region "${{ env.AWS_REGION }}" \
-    --image-repo "${{ env.IMAGE_REPO }}" \
-    --listener-arn "${{ env.listener_arn }}" \
-    --s3-bucket "${{ env.DEPLOY_METADATA_S3_BUCKET }}" \
-    --github-actor "${{ github.actor }}"
-
-  echo "Frontend BLUE is live."
   exit 0
 fi
 
@@ -168,7 +139,7 @@ done
 DEPLOYED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 echo "frontend_current_image=$NEW_IMAGE" >> $GITHUB_OUTPUT
 echo "frontend_previous_image=$CURRENT_IMAGE" >> $GITHUB_OUTPUT
-echo "frontend_active_env=$CURRENT_COLOR" >> $GITHUB_OUTPUT
+echo "frontend_active_env=$NEXT_COLOR" >> $GITHUB_OUTPUT
 echo "frontend_blue_tg=$FRONTEND_BLUE_TG" >> $GITHUB_OUTPUT
 echo "frontend_green_tg=$FRONTEND_GREEN_TG" >> $GITHUB_OUTPUT
 echo "frontend_deployed_at=$DEPLOYED_AT" >> $GITHUB_OUTPUT
