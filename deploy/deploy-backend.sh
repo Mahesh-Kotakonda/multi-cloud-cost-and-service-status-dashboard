@@ -175,7 +175,7 @@ DEPLOYED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 echo "backend_current_image=$NEW_IMAGE_CLEAN" >> $GITHUB_OUTPUT
 echo "backend_previous_image=$CURRENT_IMAGE_CLEAN" >> $GITHUB_OUTPUT
-echo "backend_active_env=$NEXT_COLOR" >> $GITHUB_OUTPUT
+echo "backend_active_env=$CURRENT_COLOR" >> $GITHUB_OUTPUT
 echo "backend_blue_tg=$BACKEND_BLUE_TG" >> $GITHUB_OUTPUT
 echo "backend_green_tg=$BACKEND_GREEN_TG" >> $GITHUB_OUTPUT
 echo "backend_deployed_at=$DEPLOYED_AT" >> $GITHUB_OUTPUT
