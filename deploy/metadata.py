@@ -3,6 +3,7 @@ import json
 import boto3
 import subprocess
 import datetime
+import paramiko  # pip install paramiko
 
 def run_command(cmd):
     """Run shell command and return output."""
@@ -43,15 +44,53 @@ def create_or_update_rule(listener_arn, path, target_group_arn, priority):
             f"--actions Type=forward,TargetGroupArn={target_group_arn}"
         )
 
-def deploy_worker(current_image, previous_image):
-    """Deploy worker container: remove old and rename new."""
-    print(f"Deploying worker container: {current_image}")
-    try:
-        run_command("docker rm -f worker || true")
-    except RuntimeError:
-        print("No existing worker container to remove.")
-    run_command("docker rename worker_new worker || true")
-    print("Worker deployment completed.")
+def deploy_worker_on_instance(instance_ip, pem_path):
+    """Deploy worker container on a single instance via SSH."""
+    print(f"Deploying worker on instance {instance_ip}")
+
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect(instance_ip, username="ec2-user", key_filename=pem_path)
+
+    # Remove old worker container if it exists
+    remove_cmd = "docker rm -f worker || true"
+    stdin, stdout, stderr = ssh.exec_command(remove_cmd)
+    out, err = stdout.read().decode(), stderr.read().decode()
+    if err:
+        print(f"[{instance_ip}] Remove old worker error: {err.strip()}")
+    else:
+        print(f"[{instance_ip}] Old worker removed (if existed).")
+
+    # Rename worker_new -> worker
+    rename_cmd = "docker rename worker_new worker || true"
+    stdin, stdout, stderr = ssh.exec_command(rename_cmd)
+    out, err = stdout.read().decode(), stderr.read().decode()
+    if err:
+        print(f"[{instance_ip}] Rename worker_new error: {err.strip()}")
+    else:
+        print(f"[{instance_ip}] worker_new renamed to worker.")
+
+    ssh.close()
+    print(f"[{instance_ip}] Worker deployment completed.")
+
+def deploy_worker(instance_ids, pem_path, aws_access_key, aws_secret_key, aws_region):
+    """Deploy worker container across multiple EC2 instances."""
+    ec2 = boto3.client(
+        "ec2",
+        aws_access_key_id=aws_access_key,
+        aws_secret_access_key=aws_secret_key,
+        region_name=aws_region
+    )
+
+    # Resolve instance IDs to public IPs
+    reservations = ec2.describe_instances(InstanceIds=instance_ids.split(","))["Reservations"]
+    for res in reservations:
+        for inst in res["Instances"]:
+            public_ip = inst.get("PublicIpAddress")
+            if public_ip:
+                deploy_worker_on_instance(public_ip, pem_path)
+            else:
+                print(f"Instance {inst['InstanceId']} does not have a public IP, skipping worker deployment.")
 
 def deploy_service(listener_arn, target_group_arn, paths, starting_priority=10):
     """Deploy backend/frontend ALB rules."""
@@ -82,14 +121,12 @@ def save_outputs_to_s3(outputs, aws_access_key, aws_secret_key, aws_region, buck
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Deploy Metadata Script")
     parser.add_argument("--pem-path", required=True)
-    parser.add_argument("--worker-current-image", required=True)
-    parser.add_argument("--worker-previous-image", required=True)
     parser.add_argument("--worker-status", required=True)
+    parser.add_argument("--instance-ids", required=True)
     parser.add_argument("--backend-current-image", required=True)
     parser.add_argument("--backend-previous-image", required=True)
     parser.add_argument("--frontend-current-image", required=True)
     parser.add_argument("--frontend-previous-image", required=True)
-    parser.add_argument("--instance-ids", required=True)
     parser.add_argument("--backend-blue-tg", required=True)
     parser.add_argument("--backend-green-tg", required=True)
     parser.add_argument("--backend-active-env", required=True)
@@ -109,37 +146,28 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     print("Starting deployment process...")
-
     deployed_at = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    # Worker deployment
-    deploy_worker(args.worker_current_image, args.worker_previous_image)
+    # Worker deployment across instances
+    deploy_worker(args.instance_ids, args.pem_path, args.aws_access_key_id, args.aws_secret_access_key, args.aws_region)
 
     # Normalize env names to uppercase
     backend_env = args.backend_active_env.strip().upper()
     frontend_env = args.frontend_active_env.strip().upper()
 
-    # Backend deployment (switch TG based on active env)
+    # Backend deployment
     backend_tg = args.backend_green_tg if backend_env == "BLUE" else args.backend_blue_tg
-    if not backend_tg:
-        raise ValueError("Resolved backend target group ARN is empty. Check --backend-* arguments and backend_active_env.")
     backend_paths = ["/api/aws/*"]
-    print(f"Deploying backend with active environment: {backend_env}")
     deploy_service(args.listener_arn, backend_tg, backend_paths, starting_priority=10)
 
-    # Frontend deployment (switch TG based on active env)
+    # Frontend deployment
     frontend_tg = args.frontend_green_tg if frontend_env == "BLUE" else args.frontend_blue_tg
-    if not frontend_tg:
-        raise ValueError("Resolved frontend target group ARN is empty. Check --frontend-* arguments and frontend_active_env.")
     frontend_paths = ["/", "/favicon.ico", "/robots.txt", "/static/*"]
-    print(f"Deploying frontend with active environment: {frontend_env}")
     deploy_service(args.listener_arn, frontend_tg, frontend_paths, starting_priority=500)
 
     # Prepare deployment outputs
     outputs = {
         "worker": {
-            "current_image": args.worker_current_image,
-            "previous_image": args.worker_previous_image,
             "deployed_at": deployed_at,
             "deployed_by": args.github_actor,
             "status": args.worker_status
@@ -166,7 +194,7 @@ if __name__ == "__main__":
         }
     }
 
-    # Upload to S3
+    # Upload deployment metadata to S3
     save_outputs_to_s3(outputs, args.aws_access_key_id, args.aws_secret_access_key, args.aws_region, args.s3_bucket)
 
     # GitHub Actions outputs
