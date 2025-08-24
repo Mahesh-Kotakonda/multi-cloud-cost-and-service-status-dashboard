@@ -127,7 +127,7 @@ if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
     # Strip username from image
     IMAGE_CLEAN=$(echo "$IMAGE_TAG" | cut -d'/' -f2)
 
-    echo "backend_active_env=BLUE" >> $GITHUB_OUTPUT
+    echo "backend_active_env=GREEN" >> $GITHUB_OUTPUT
     echo "backend_current_image=$IMAGE_CLEAN" >> $GITHUB_OUTPUT
     echo "backend_previous_image=$IMAGE_CLEAN" >> $GITHUB_OUTPUT
     echo "backend_blue_tg=$BACKEND_BLUE_TG" >> $GITHUB_OUTPUT
