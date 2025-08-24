@@ -167,14 +167,15 @@ jobs:
       IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
       S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
     outputs:
-      backend_status: ${{ steps.deploy.outputs.backend_status }}
-      backend_active_env: ${{ steps.deploy.outputs.backend_active_env }}
-      backend_current_image: ${{ steps.deploy.outputs.backend_current_image }}
-      backend_previous_image: ${{ steps.deploy.outputs.backend_previous_image }}
-      backend_blue_tg: ${{ steps.deploy.outputs.backend_blue_tg }}
-      backend_green_tg: ${{ steps.deploy.outputs.backend_green_tg }}
-      backend_deployed_at: ${{ steps.deploy.outputs.backend_deployed_at }}
-      backend_deployed_by: ${{ steps.deploy.outputs.backend_deployed_by }}
+      backend_status: ${{ steps.deploy_backend.outputs.backend_status }}
+      backend_active_env: ${{ steps.deploy_backend.outputs.backend_active_env }}
+      backend_current_image: ${{ steps.deploy_backend.outputs.backend_current_image }}
+      backend_previous_image: ${{ steps.deploy_backend.outputs.backend_previous_image }}
+      backend_blue_tg: ${{ steps.deploy_backend.outputs.backend_blue_tg }}
+      backend_green_tg: ${{ steps.deploy_backend.outputs.backend_green_tg }}
+      backend_deployed_at: ${{ steps.deploy_backend.outputs.backend_deployed_at }}
+      backend_deployed_by: ${{ steps.deploy_backend.outputs.backend_deployed_by }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -218,14 +219,15 @@ jobs:
       IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
       S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
     outputs:
-      frontend_status: ${{ steps.deploy.outputs.frontend_status }}
-      frontend_active_env: ${{ steps.deploy.outputs.frontend_active_env }}
-      frontend_current_image: ${{ steps.deploy.outputs.frontend_current_image }}
-      frontend_previous_image: ${{ steps.deploy.outputs.frontend_previous_image }}
-      frontend_blue_tg: ${{ steps.deploy.outputs.frontend_blue_tg }}
-      frontend_green_tg: ${{ steps.deploy.outputs.frontend_green_tg }}
-      frontend_deployed_at: ${{ steps.deploy.outputs.frontend_deployed_at }}
-      frontend_deployed_by: ${{ steps.deploy.outputs.frontend_deployed_by }}
+      frontend_status: ${{ steps.deploy_frontend.outputs.frontend_status }}
+      frontend_active_env: ${{ steps.deploy_frontend.outputs.frontend_active_env }}
+      frontend_current_image: ${{ steps.deploy_frontend.outputs.frontend_current_image }}
+      frontend_previous_image: ${{ steps.deploy_frontend.outputs.frontend_previous_image }}
+      frontend_blue_tg: ${{ steps.deploy_frontend.outputs.frontend_blue_tg }}
+      frontend_green_tg: ${{ steps.deploy_frontend.outputs.frontend_green_tg }}
+      frontend_deployed_at: ${{ steps.deploy_frontend.outputs.frontend_deployed_at }}
+      frontend_deployed_by: ${{ steps.deploy_frontend.outputs.frontend_deployed_by }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
