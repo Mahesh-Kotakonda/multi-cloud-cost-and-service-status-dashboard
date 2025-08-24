@@ -44,23 +44,28 @@ jobs:
 
       - name: Build & Push Backend
         run: |
-          docker build -t $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest -t $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-${VERSION} -f docker/backend/Dockerfile .
-          docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest
-          docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:backend-${VERSION}
+          docker build -t "$DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest" \
+                       -t "$DOCKERHUB_USERNAME/$IMAGE_REPO:backend-${VERSION}" \
+                       -f docker/backend/Dockerfile .
+          docker push "$DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest"
+          docker push "$DOCKERHUB_USERNAME/$IMAGE_REPO:backend-${VERSION}"
 
       - name: Build & Push Worker
         run: |
-          docker build -t $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest -t $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-${VERSION} -f docker/worker/Dockerfile .
-          docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest
-          docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:worker-${VERSION}
+          docker build -t "$DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest" \
+                       -t "$DOCKERHUB_USERNAME/$IMAGE_REPO:worker-${VERSION}" \
+                       -f docker/worker/Dockerfile .
+          docker push "$DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest"
+          docker push "$DOCKERHUB_USERNAME/$IMAGE_REPO:worker-${VERSION}"
 
       - name: Build & Push Frontend
         run: |
-          docker build -t $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest -t $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-${VERSION} -f docker/frontend/Dockerfile .
-          docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest
-          docker push $DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-${VERSION}
+          docker build -t "$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest" \
+                       -t "$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-${VERSION}" \
+                       -f docker/frontend/Dockerfile .
+          docker push "$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
+          docker push "$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-${VERSION}"
 
-  # Trigger deployment workflow after Build succeeds
   trigger-deployment:
     needs: build-and-push-dockerhub
     runs-on: self-hosted
@@ -78,4 +83,3 @@ jobs:
               "worker": "${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_REPO }}:worker-${{ github.run_number }}",
               "frontend": "${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_REPO }}:frontend-${{ github.run_number }}"
             }
-
