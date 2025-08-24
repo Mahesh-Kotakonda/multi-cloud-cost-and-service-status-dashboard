@@ -29,6 +29,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+
 # === VALIDATE REQUIREMENTS ===
 if [[ -z "${OUTPUTS_JSON:-}" ]]; then echo "Must provide --outputs-json"; exit 1; fi
 if [[ -z "${INSTANCE_IDS:-}" ]]; then echo "Must provide --instance-ids"; exit 1; fi
