@@ -132,9 +132,6 @@ jobs:
 
 
 
-  ##########################
-  # Backend Rollback
-  ##########################
   rollback_backend:
     needs: rollback_worker
     if: contains(fromJSON('["all","backend"]'), github.event.inputs.component)
@@ -143,25 +140,33 @@ jobs:
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: us-east-1
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
       IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
       S3_BUCKET: multi-cloud-cost-and-service-status-dashboard
+      SSM_PARAM_NAME: myapp_database_credentials
     steps:
       - name: Checkout
         uses: actions/checkout@v4
   
+      - name: Download deployment & infra JSON
+        run: |
+          aws s3 cp "s3://$S3_BUCKET/${{ needs.fetch_json.outputs.deployment_s3_key }}" deployment.json
+          aws s3 cp "${{ needs.fetch_json.outputs.infra_s3_path }}" infra.json
+  
       - name: Fetch DB info from infra JSON and SSM
         id: db_info
         run: |
-          INFRA_JSON="${{ needs.fetch_json.outputs.infra_json_path }}"
+          INFRA_JSON="infra.json"
   
+          # DB endpoint and name from infra JSON
           DB_HOST=$(jq -r '.db.endpoint' $INFRA_JSON | cut -d':' -f1)
           DB_PORT=$(jq -r '.db.endpoint' $INFRA_JSON | cut -d':' -f2)
           DB_NAME=$(jq -r '.db.name' $INFRA_JSON)
   
-          SSM_PARAM_NAME=$(jq -r '.db.ssm_param_name' $INFRA_JSON)
-          PARAM_VALUE=$(aws ssm get-parameter --name "$SSM_PARAM_NAME" --with-decryption --query "Parameter.Value" --output text)
+          # Fetch DB credentials from SSM using the fixed parameter name
+          PARAM_VALUE=$(aws ssm get-parameter --name "$SSM_PARAM_NAME" --with-decryption --region $AWS_REGION --query "Parameter.Value" --output text)
           DB_USER=$(echo $PARAM_VALUE | jq -r '.username')
           DB_PASS=$(echo $PARAM_VALUE | jq -r '.password')
   
@@ -175,7 +180,7 @@ jobs:
       - name: Run Backend Rollback
         run: |
           python3 ./deploy/rollback.py backend \
-            --deployment-json-path ${{ needs.fetch_json.outputs.deployment_json_path }} \
+            --deployment-json-path deployment.json \
             --infra-json-path $INFRA_JSON \
             --docker-username $DOCKERHUB_USERNAME \
             --docker-password $DOCKERHUB_TOKEN \
@@ -187,6 +192,7 @@ jobs:
             --s3-bucket $S3_BUCKET \
             --pem-path ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem \
             --reason "${{ github.event.inputs.reason }}"
+  
 
 
   ##########################
