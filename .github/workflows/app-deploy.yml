@@ -81,6 +81,9 @@ jobs:
         run: |
           PEM_PATH=~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
           WORKER_IMAGE="${{ github.event.client_payload.worker }}"
+          
+          # Extract only RepoName:Tag for outputs
+          WORKER_IMAGE_CLEAN=$(echo "$WORKER_IMAGE" | cut -d'/' -f2)
       
           echo "Downloading worker output JSON from S3..."
           aws s3 cp "$S3_JSON_PATH" worker-outputs.json
@@ -100,6 +103,7 @@ jobs:
             
             OLD_CONTAINER_PRESENT=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
               "sudo docker ps -a --filter 'name=worker' --format '{{.Names}}' | grep -w worker || true")
+            
             if [ -z "$OLD_CONTAINER_PRESENT" ]; then
               echo "No existing worker container found on $IP. First deployment."
               PREV_IMAGE="$WORKER_IMAGE"
@@ -108,6 +112,9 @@ jobs:
                 "sudo docker inspect --format='{{.Config.Image}}' worker || echo '$WORKER_IMAGE'")
               echo "Found existing worker container on $IP. Previous image: $PREV_IMAGE"
             fi
+      
+            # Strip username from previous image
+            PREV_IMAGE_CLEAN=$(echo "$PREV_IMAGE" | cut -d'/' -f2)
       
             echo "Cleaning any old worker_new container..."
             ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
@@ -145,11 +152,12 @@ jobs:
               exit 1
             else
               echo "Worker rollout SUCCESS on $IP."
-              echo "worker_current_image=$WORKER_IMAGE" >> $GITHUB_OUTPUT
-              echo "worker_previous_image=$PREV_IMAGE" >> $GITHUB_OUTPUT
+              echo "worker_current_image=$WORKER_IMAGE_CLEAN" >> $GITHUB_OUTPUT
+              echo "worker_previous_image=$PREV_IMAGE_CLEAN" >> $GITHUB_OUTPUT
               echo "worker_status=success" >> $GITHUB_OUTPUT
             fi
           done
+
 
 
   ##########################
