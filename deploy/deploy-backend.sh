@@ -22,8 +22,7 @@ while [[ $# -gt 0 ]]; do
         --db-pass) DB_PASS="$2"; shift 2 ;;
         --dockerhub-username) DOCKERHUB_USERNAME="$2"; shift 2 ;;
         --dockerhub-token) DOCKERHUB_TOKEN="$2"; shift 2 ;;
-        --image-repo) IMAGE_REPO="$2"; shift 2 ;;
-        --image-tag) IMAGE_TAG="$2"; shift 2 ;;
+        --image-tag) IMAGE_TAG="$2"; shift 2 ;;  # Full image string
         --instance-ids) INSTANCE_IDS="$2"; shift 2 ;;
         --blue-tg) BACKEND_BLUE_TG="$2"; shift 2 ;;
         --green-tg) BACKEND_GREEN_TG="$2"; shift 2 ;;
@@ -73,13 +72,18 @@ deploy_container() {
     ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" bash <<EOF
 set -e
 if docker ps -a --format '{{.Names}}' | grep -q '^${container_name}\$'; then
+    echo "Stopping and removing existing container $container_name"
     docker stop $container_name || true
     docker rm $container_name || true
 fi
 
+echo "Logging in to Docker Hub..."
 echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+
+echo "Pulling image $docker_image..."
 docker pull "$docker_image"
 
+echo "Running container $container_name on port $port..."
 docker run -d -p $port:8000 \
     --name $container_name \
     -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
@@ -112,15 +116,16 @@ echo "Current active backend Target Group ARN: $CURRENT_TG"
 if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
     echo "First-time backend deployment. Deploying BLUE and GREEN with same image but attaching BLUE only..."
     for instance in "${INSTANCES[@]}"; do
-        deploy_container "$instance" "$BACKEND_BLUE_PORT" "BLUE" "$DOCKERHUB_USERNAME/$IMAGE_REPO:$IMAGE_TAG"
-        deploy_container "$instance" "$BACKEND_GREEN_PORT" "GREEN" "$DOCKERHUB_USERNAME/$IMAGE_REPO:$IMAGE_TAG"
+        deploy_container "$instance" "$BACKEND_BLUE_PORT" "BLUE" "$IMAGE_TAG"
+        deploy_container "$instance" "$BACKEND_GREEN_PORT" "GREEN" "$IMAGE_TAG"
+        echo "Registering BLUE instance $instance to target group $BACKEND_BLUE_TG"
         aws elbv2 register-targets --target-group-arn "$BACKEND_BLUE_TG" --targets Id=$instance,Port=$BACKEND_BLUE_PORT
     done
 
     DEPLOYED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
     echo "backend_active_env=BLUE" >> $GITHUB_OUTPUT
-    echo "backend_versions_blue=$DOCKERHUB_USERNAME/$IMAGE_REPO:$IMAGE_TAG" >> $GITHUB_OUTPUT
-    echo "backend_versions_green=$DOCKERHUB_USERNAME/$IMAGE_REPO:$IMAGE_TAG" >> $GITHUB_OUTPUT
+    echo "backend_versions_blue=$IMAGE_TAG" >> $GITHUB_OUTPUT
+    echo "backend_versions_green=$IMAGE_TAG" >> $GITHUB_OUTPUT
     echo "backend_target_group_blue=$BACKEND_BLUE_TG" >> $GITHUB_OUTPUT
     echo "backend_target_group_green=$BACKEND_GREEN_TG" >> $GITHUB_OUTPUT
     echo "backend_deployed_at=$DEPLOYED_AT" >> $GITHUB_OUTPUT
@@ -147,11 +152,12 @@ echo "$CURRENT_COLOR active → deploying $NEXT_COLOR"
 
 # === FETCH CURRENT IMAGE OF ACTIVE COLOR ===
 CURRENT_IMAGE=$(get_current_container_image "${INSTANCES[0]}" "$CURRENT_COLOR")
-NEW_IMAGE="$DOCKERHUB_USERNAME/$IMAGE_REPO:$IMAGE_TAG"
+NEW_IMAGE="$IMAGE_TAG"
 
 # === DEPLOY NEW IMAGE TO NEXT COLOR ===
 for instance in "${INSTANCES[@]}"; do
     deploy_container "$instance" "$NEW_PORT" "$NEXT_COLOR" "$NEW_IMAGE"
+    echo "Registering $NEXT_COLOR instance $instance to target group $NEW_TG"
     aws elbv2 register-targets --target-group-arn "$NEW_TG" --targets Id=$instance,Port=$NEW_PORT
 done
 
