@@ -258,7 +258,7 @@ jobs:
 
       - name: Run metadata.py
         run: |
-          python3 metadata.py \
+          python3 ./deploy/metadata.py \
             --pem-path ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem \
             --worker-current-image $WORKER_CURRENT_IMAGE \
             --worker-previous-image $WORKER_PREVIOUS_IMAGE \
