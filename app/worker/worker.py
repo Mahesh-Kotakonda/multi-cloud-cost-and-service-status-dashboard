@@ -12,6 +12,70 @@ from botocore.config import Config
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 import mysql.connector
 
+import random
+from datetime import datetime, timedelta
+
+def store_dummy_monthly_cost(conn, cloud="AWS"):
+    """
+    Generate dummy cost data for the last 3 months and store in cloud_cost_monthly table.
+    """
+    today = datetime.utcnow()
+    
+    # Define 3 months: 2 months ago, 1 month ago, current month
+    months = [
+        (today.replace(day=1) - timedelta(days=61)).replace(day=1),
+        (today.replace(day=1) - timedelta(days=31)).replace(day=1),
+        today.replace(day=1)
+    ]
+    
+    cur = conn.cursor()
+    retrieved_at = datetime.utcnow()
+    
+    for month_start in months:
+        month_str = month_start.strftime("%Y-%m")
+        
+        # Dummy services
+        services = ["EC2", "S3", "RDS", "Lambda", "DynamoDB"]
+        
+        service_costs = {}
+        total_amount = 0.0
+        
+        # Generate random dummy cost
+        for s in services:
+            cost = round(random.uniform(10, 100), 2)
+            total_amount += cost
+            service_costs[s] = cost
+        
+        # Calculate percentage of total
+        service_costs_pct = {s: (c, round((c/total_amount)*100, 2)) for s, c in service_costs.items()}
+        
+        # Add TOTAL row
+        service_costs_pct['TOTAL'] = (total_amount, 100.0)
+        
+        # Prepare rows for insertion
+        rows = [
+            (cloud, month_str, s, cost, pct, retrieved_at)
+            for s, (cost, pct) in service_costs_pct.items()
+        ]
+        
+        # Insert into DB
+        cur.executemany("""
+            INSERT INTO cloud_cost_monthly (cloud, month_year, service, total_amount, pct_of_total, retrieved_at)
+            VALUES (%s,%s,%s,%s,%s,%s)
+            ON DUPLICATE KEY UPDATE
+                total_amount=VALUES(total_amount),
+                pct_of_total=VALUES(pct_of_total),
+                retrieved_at=VALUES(retrieved_at)
+        """, rows)
+        
+        conn.commit()
+        print(f"Stored dummy costs for {month_str}: {len(rows)} rows")
+    
+    cur.close()
+
+
+
+
 # ----------------------------
 # Logging (adjustable via env)
 # ----------------------------
@@ -271,36 +335,63 @@ def print_table(conn, table_name):
     cur.close()
 
 # ----------------------------
-# Main loop
+# Main loop function 
 # ----------------------------
+# def run_once():
+#     conn = get_db_connection()
+#     ensure_tables(conn)
+
+#     today = datetime.now(timezone.utc)
+#     months = [
+#         ((today.replace(day=1) - timedelta(days=61)).replace(day=1).strftime("%Y-%m-%d"),
+#          (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m-%d")),
+#         ((today.replace(day=1) - timedelta(days=31)).replace(day=1).strftime("%Y-%m-%d"),
+#          (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m-%d")),
+#         (today.replace(day=1).strftime("%Y-%m-%d"), today.strftime("%Y-%m-%d")),
+#     ]
+
+#     for start, end in months:
+#         month_str = datetime.strptime(start, "%Y-%m-%d").strftime("%Y-%m")
+#         service_costs, total = fetch_monthly_cost(ce, start, end)
+#         log.info(f"Month {month_str} total cost: {total:.2f} USD")
+#         for s, (amt, pct) in service_costs.items():
+#             log.info(f"  {s}: {amt:.2f} USD ({pct}%)")
+#         store_monthly_cost(conn, 'AWS', month_str, service_costs)
+
+#     collect_ec2_status(conn)
+
+#     # Print last rows of both tables
+#     print_table(conn, "cloud_cost_monthly")
+#     print_table(conn, "server_status_agg")
+
+#     conn.close()
+
 def run_once():
     conn = get_db_connection()
     ensure_tables(conn)
 
-    today = datetime.now(timezone.utc)
-    months = [
-        ((today.replace(day=1) - timedelta(days=61)).replace(day=1).strftime("%Y-%m-%d"),
-         (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m-%d")),
-        ((today.replace(day=1) - timedelta(days=31)).replace(day=1).strftime("%Y-%m-%d"),
-         (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m-%d")),
-        (today.replace(day=1).strftime("%Y-%m-%d"), today.strftime("%Y-%m-%d")),
-    ]
+    # --------------------------------------
+    # 🔄 TEMPORARY: Use dummy cost generator
+    # --------------------------------------
+    # Instead of calling Cost Explorer API (which costs $0.01/request),
+    # we insert random dummy cost values into the DB.
+    # Later: Replace with fetch_monthly_cost() + store_monthly_cost().
+    store_dummy_monthly_cost(conn, cloud="AWS")
 
-    for start, end in months:
-        month_str = datetime.strptime(start, "%Y-%m-%d").strftime("%Y-%m")
-        service_costs, total = fetch_monthly_cost(ce, start, end)
-        log.info(f"Month {month_str} total cost: {total:.2f} USD")
-        for s, (amt, pct) in service_costs.items():
-            log.info(f"  {s}: {amt:.2f} USD ({pct}%)")
-        store_monthly_cost(conn, 'AWS', month_str, service_costs)
-
+    # --------------------------------------
+    # EC2 Status Aggregation (kept as real calls)
+    # --------------------------------------
+    # This part is free (EC2 API calls are not billed), so we can run normally.
     collect_ec2_status(conn)
 
-    # Print last rows of both tables
+    # --------------------------------------
+    # Print latest rows for debugging
+    # --------------------------------------
     print_table(conn, "cloud_cost_monthly")
     print_table(conn, "server_status_agg")
 
     conn.close()
+
 
 def main():
     while not _shutdown:
