@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - blue_green_deployment
     paths:
       - 'app/**'
       - 'docker/**'
@@ -12,35 +11,96 @@ on:
   pull_request:
     branches:
       - main
-      - blue_green_deployment
     paths:
       - 'app/**'
       - 'docker/**'
   workflow_dispatch:
-
-concurrency:
-  group: docker-build-${{ github.ref }}
-  cancel-in-progress: true
+    inputs:
+      services:
+        description: "Which services to build? (comma-separated: backend,worker,frontend or all)"
+        required: true
+        default: "all"
 
 jobs:
-  build-and-push-dockerhub:
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/blue_green_deployment'
+  determine-services:
+    runs-on: ubuntu-latest
+    outputs:
+      build_backend: ${{ steps.set-matrix.outputs.build_backend }}
+      build_worker: ${{ steps.set-matrix.outputs.build_worker }}
+      build_frontend: ${{ steps.set-matrix.outputs.build_frontend }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Detect changed paths
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            backend:
+              - 'app/backend/**'
+              - 'docker/backend/**'
+            worker:
+              - 'app/worker/**'
+              - 'docker/worker/**'
+            frontend:
+              - 'app/frontend/**'
+              - 'docker/frontend/**'
+
+      - name: Set services to build
+        id: set-matrix
+        run: |
+          echo "build_backend=false" >> $GITHUB_OUTPUT
+          echo "build_worker=false" >> $GITHUB_OUTPUT
+          echo "build_frontend=false" >> $GITHUB_OUTPUT
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            INPUT="${{ github.event.inputs.services }}"
+            if [[ "$INPUT" == "all" ]]; then
+              echo "build_backend=true" >> $GITHUB_OUTPUT
+              echo "build_worker=true" >> $GITHUB_OUTPUT
+              echo "build_frontend=true" >> $GITHUB_OUTPUT
+            else
+              if [[ "$INPUT" == *"backend"* ]]; then
+                echo "build_backend=true" >> $GITHUB_OUTPUT
+              fi
+              if [[ "$INPUT" == *"worker"* ]]; then
+                echo "build_worker=true" >> $GITHUB_OUTPUT
+              fi
+              if [[ "$INPUT" == *"frontend"* ]]; then
+                echo "build_frontend=true" >> $GITHUB_OUTPUT
+              fi
+            fi
+          else
+            if [[ "${{ steps.changes.outputs.backend }}" == "true" ]]; then
+              echo "build_backend=true" >> $GITHUB_OUTPUT
+            fi
+            if [[ "${{ steps.changes.outputs.worker }}" == "true" ]]; then
+              echo "build_worker=true" >> $GITHUB_OUTPUT
+            fi
+            if [[ "${{ steps.changes.outputs.frontend }}" == "true" ]]; then
+              echo "build_frontend=true" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+  build-backend:
+    needs: determine-services
+    if: needs.determine-services.outputs.build_backend == 'true' && (github.ref == 'refs/heads/main')
     runs-on: self-hosted
+    concurrency:
+      group: docker-build-backend-${{ github.ref }}
+      cancel-in-progress: true
     env:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
       IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
       VERSION: v${{ github.run_number }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
         with:
           username: ${{ env.DOCKERHUB_USERNAME }}
           password: ${{ env.DOCKERHUB_TOKEN }}
-
       - name: Build & Push Backend
         run: |
           docker build -t "$DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest" \
@@ -49,6 +109,24 @@ jobs:
           docker push "$DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest"
           docker push "$DOCKERHUB_USERNAME/$IMAGE_REPO:backend-${VERSION}"
 
+  build-worker:
+    needs: determine-services
+    if: needs.determine-services.outputs.build_worker == 'true' && (github.ref == 'refs/heads/main')
+    runs-on: self-hosted
+    concurrency:
+      group: docker-build-worker-${{ github.ref }}
+      cancel-in-progress: true
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
+      VERSION: v${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
       - name: Build & Push Worker
         run: |
           docker build -t "$DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest" \
@@ -57,6 +135,24 @@ jobs:
           docker push "$DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest"
           docker push "$DOCKERHUB_USERNAME/$IMAGE_REPO:worker-${VERSION}"
 
+  build-frontend:
+    needs: determine-services
+    if: needs.determine-services.outputs.build_frontend == 'true' && (github.ref == 'refs/heads/main')
+    runs-on: self-hosted
+    concurrency:
+      group: docker-build-frontend-${{ github.ref }}
+      cancel-in-progress: true
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
+      VERSION: v${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
       - name: Build & Push Frontend
         run: |
           docker build -t "$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest" \
@@ -66,8 +162,12 @@ jobs:
           docker push "$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-${VERSION}"
 
   trigger-deployment:
-    needs: build-and-push-dockerhub
+    needs: [build-backend, build-worker, build-frontend]
     runs-on: self-hosted
+    if: |
+      needs.build-backend.result == 'success' ||
+      needs.build-worker.result == 'success' ||
+      needs.build-frontend.result == 'success'
     steps:
       - name: Trigger Deployment Workflow
         uses: peter-evans/repository-dispatch@v3
@@ -78,7 +178,7 @@ jobs:
             {
               "ref": "${{ github.ref }}",
               "run_number": "${{ github.run_number }}",
-              "backend": "${{ secrets.DOCKERHUB_USERNAME }}/multi-cloud-cost-and-service-status-dashboard-repo:backend-v${{ github.run_number }}",
-              "worker": "${{ secrets.DOCKERHUB_USERNAME }}/multi-cloud-cost-and-service-status-dashboard-repo:worker-v${{ github.run_number }}",
-              "frontend": "${{ secrets.DOCKERHUB_USERNAME }}/multi-cloud-cost-and-service-status-dashboard-repo:frontend-v${{ github.run_number }}"
+              "backend": "${{ needs.build-backend.result == 'success' && format('{0}/multi-cloud-cost-and-service-status-dashboard-repo:backend-v{1}', secrets.DOCKERHUB_USERNAME, github.run_number) || '' }}",
+              "worker": "${{ needs.build-worker.result == 'success' && format('{0}/multi-cloud-cost-and-service-status-dashboard-repo:worker-v{1}', secrets.DOCKERHUB_USERNAME, github.run_number) || '' }}",
+              "frontend": "${{ needs.build-frontend.result == 'success' && format('{0}/multi-cloud-cost-and-service-status-dashboard-repo:frontend-v{1}', secrets.DOCKERHUB_USERNAME, github.run_number) || '' }}"
             }
