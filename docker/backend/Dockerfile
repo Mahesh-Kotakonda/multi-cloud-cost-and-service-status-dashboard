@@ -1,7 +1,7 @@
 # docker/backend/Dockerfile
 FROM python:3.11-slim
 
-# Set working directory
+# Set Working directory
 WORKDIR /app/backend
 
 # System deps (for psycopg2 & boto3)
