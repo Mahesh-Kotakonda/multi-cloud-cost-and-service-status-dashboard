@@ -164,7 +164,7 @@ jobs:
   trigger-deployment:
     needs: [build-backend, build-worker, build-frontend]
     runs-on: self-hosted
-    if: contains(needs.*.result, 'success')
+    if: needs.build-backend.result == 'success' || needs.build-worker.result == 'success' || needs.build-frontend.result == 'success'
     steps:
       - name: Build JSON Payload
         id: payload
@@ -205,6 +205,8 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           event-type: trigger-deployment
           client-payload: ${{ steps.payload.outputs.payload }}
+
+
 
 
 
