@@ -164,49 +164,50 @@ jobs:
   trigger-deployment:
     needs: [build-backend, build-worker, build-frontend]
     runs-on: self-hosted
+    if: ${{ always() }}  # run regardless of success/skipped in upstream jobs
     steps:
-      - name: Show results for debugging
+      - name: Debug results
         run: |
-          echo "Backend:  ${{ needs.build-backend.result }}"
-          echo "Worker:   ${{ needs.build-worker.result }}"
-          echo "Frontend: ${{ needs.build-frontend.result }}"
+          echo "build-backend result:  ${{ needs.build-backend.result }}"
+          echo "build-worker  result:  ${{ needs.build-worker.result }}"
+          echo "build-frontend result: ${{ needs.build-frontend.result }}"
 
       - name: Build JSON Payload
         id: payload
+        shell: bash
         run: |
-          PAYLOAD="{\"ref\":\"${GITHUB_REF}\",\"run_number\":\"${GITHUB_RUN_NUMBER}\""
-          
-          if [ "${{ needs.build-backend.result }}" = "success" ]; then
-            PAYLOAD="$PAYLOAD,\"backend\":\"multi-cloud-cost-and-service-status-dashboard-repo:backend-v${GITHUB_RUN_NUMBER}\""
-          fi
-          if [ "${{ needs.build-worker.result }}" = "success" ]; then
-            PAYLOAD="$PAYLOAD,\"worker\":\"multi-cloud-cost-and-service-status-dashboard-repo:worker-v${GITHUB_RUN_NUMBER}\""
-          fi
-          if [ "${{ needs.build-frontend.result }}" = "success" ]; then
-            PAYLOAD="$PAYLOAD,\"frontend\":\"multi-cloud-cost-and-service-status-dashboard-repo:frontend-v${GITHUB_RUN_NUMBER}\""
+          images=()
+
+          if [[ "${{ needs.build-backend.result }}" == "success" ]]; then
+            images+=("\"backend\":\"multi-cloud-cost-and-service-status-dashboard-repo:backend-v${GITHUB_RUN_NUMBER}\"")
           fi
 
-          PAYLOAD="$PAYLOAD}"
-          echo "payload=$PAYLOAD" >> $GITHUB_OUTPUT
+          if [[ "${{ needs.build-worker.result }}" == "success" ]]; then
+            images+=("\"worker\":\"multi-cloud-cost-and-service-status-dashboard-repo:worker-v${GITHUB_RUN_NUMBER}\"")
+          fi
 
-      - name: Check if Payload Has Images
-        id: check
-        run: |
-          if [[ "${{ steps.payload.outputs.payload }}" == *"backend"* ]] || \
-             [[ "${{ steps.payload.outputs.payload }}" == *"worker"* ]] || \
-             [[ "${{ steps.payload.outputs.payload }}" == *"frontend"* ]]; then
-            echo "has_images=true" >> $GITHUB_OUTPUT
-          else
+          if [[ "${{ needs.build-frontend.result }}" == "success" ]]; then
+            images+=("\"frontend\":\"multi-cloud-cost-and-service-status-dashboard-repo:frontend-v${GITHUB_RUN_NUMBER}\"")
+          fi
+
+          if [[ ${#images[@]} -eq 0 ]]; then
             echo "has_images=false" >> $GITHUB_OUTPUT
+            exit 0
           fi
+
+          joined=$(IFS=,; echo "${images[*]}")
+          printf 'payload={"ref":"%s","run_number":"%s",%s}\n' "$GITHUB_REF" "$GITHUB_RUN_NUMBER" "$joined" >> $GITHUB_OUTPUT
+          echo "has_images=true" >> $GITHUB_OUTPUT
 
       - name: Trigger Deployment Workflow
-        if: steps.check.outputs.has_images == 'true'
+        if: steps.payload.outputs.has_images == 'true'
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           event-type: trigger-deployment
           client-payload: ${{ steps.payload.outputs.payload }}
+
+
 
 
 
