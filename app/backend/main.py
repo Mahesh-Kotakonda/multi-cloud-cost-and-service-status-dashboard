@@ -11,7 +11,7 @@ if __name__ == "__main__":
     print(f"\n🚀 Starting FastAPI server at: http://{host}:{port}")
     print(f"📖 Swagger docs available at: http://{host}:{port}/docs")
     print(f"ReDoc docs available at:   http://{host}:{port}/redoc")
-    print(f"💰 AWS Costs endpoint:        http://{host}:{port}/aws/costs")
+    print(f"AWS Costs endpoint:        http://{host}:{port}/aws/costs")
     print(f"🖥️  EC2 Status endpoint:      http://{host}:{port}/aws/ec2-status\n")
 
     uvicorn.run(
