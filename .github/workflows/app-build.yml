@@ -169,6 +169,30 @@ jobs:
       needs.build-worker.result == 'success' ||
       needs.build-frontend.result == 'success'
     steps:
+      - name: Set Payload
+        id: payload
+        run: |
+          echo 'ref=${{ github.ref }}' >> $GITHUB_OUTPUT
+          echo 'run_number=${{ github.run_number }}' >> $GITHUB_OUTPUT
+
+          if [ "${{ needs.build-backend.result }}" = "success" ]; then
+            echo "backend=multi-cloud-cost-and-service-status-dashboard-repo:backend-v${{ github.run_number }}" >> $GITHUB_OUTPUT
+          else
+            echo "backend=" >> $GITHUB_OUTPUT
+          fi
+
+          if [ "${{ needs.build-worker.result }}" = "success" ]; then
+            echo "worker=multi-cloud-cost-and-service-status-dashboard-repo:worker-v${{ github.run_number }}" >> $GITHUB_OUTPUT
+          else
+            echo "worker=" >> $GITHUB_OUTPUT
+          fi
+
+          if [ "${{ needs.build-frontend.result }}" = "success" ]; then
+            echo "frontend=multi-cloud-cost-and-service-status-dashboard-repo:frontend-v${{ github.run_number }}" >> $GITHUB_OUTPUT
+          else
+            echo "frontend=" >> $GITHUB_OUTPUT
+          fi
+
       - name: Trigger Deployment Workflow
         uses: peter-evans/repository-dispatch@v3
         with:
@@ -176,9 +200,10 @@ jobs:
           event-type: trigger-deployment
           client-payload: |
             {
-              "ref": "${{ github.ref }}",
-              "run_number": "${{ github.run_number }}",
-              "backend": "${{ needs.build-backend.result == 'success' && format('{0}/multi-cloud-cost-and-service-status-dashboard-repo:backend-v{1}', secrets.DOCKERHUB_USERNAME, github.run_number) || '' }}",
-              "worker": "${{ needs.build-worker.result == 'success' && format('{0}/multi-cloud-cost-and-service-status-dashboard-repo:worker-v{1}', secrets.DOCKERHUB_USERNAME, github.run_number) || '' }}",
-              "frontend": "${{ needs.build-frontend.result == 'success' && format('{0}/multi-cloud-cost-and-service-status-dashboard-repo:frontend-v{1}', secrets.DOCKERHUB_USERNAME, github.run_number) || '' }}"
+              "ref": "${{ steps.payload.outputs.ref }}",
+              "run_number": "${{ steps.payload.outputs.run_number }}",
+              "backend": "${{ steps.payload.outputs.backend }}",
+              "worker": "${{ steps.payload.outputs.worker }}",
+              "frontend": "${{ steps.payload.outputs.frontend }}"
             }
+
