@@ -164,46 +164,47 @@ jobs:
   trigger-deployment:
     needs: [build-backend, build-worker, build-frontend]
     runs-on: self-hosted
-    if: |
-      needs.build-backend.result == 'success' ||
-      needs.build-worker.result == 'success' ||
-      needs.build-frontend.result == 'success'
+    if: contains(needs.*.result, 'success')
     steps:
-      - name: Set Payload
+      - name: Build JSON Payload
         id: payload
         run: |
-          echo 'ref=${{ github.ref }}' >> $GITHUB_OUTPUT
-          echo 'run_number=${{ github.run_number }}' >> $GITHUB_OUTPUT
-
+          PAYLOAD="{\"ref\":\"${GITHUB_REF}\",\"run_number\":\"${GITHUB_RUN_NUMBER}\""
+          
           if [ "${{ needs.build-backend.result }}" = "success" ]; then
-            echo "backend=multi-cloud-cost-and-service-status-dashboard-repo:backend-v${{ github.run_number }}" >> $GITHUB_OUTPUT
-          else
-            echo "backend=" >> $GITHUB_OUTPUT
+            PAYLOAD="$PAYLOAD,\"backend\":\"multi-cloud-cost-and-service-status-dashboard-repo:backend-v${GITHUB_RUN_NUMBER}\""
           fi
 
           if [ "${{ needs.build-worker.result }}" = "success" ]; then
-            echo "worker=multi-cloud-cost-and-service-status-dashboard-repo:worker-v${{ github.run_number }}" >> $GITHUB_OUTPUT
-          else
-            echo "worker=" >> $GITHUB_OUTPUT
+            PAYLOAD="$PAYLOAD,\"worker\":\"multi-cloud-cost-and-service-status-dashboard-repo:worker-v${GITHUB_RUN_NUMBER}\""
           fi
 
           if [ "${{ needs.build-frontend.result }}" = "success" ]; then
-            echo "frontend=multi-cloud-cost-and-service-status-dashboard-repo:frontend-v${{ github.run_number }}" >> $GITHUB_OUTPUT
+            PAYLOAD="$PAYLOAD,\"frontend\":\"multi-cloud-cost-and-service-status-dashboard-repo:frontend-v${GITHUB_RUN_NUMBER}\""
+          fi
+
+          PAYLOAD="$PAYLOAD}"
+
+          echo "payload=$PAYLOAD" >> $GITHUB_OUTPUT
+
+      - name: Check if Payload Has Images
+        id: check
+        run: |
+          if [[ "${{ steps.payload.outputs.payload }}" == *"backend"* ]] || \
+             [[ "${{ steps.payload.outputs.payload }}" == *"worker"* ]] || \
+             [[ "${{ steps.payload.outputs.payload }}" == *"frontend"* ]]; then
+            echo "has_images=true" >> $GITHUB_OUTPUT
           else
-            echo "frontend=" >> $GITHUB_OUTPUT
+            echo "has_images=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Trigger Deployment Workflow
+        if: steps.check.outputs.has_images == 'true'
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           event-type: trigger-deployment
-          client-payload: |
-            {
-              "ref": "${{ steps.payload.outputs.ref }}",
-              "run_number": "${{ steps.payload.outputs.run_number }}",
-              "backend": "${{ steps.payload.outputs.backend }}",
-              "worker": "${{ steps.payload.outputs.worker }}",
-              "frontend": "${{ steps.payload.outputs.frontend }}"
-            }
+          client-payload: ${{ steps.payload.outputs.payload }}
+
+
 
