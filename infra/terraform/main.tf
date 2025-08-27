@@ -16,12 +16,19 @@ terraform {
   }
 }
 
+# Default provider -> ap-south-1 (your main region)
 provider "aws" {
-  region = var.aws_region
+  region = var.aws_region # you will pass "ap-south-1"
 }
 
-# ===== Fetch database credentials from AWS SSM Parameter Store =====
+# Secondary provider -> us-east-1 (for SSM fetch only)
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+}
+# Fetch DB credentials from us-east-1 SSM Parameter Store
 data "aws_ssm_parameter" "db_creds" {
+  provider        = aws.us_east_1
   name            = "myapp_database_credentials"
   with_decryption = true
 }
