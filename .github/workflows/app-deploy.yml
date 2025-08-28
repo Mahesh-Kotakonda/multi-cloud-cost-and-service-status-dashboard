@@ -236,11 +236,21 @@ jobs:
               fi
             fi
   
+
             echo "Deploying worker_new to instance $ID with image $WORKER_IMAGE"
+            
             ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" "
-              docker rm -f worker_new >/dev/null 2>&1 || true && \
-              echo '$DOCKERHUB_TOKEN' | docker login -u '$DOCKERHUB_USERNAME' --password-stdin && \
-              docker pull $DOCKERHUB_USERNAME/$WORKER_IMAGE && \
+              # Check if worker_new exists
+              if docker ps -a --format '{{.Names}}' | grep -q '^worker_new\$'; then
+                echo 'Found existing worker_new container. Removing...'
+                docker rm -f worker_new >/dev/null 2>&1 || true
+              else
+                echo 'No existing worker_new container found.'
+              fi
+            
+              # Login and run new container
+              echo '$DOCKERHUB_TOKEN' | docker login -u '$DOCKERHUB_USERNAME' --password-stdin
+              docker pull $DOCKERHUB_USERNAME/$WORKER_IMAGE
               docker run -d --name worker_new \
                 -e AWS_ACCESS_KEY_ID='$AWS_ACCESS_KEY_ID' \
                 -e AWS_SECRET_ACCESS_KEY='$AWS_SECRET_ACCESS_KEY' \
@@ -250,7 +260,9 @@ jobs:
                 -e DB_USER='$DB_USER' \
                 -e DB_PASS='$DB_PASS' \
                 -e POLL_INTERVAL_SECONDS=60000 \
-                $DOCKERHUB_USERNAME/$WORKER_IMAGE"
+                $DOCKERHUB_USERNAME/$WORKER_IMAGE
+            "
+
   
             sleep 20
             STATUS=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
