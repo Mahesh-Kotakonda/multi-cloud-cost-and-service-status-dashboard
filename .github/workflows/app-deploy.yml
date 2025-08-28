@@ -221,6 +221,7 @@ jobs:
             IP=$(aws ec2 describe-instances --instance-ids $ID --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
             echo "Checking previous worker container on instance $ID ($IP)..."
   
+            # Check old production container named "worker"
             OLD_IMAGE=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
               "docker inspect -f '{{.Config.Image}}' worker || echo ''")
   
@@ -282,13 +283,15 @@ jobs:
   
           echo "All worker instances deployed successfully."
   
-          # Export deployment summary
-          # Export deployment summary to GitHub outputs
+          # Convert instance IDs to comma-separated for GitHub output
+          DEPLOYED_INSTANCE_IDS=$(echo ${INSTANCE_IDS} | tr ' ' ',')
+  
+          # Export deployment summary as GitHub outputs
           echo "previous_image=$PREVIOUS_IMAGE" >> $GITHUB_OUTPUT
           echo "current_image=$WORKER_IMAGE" >> $GITHUB_OUTPUT
-          echo "deployed_instance_ids=${INSTANCE_IDS}" >> $GITHUB_OUTPUT
+          echo "deployed_instance_ids=$DEPLOYED_INSTANCE_IDS" >> $GITHUB_OUTPUT
           echo "deploy_status=success" >> $GITHUB_OUTPUT
-
+  
 
 
 
