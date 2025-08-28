@@ -97,7 +97,7 @@ jobs:
   resolve-images:
     needs: pre-check
     if: needs.pre-check.outputs.can_deploy == 'true'
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     outputs:
       worker_image: ${{ steps.resolve.outputs.worker_image }}
       backend_image: ${{ steps.resolve.outputs.backend_image }}
