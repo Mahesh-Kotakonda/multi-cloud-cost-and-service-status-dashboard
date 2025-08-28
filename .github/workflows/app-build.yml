@@ -103,6 +103,7 @@ jobs:
           password: ${{ env.DOCKERHUB_TOKEN }}
       - name: Build & Push Backend
         run: |
+          sleep 60
           docker build -t "$DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest" \
                        -t "$DOCKERHUB_USERNAME/$IMAGE_REPO:backend-${VERSION}" \
                        -f docker/backend/Dockerfile .
@@ -155,6 +156,7 @@ jobs:
           password: ${{ env.DOCKERHUB_TOKEN }}
       - name: Build & Push Frontend
         run: |
+          sleep 60
           docker build -t "$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest" \
                        -t "$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-${VERSION}" \
                        -f docker/frontend/Dockerfile .
@@ -208,6 +210,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           event-type: trigger-deployment
           client-payload: ${{ steps.payload.outputs.payload }}
+
 
 
 
