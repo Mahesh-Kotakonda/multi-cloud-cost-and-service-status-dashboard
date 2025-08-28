@@ -193,21 +193,27 @@ jobs:
       - name: Deploy worker to instances
         run: |
           PEM_PATH=~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
-  
+      
           echo "Downloading infra outputs..."
           aws s3 cp "s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json" worker-outputs.json
-  
+      
           DB_HOST=$(jq -r '.db.endpoint | split(":")[0]' worker-outputs.json)
           DB_NAME=$(jq -r '.db.name' worker-outputs.json)
           INSTANCE_IDS=$(jq -r '.ec2_instance_ids[]' worker-outputs.json)
-  
+      
           SUCCESSFUL=()
           FAILED=0
-  
+      
+          # Fetch DB credentials from SSM Parameter Store
+          SSM_PARAM_NAME="/multi-cloud/dashboard/db-credentials"
+          PARAM_VALUE=$(aws ssm get-parameter --name "$SSM_PARAM_NAME" --with-decryption --query "Parameter.Value" --output text)
+          DB_USER=$(echo $PARAM_VALUE | jq -r '.username')
+          DB_PASS=$(echo $PARAM_VALUE | jq -r '.password')
+      
           for ID in $INSTANCE_IDS; do
             IP=$(aws ec2 describe-instances --instance-ids $ID --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
             echo "Deploying worker to instance $ID ($IP) with image $WORKER_IMAGE"
-  
+      
             ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" "
               docker rm -f worker_new >/dev/null 2>&1 || true && \
               echo '${{ secrets.DOCKERHUB_TOKEN }}' | docker login -u '${{ secrets.DOCKERHUB_USERNAME }}' --password-stdin && \
@@ -218,14 +224,16 @@ jobs:
                 -e AWS_REGION='us-east-1' \
                 -e DB_HOST='$DB_HOST' \
                 -e DB_NAME='$DB_NAME' \
-                -e DB_USER='${{ secrets.DB_USER }}' \
-                -e DB_PASS='${{ secrets.DB_PASS }}' \
+                -e DB_USER='$DB_USER' \
+                -e DB_PASS='$DB_PASS' \
                 -e POLL_INTERVAL_SECONDS=60000 \
                 ${{ secrets.DOCKERHUB_USERNAME }}/$WORKER_IMAGE"
-  
+      
+            # Wait for container to start
             sleep 20
+      
             STATUS=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" "docker ps --filter 'name=worker_new' --filter 'status=running' | grep worker_new >/dev/null 2>&1; echo $?")
-  
+      
             if [ "$STATUS" -eq 0 ]; then
               echo "Deployment succeeded on instance $ID"
               SUCCESSFUL+=("$ID")
@@ -239,7 +247,7 @@ jobs:
               break
             fi
           done
-  
+      
           if [ $FAILED -eq 1 ]; then
             echo "One or more instances failed. Rolling back successful instances."
             for ID in "${SUCCESSFUL[@]}"; do
@@ -249,8 +257,9 @@ jobs:
             done
             exit 1
           fi
-  
-          echo "All worker instances deployed successfully. Promotion (rename) will be handled in the final job."
+      
+          echo "All worker instances deployed successfully. WorkerNew container should now be running on all instances."
+
 
 
 
