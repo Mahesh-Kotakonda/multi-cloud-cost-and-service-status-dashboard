@@ -222,7 +222,7 @@ jobs:
             echo "Checking previous worker container on instance $ID ($IP)..."
   
             OLD_IMAGE=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-              "docker inspect -f '{{.Config.Image}}' worker_new || echo ''")
+              "docker inspect -f '{{.Config.Image}}' worker || echo ''")
   
             # Capture previous image from the first instance only
             if [ -z "$PREVIOUS_IMAGE" ]; then
