@@ -158,6 +158,15 @@ jobs:
     if: needs.pre-check.outputs.can_deploy == 'true' && needs.resolve-images.outputs.worker_image
     runs-on: self-hosted
     environment: production
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: us-east-1
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
+      S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
+      SSM_PARAM_NAME: myapp_database_credentials
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -179,9 +188,7 @@ jobs:
             echo "Skipping worker deployment: no worker image provided."
             exit 0
           fi
-  
           echo "Deploying Worker image: ${{ needs.resolve-images.outputs.worker_image }}"
-          # Export to environment for next steps
           echo "WORKER_IMAGE=${{ needs.resolve-images.outputs.worker_image }}" >> $GITHUB_ENV
   
       - name: Log in to Docker Hub
@@ -193,47 +200,61 @@ jobs:
       - name: Deploy worker to instances
         run: |
           PEM_PATH=~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
-      
+  
           echo "Downloading infra outputs..."
-          aws s3 cp "s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json" worker-outputs.json
-      
+          aws s3 cp "$S3_JSON_PATH" worker-outputs.json
+  
           DB_HOST=$(jq -r '.db.endpoint | split(":")[0]' worker-outputs.json)
           DB_NAME=$(jq -r '.db.name' worker-outputs.json)
           INSTANCE_IDS=$(jq -r '.ec2_instance_ids[]' worker-outputs.json)
-      
+  
           SUCCESSFUL=()
           FAILED=0
-      
+          PREVIOUS_IMAGE=""
+  
           # Fetch DB credentials from SSM Parameter Store
-          SSM_PARAM_NAME="/multi-cloud/dashboard/db-credentials"
           PARAM_VALUE=$(aws ssm get-parameter --name "$SSM_PARAM_NAME" --with-decryption --query "Parameter.Value" --output text)
           DB_USER=$(echo $PARAM_VALUE | jq -r '.username')
           DB_PASS=$(echo $PARAM_VALUE | jq -r '.password')
-      
+  
           for ID in $INSTANCE_IDS; do
             IP=$(aws ec2 describe-instances --instance-ids $ID --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
-            echo "Deploying worker to instance $ID ($IP) with image $WORKER_IMAGE"
-      
+            echo "Checking previous worker container on instance $ID ($IP)..."
+  
+            OLD_IMAGE=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
+              "docker inspect -f '{{.Config.Image}}' worker_new || echo ''")
+  
+            # Capture previous image from the first instance only
+            if [ -z "$PREVIOUS_IMAGE" ]; then
+              if [ -z "$OLD_IMAGE" ]; then
+                echo "No previous worker container found on $ID. First deployment."
+                PREVIOUS_IMAGE=$WORKER_IMAGE
+              else
+                echo "Previous worker container image on $ID: $OLD_IMAGE"
+                PREVIOUS_IMAGE=$OLD_IMAGE
+              fi
+            fi
+  
+            echo "Deploying worker_new to instance $ID with image $WORKER_IMAGE"
             ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" "
               docker rm -f worker_new >/dev/null 2>&1 || true && \
-              echo '${{ secrets.DOCKERHUB_TOKEN }}' | docker login -u '${{ secrets.DOCKERHUB_USERNAME }}' --password-stdin && \
-              docker pull ${{ secrets.DOCKERHUB_USERNAME }}/$WORKER_IMAGE && \
+              echo '$DOCKERHUB_TOKEN' | docker login -u '$DOCKERHUB_USERNAME' --password-stdin && \
+              docker pull $DOCKERHUB_USERNAME/$WORKER_IMAGE && \
               docker run -d --name worker_new \
-                -e AWS_ACCESS_KEY_ID='${{ secrets.AWS_ACCESS_KEY_ID }}' \
-                -e AWS_SECRET_ACCESS_KEY='${{ secrets.AWS_SECRET_ACCESS_KEY }}' \
-                -e AWS_REGION='us-east-1' \
+                -e AWS_ACCESS_KEY_ID='$AWS_ACCESS_KEY_ID' \
+                -e AWS_SECRET_ACCESS_KEY='$AWS_SECRET_ACCESS_KEY' \
+                -e AWS_REGION='$AWS_REGION' \
                 -e DB_HOST='$DB_HOST' \
                 -e DB_NAME='$DB_NAME' \
                 -e DB_USER='$DB_USER' \
                 -e DB_PASS='$DB_PASS' \
                 -e POLL_INTERVAL_SECONDS=60000 \
-                ${{ secrets.DOCKERHUB_USERNAME }}/$WORKER_IMAGE"
-      
-            # Wait for container to start
+                $DOCKERHUB_USERNAME/$WORKER_IMAGE"
+  
             sleep 20
-      
-            STATUS=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" "docker ps --filter 'name=worker_new' --filter 'status=running' | grep worker_new >/dev/null 2>&1; echo $?")
-      
+            STATUS=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
+              "docker ps --filter 'name=worker_new' --filter 'status=running' | grep worker_new >/dev/null 2>&1; echo $?")
+  
             if [ "$STATUS" -eq 0 ]; then
               echo "Deployment succeeded on instance $ID"
               SUCCESSFUL+=("$ID")
@@ -247,7 +268,8 @@ jobs:
               break
             fi
           done
-      
+  
+          # Rollback logic
           if [ $FAILED -eq 1 ]; then
             echo "One or more instances failed. Rolling back successful instances."
             for ID in "${SUCCESSFUL[@]}"; do
@@ -257,8 +279,16 @@ jobs:
             done
             exit 1
           fi
-      
-          echo "All worker instances deployed successfully. WorkerNew container should now be running on all instances."
+  
+          echo "All worker instances deployed successfully."
+  
+          # Export deployment summary
+          # Export deployment summary to GitHub outputs
+          echo "previous_image=$PREVIOUS_IMAGE" >> $GITHUB_OUTPUT
+          echo "current_image=$WORKER_IMAGE" >> $GITHUB_OUTPUT
+          echo "deployed_instance_ids=${INSTANCE_IDS}" >> $GITHUB_OUTPUT
+          echo "deploy_status=success" >> $GITHUB_OUTPUT
+
 
 
 
