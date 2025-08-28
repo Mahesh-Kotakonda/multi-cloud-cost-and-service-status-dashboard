@@ -1,4 +1,4 @@
-name: Deployment
+name: App Deployment
 
 on:
   repository_dispatch:
@@ -7,7 +7,8 @@ on:
     inputs:
       components:
         description: "Which components to deploy (all, worker, backend, frontend, or comma-separated list)"
-        required: true
+        required: false
+        default: "all"
       worker_version:
         description: "Version tag for worker (default: latest)"
         required: false
