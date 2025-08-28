@@ -118,19 +118,19 @@ jobs:
   
             if [[ "$COMPONENTS" == "all" || "$COMPONENTS" == *"worker"* ]]; then
               TAG="${{ needs.pre-check.outputs.worker_version }}"
-              FULL_WORKER_IMAGE="$USER/$IMAGE_REPO-worker:$TAG"
+              FULL_WORKER_IMAGE="$USER/$IMAGE_REPO:worker-$TAG"
               WORKER_IMAGE="$(basename $FULL_WORKER_IMAGE)"  # take only repo:image:tag
             fi
   
             if [[ "$COMPONENTS" == "all" || "$COMPONENTS" == *"backend"* ]]; then
               TAG="${{ needs.pre-check.outputs.backend_version }}"
-              FULL_BACKEND_IMAGE="$USER/$IMAGE_REPO-backend:$TAG"
+              FULL_BACKEND_IMAGE="$USER/$IMAGE_REPO:backend-$TAG"
               BACKEND_IMAGE="$(basename $FULL_BACKEND_IMAGE)"
             fi
   
             if [[ "$COMPONENTS" == "all" || "$COMPONENTS" == *"frontend"* ]]; then
               TAG="${{ needs.pre-check.outputs.frontend_version }}"
-              FULL_FRONTEND_IMAGE="$USER/$IMAGE_REPO-frontend:$TAG"
+              FULL_FRONTEND_IMAGE="$USER/$IMAGE_REPO:frontend-$TAG"
               FRONTEND_IMAGE="$(basename $FULL_FRONTEND_IMAGE)"
             fi
           else
