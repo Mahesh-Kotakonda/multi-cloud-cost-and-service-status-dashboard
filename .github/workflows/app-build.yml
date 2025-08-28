@@ -175,19 +175,21 @@ jobs:
       - name: Build JSON Payload
         id: payload
         shell: bash
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
           images=()
 
           if [[ "${{ needs.build-backend.result }}" == "success" ]]; then
-            images+=("\"backend\":\"multi-cloud-cost-and-service-status-dashboard-repo:backend-v${GITHUB_RUN_NUMBER}\"")
+            images+=("\"backend\":\"${DOCKERHUB_USERNAME}/multi-cloud-cost-and-service-status-dashboard-repo:backend-v${GITHUB_RUN_NUMBER}\"")
           fi
 
           if [[ "${{ needs.build-worker.result }}" == "success" ]]; then
-            images+=("\"worker\":\"multi-cloud-cost-and-service-status-dashboard-repo:worker-v${GITHUB_RUN_NUMBER}\"")
+            images+=("\"worker\":\"${DOCKERHUB_USERNAME}/multi-cloud-cost-and-service-status-dashboard-repo:worker-v${GITHUB_RUN_NUMBER}\"")
           fi
 
           if [[ "${{ needs.build-frontend.result }}" == "success" ]]; then
-            images+=("\"frontend\":\"multi-cloud-cost-and-service-status-dashboard-repo:frontend-v${GITHUB_RUN_NUMBER}\"")
+            images+=("\"frontend\":\"${DOCKERHUB_USERNAME}/multi-cloud-cost-and-service-status-dashboard-repo:frontend-v${GITHUB_RUN_NUMBER}\"")
           fi
 
           if [[ ${#images[@]} -eq 0 ]]; then
@@ -206,6 +208,8 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           event-type: trigger-deployment
           client-payload: ${{ steps.payload.outputs.payload }}
+
+
 
 
 
