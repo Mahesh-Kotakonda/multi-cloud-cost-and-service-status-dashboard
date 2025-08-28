@@ -1,4 +1,4 @@
-name: App Deployment
+name: Deployment
 
 on:
   repository_dispatch:
@@ -27,44 +27,110 @@ concurrency:
 
 jobs:
   ##########################
+  # Pre-check deployment
+  ##########################
+  pre-check:
+    runs-on: self-hosted
+    outputs:
+      can_deploy: ${{ steps.set-output.outputs.can_deploy }}
+      components: ${{ steps.parse-inputs.outputs.components }}
+      worker_version: ${{ steps.parse-inputs.outputs.worker_version }}
+      backend_version: ${{ steps.parse-inputs.outputs.backend_version }}
+      frontend_version: ${{ steps.parse-inputs.outputs.frontend_version }}
+    steps:
+      - name: Check if deployment should run
+        id: set-output
+        run: |
+          CAN_DEPLOY=false
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            CAN_DEPLOY=true
+          fi
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.actor }}" = "Mahesh-Kotakonda" ]; then
+            CAN_DEPLOY=true
+          fi
+          echo "can_deploy=$CAN_DEPLOY" >> $GITHUB_OUTPUT
+
+      - name: Parse and validate inputs (manual only)
+        id: parse-inputs
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            COMPONENTS="${{ github.event.inputs.components }}"
+            WORKER_VER="${{ github.event.inputs.worker_version }}"
+            BACKEND_VER="${{ github.event.inputs.backend_version }}"
+            FRONTEND_VER="${{ github.event.inputs.frontend_version }}"
+
+            COMPONENTS=$(echo "$COMPONENTS" | tr '[:upper:]' '[:lower:]')
+
+            VALID_COMPONENTS=(all worker backend frontend)
+            for comp in $(echo $COMPONENTS | tr ',' ' '); do
+              if [[ ! " ${VALID_COMPONENTS[@]} " =~ " $comp " ]]; then
+                echo "Invalid component: $comp. Allowed: all, worker, backend, frontend."
+                exit 1
+              fi
+            done
+
+            if [[ "$COMPONENTS" == *"all"* && "$COMPONENTS" != "all" ]]; then
+              echo "If you want to deploy all components, you must set components=all only. Do not combine 'all' with others."
+              exit 1
+            fi
+
+            echo "Manual inputs received:"
+            echo "  components=$COMPONENTS"
+            echo "  worker_version=$WORKER_VER"
+            echo "  backend_version=$BACKEND_VER"
+            echo "  frontend_version=$FRONTEND_VER"
+          else
+            COMPONENTS=""
+            WORKER_VER=""
+            BACKEND_VER=""
+            FRONTEND_VER=""
+          fi
+
+          echo "components=$COMPONENTS" >> $GITHUB_OUTPUT
+          echo "worker_version=$WORKER_VER" >> $GITHUB_OUTPUT
+          echo "backend_version=$BACKEND_VER" >> $GITHUB_OUTPUT
+          echo "frontend_version=$FRONTEND_VER" >> $GITHUB_OUTPUT
+
+  ##########################
   # Resolve Images
   ##########################
   resolve-images:
+    needs: pre-check
+    if: needs.pre-check.outputs.can_deploy == 'true'
     runs-on: ubuntu-latest
     outputs:
-      worker_image: ${{ steps.out.outputs.worker_image }}
-      backend_image: ${{ steps.out.outputs.backend_image }}
-      frontend_image: ${{ steps.out.outputs.frontend_image }}
+      worker_image: ${{ steps.resolve.outputs.worker_image }}
+      backend_image: ${{ steps.resolve.outputs.backend_image }}
+      frontend_image: ${{ steps.resolve.outputs.frontend_image }}
     steps:
       - name: Resolve images
-        id: out
+        id: resolve
         run: |
+          IMAGE_REPO="multi-cloud-cost-and-service-status-dashboard-repo"
+          USER="${{ secrets.DOCKERHUB_USERNAME }}"
+
           WORKER_IMAGE=""
           BACKEND_IMAGE=""
           FRONTEND_IMAGE=""
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            COMPONENTS="${{ github.event.inputs.components }}"
-            COMPONENTS=$(echo "$COMPONENTS" | tr '[:upper:]' '[:lower:]')
-            USER="${{ secrets.DOCKERHUB_USERNAME }}"
-            REPO="multi-cloud-cost-and-service-status-dashboard-repo"
+            COMPONENTS="${{ needs.pre-check.outputs.components }}"
 
             if [[ "$COMPONENTS" == "all" || "$COMPONENTS" == *"worker"* ]]; then
-              TAG="${{ github.event.inputs.worker_version }}"
-              WORKER_IMAGE="$USER/$REPO-worker:$TAG"
+              TAG="${{ needs.pre-check.outputs.worker_version }}"
+              WORKER_IMAGE="$USER/$IMAGE_REPO-worker:$TAG"
             fi
 
             if [[ "$COMPONENTS" == "all" || "$COMPONENTS" == *"backend"* ]]; then
-              TAG="${{ github.event.inputs.backend_version }}"
-              BACKEND_IMAGE="$USER/$REPO-backend:$TAG"
+              TAG="${{ needs.pre-check.outputs.backend_version }}"
+              BACKEND_IMAGE="$USER/$IMAGE_REPO-backend:$TAG"
             fi
 
             if [[ "$COMPONENTS" == "all" || "$COMPONENTS" == *"frontend"* ]]; then
-              TAG="${{ github.event.inputs.frontend_version }}"
-              FRONTEND_IMAGE="$USER/$REPO-frontend:$TAG"
+              TAG="${{ needs.pre-check.outputs.frontend_version }}"
+              FRONTEND_IMAGE="$USER/$IMAGE_REPO-frontend:$TAG"
             fi
-
-          elif [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+          else
             WORKER_IMAGE="${{ github.event.client_payload.worker }}"
             BACKEND_IMAGE="${{ github.event.client_payload.backend }}"
             FRONTEND_IMAGE="${{ github.event.client_payload.frontend }}"
@@ -83,8 +149,8 @@ jobs:
   # Deploy Worker
   ##########################
   deploy_worker:
-    needs: resolve-images
-    if: needs.resolve-images.outputs.worker_image != ''
+    needs: [pre-check, resolve-images]
+    if: needs.pre-check.outputs.can_deploy == 'true'
     runs-on: self-hosted
     environment: production
     steps:
@@ -98,15 +164,21 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      - name: Set image
-        run: echo "WORKER_IMAGE=${{ needs.resolve-images.outputs.worker_image }}" >> $GITHUB_ENV
+      - name: Determine deployment image
+        run: |
+          IMAGE="${{ needs.resolve-images.outputs.worker_image }}"
+          if [ -z "$IMAGE" ]; then
+            echo "Skipping worker deployment: no worker image provided."
+            exit 0
+          fi
+          echo "Deploying Worker image: $IMAGE"
+          echo "WORKER_IMAGE=$IMAGE" >> $GITHUB_ENV
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-
 
       - name: Deploy worker to instances
         run: |
@@ -159,7 +231,7 @@ jobs:
           done
 
           if [ $FAILED -eq 1 ]; then
-            echo "One or more instances failed. All successful instances will be cleaned up."
+            echo "One or more instances failed. Rolling back successful instances."
             for ID in "${SUCCESSFUL[@]}"; do
               IP=$(aws ec2 describe-instances --instance-ids $ID --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
               echo "Removing worker_new container from $ID due to rollback."
@@ -168,7 +240,7 @@ jobs:
             exit 1
           fi
 
-          echo "All instances deployed successfully. Promotion (rename) will be handled in the final job."
+          echo "All worker instances deployed successfully. Promotion (rename) will be handled in the final job."
 
 
 
