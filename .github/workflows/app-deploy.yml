@@ -157,6 +157,10 @@ jobs:
             COMPONENTS="${{ needs.pre-check.outputs.components }}"
             if [[ "$COMPONENTS" == "all" || "$COMPONENTS" == *"worker"* ]]; then
               IMAGE="${{ needs.resolve-images.outputs.worker_image }}"
+              if [ -z "$IMAGE" ]; then
+                echo "ERROR: worker_image output from resolve-images is empty."
+                exit 1
+              fi
               echo "Manual mode detected. Worker image: $IMAGE"
             else
               echo "Skipping worker deployment: not requested in components."
@@ -170,7 +174,9 @@ jobs:
             IMAGE="${{ github.event.client_payload.worker }}"
             echo "Automatic mode detected. Client payload worker image: $IMAGE"
           fi
+      
           echo "WORKER_IMAGE=$IMAGE" >> $GITHUB_ENV
+
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
