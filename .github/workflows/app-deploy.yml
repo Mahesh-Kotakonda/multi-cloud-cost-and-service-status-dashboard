@@ -164,15 +164,17 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      - name: Determine deployment image
+      - name: Set worker image from resolve-images
         run: |
-          IMAGE="${{ needs.resolve-images.outputs.worker_image }}"
-          if [ -z "$IMAGE" ]; then
+          if [ -z "${{ needs.resolve-images.outputs.worker_image }}" ]; then
             echo "Skipping worker deployment: no worker image provided."
             exit 0
           fi
-          echo "Deploying Worker image: $IMAGE"
-          echo "WORKER_IMAGE=$IMAGE" >> $GITHUB_ENV
+
+          echo "Deploying Worker image: ${{ needs.resolve-images.outputs.worker_image }}"
+          # Export to environment for next steps
+          echo "WORKER_IMAGE=${{ needs.resolve-images.outputs.worker_image }}" >> $GITHUB_ENV
+
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
