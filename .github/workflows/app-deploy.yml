@@ -142,6 +142,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -180,7 +181,6 @@ jobs:
       - name: Deploy worker to instances
         run: |
           PEM_PATH=~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
-          IMAGE="$WORKER_IMAGE"
 
           echo "Downloading infra outputs..."
           aws s3 cp "s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json" worker-outputs.json
@@ -194,12 +194,12 @@ jobs:
 
           for ID in $INSTANCE_IDS; do
             IP=$(aws ec2 describe-instances --instance-ids $ID --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
-            echo "Deploying worker to instance $ID ($IP) with image $IMAGE"
+            echo "Deploying worker to instance $ID ($IP) with image $WORKER_IMAGE"
 
             ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" "
               docker rm -f worker_new >/dev/null 2>&1 || true && \
               echo '${{ secrets.DOCKERHUB_TOKEN }}' | docker login -u '${{ secrets.DOCKERHUB_USERNAME }}' --password-stdin && \
-              docker pull $IMAGE && \
+              docker pull $WORKER_IMAGE && \
               docker run -d --name worker_new \
                 -e AWS_ACCESS_KEY_ID='${{ secrets.AWS_ACCESS_KEY_ID }}' \
                 -e AWS_SECRET_ACCESS_KEY='${{ secrets.AWS_SECRET_ACCESS_KEY }}' \
@@ -209,7 +209,7 @@ jobs:
                 -e DB_USER='${{ secrets.DB_USER }}' \
                 -e DB_PASS='${{ secrets.DB_PASS }}' \
                 -e POLL_INTERVAL_SECONDS=60000 \
-                $IMAGE"
+                $WORKER_IMAGE"
 
             sleep 20
             STATUS=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" "docker ps --filter 'name=worker_new' --filter 'status=running' | grep worker_new >/dev/null 2>&1; echo $?")
