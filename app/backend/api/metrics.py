@@ -8,7 +8,7 @@ app = FastAPI(title="AWS Metrics API", version="2.0.0")
 
 # ------------------------------
 # CORS Setup
-# ------------------------------
+# -------------------------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  #since frontend & backend share ALB, relative URLs are safe
