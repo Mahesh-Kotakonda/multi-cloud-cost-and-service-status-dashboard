@@ -150,12 +150,17 @@ jobs:
   ##########################
   deploy_worker:
     needs: [pre-check, resolve-images]
-    if: needs.pre-check.outputs.can_deploy == 'true' && needs.resolve-images.outputs.worker_image != ''
+    if: needs.pre-check.outputs.can_deploy == 'true' && needs.resolve-images.outputs.worker_image
     runs-on: self-hosted
     environment: production
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+  
+      - name: Print resolved worker image
+        run: |
+          echo "Resolved Worker Image: ${{ needs.resolve-images.outputs.worker_image }}"
+
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
