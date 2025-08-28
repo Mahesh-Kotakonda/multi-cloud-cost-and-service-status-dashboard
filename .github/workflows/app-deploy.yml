@@ -58,23 +58,26 @@ jobs:
           BACKEND_VER="${{ github.event.inputs.backend_version }}"
           FRONTEND_VER="${{ github.event.inputs.frontend_version }}"
 
-          # Normalize
           COMPONENTS=$(echo "$COMPONENTS" | tr '[:upper:]' '[:lower:]')
 
-          # Validate components
           VALID_COMPONENTS=(all worker backend frontend)
           for comp in $(echo $COMPONENTS | tr ',' ' '); do
             if [[ ! " ${VALID_COMPONENTS[@]} " =~ " $comp " ]]; then
-              echo "❌ Invalid component: $comp. Allowed: all, worker, backend, frontend."
+              echo "Invalid component: $comp. Allowed: all, worker, backend, frontend."
               exit 1
             fi
           done
 
-          # Prevent mixing all with other components
           if [[ "$COMPONENTS" == *"all"* && "$COMPONENTS" != "all" ]]; then
-            echo "❌ If you want to deploy all components, you must set components=all only. Do not combine 'all' with others."
+            echo "If you want to deploy all components, you must set components=all only. Do not combine 'all' with others."
             exit 1
           fi
+
+          echo "Manual inputs received:"
+          echo "  components=$COMPONENTS"
+          echo "  worker_version=$WORKER_VER"
+          echo "  backend_version=$BACKEND_VER"
+          echo "  frontend_version=$FRONTEND_VER"
 
           echo "components=$COMPONENTS" >> $GITHUB_OUTPUT
           echo "worker_version=$WORKER_VER" >> $GITHUB_OUTPUT
@@ -119,16 +122,14 @@ jobs:
             FRONTEND_IMAGE="$USER/$IMAGE_REPO-frontend:$TAG"
           fi
 
+          echo "Resolved images:"
+          echo "  Worker   : $WORKER_IMAGE"
+          echo "  Backend  : $BACKEND_IMAGE"
+          echo "  Frontend : $FRONTEND_IMAGE"
+
           echo "worker_image=$WORKER_IMAGE" >> $GITHUB_OUTPUT
           echo "backend_image=$BACKEND_IMAGE" >> $GITHUB_OUTPUT
           echo "frontend_image=$FRONTEND_IMAGE" >> $GITHUB_OUTPUT
-
-      - name: Show resolved images
-        run: |
-          echo "Worker Image   : ${{ steps.resolve.outputs.worker_image }}"
-          echo "Backend Image  : ${{ steps.resolve.outputs.backend_image }}"
-          echo "Frontend Image : ${{ steps.resolve.outputs.frontend_image }}"
-
 
   ##########################
   # Deploy Worker
@@ -138,20 +139,6 @@ jobs:
     if: needs.pre-check.outputs.can_deploy == 'true'
     runs-on: self-hosted
     environment: production
-    outputs:
-      worker_status: ${{ steps.set-status.outputs.worker_status }}
-      worker_current_image: ${{ steps.set-status.outputs.worker_current_image }}
-      worker_previous_image: ${{ steps.set-status.outputs.worker_previous_image }}
-      worker_instances: ${{ steps.set-status.outputs.worker_instances }}
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_REGION: us-east-1
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-      IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
-      SSM_PARAM_NAME: myapp_database_credentials
-      S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -163,46 +150,34 @@ jobs:
             COMPONENTS="${{ needs.pre-check.outputs.components }}"
             if [[ "$COMPONENTS" == "all" || "$COMPONENTS" == *"worker"* ]]; then
               IMAGE="${{ needs.resolve-images.outputs.worker_image }}"
+              echo "Manual mode detected. Worker image: $IMAGE"
             else
               echo "Skipping worker deployment: not requested in components."
-              echo "worker_status=skipped" >> $GITHUB_OUTPUT
               exit 0
             fi
           else
-            # Automatic trigger with payload
             if [ -z "${{ github.event.client_payload.worker }}" ]; then
-              echo "Skipping worker deployment: no worker image in payload."
-              echo "worker_status=skipped" >> $GITHUB_OUTPUT
+              echo "Skipping worker deployment: no worker image in client payload."
               exit 0
             fi
             IMAGE="${{ github.event.client_payload.worker }}"
+            echo "Automatic mode detected. Client payload worker image: $IMAGE"
           fi
-
           echo "WORKER_IMAGE=$IMAGE" >> $GITHUB_ENV
-          echo "worker_status=pending" >> $GITHUB_OUTPUT
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          username: ${{ env.DOCKERHUB_USERNAME }}
-          password: ${{ env.DOCKERHUB_TOKEN }}
-
-      - name: Fetch DB credentials from SSM
-        run: |
-          PARAM_VALUE=$(aws ssm get-parameter --name "$SSM_PARAM_NAME" --with-decryption --query "Parameter.Value" --output text)
-          DB_USER=$(echo $PARAM_VALUE | jq -r '.username')
-          DB_PASS=$(echo $PARAM_VALUE | jq -r '.password')
-          echo "DB_USER=$DB_USER" >> $GITHUB_ENV
-          echo "DB_PASS=$DB_PASS" >> $GITHUB_ENV
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Deploy worker to instances
-        id: deploy
         run: |
           PEM_PATH=~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
           IMAGE="$WORKER_IMAGE"
 
           echo "Downloading infra outputs..."
-          aws s3 cp "$S3_JSON_PATH" worker-outputs.json
+          aws s3 cp "s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json" worker-outputs.json
 
           DB_HOST=$(jq -r '.db.endpoint | split(":")[0]' worker-outputs.json)
           DB_NAME=$(jq -r '.db.name' worker-outputs.json)
@@ -210,75 +185,54 @@ jobs:
 
           SUCCESSFUL=()
           FAILED=0
-          PREVIOUS_IMAGES=()
 
           for ID in $INSTANCE_IDS; do
             IP=$(aws ec2 describe-instances --instance-ids $ID --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
-            echo "Deploying worker to instance $ID ($IP)..."
+            echo "Deploying worker to instance $ID ($IP) with image $IMAGE"
 
-            OLD_IMAGE=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-              "docker inspect --format='{{.Config.Image}}' worker 2>/dev/null || echo ''")
-
-            # Default to new image if no old container
-            [ -z "$OLD_IMAGE" ] && OLD_IMAGE="$IMAGE"
-            PREVIOUS_IMAGES+=("$ID:$OLD_IMAGE")
-
-            ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-              "docker rm -f worker_new >/dev/null 2>&1 || true && \
-               echo '$DOCKERHUB_TOKEN' | docker login -u '$DOCKERHUB_USERNAME' --password-stdin && \
-               docker pull $IMAGE && \
-               docker run -d --name worker_new \
-                 -e AWS_ACCESS_KEY_ID='$AWS_ACCESS_KEY_ID' \
-                 -e AWS_SECRET_ACCESS_KEY='$AWS_SECRET_ACCESS_KEY' \
-                 -e AWS_REGION='$AWS_REGION' \
-                 -e DB_HOST='$DB_HOST' \
-                 -e DB_NAME='$DB_NAME' \
-                 -e DB_USER='$DB_USER' \
-                 -e DB_PASS='$DB_PASS' \
-                 -e POLL_INTERVAL_SECONDS=60000 \
-                 $IMAGE"
+            ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" "
+              docker rm -f worker_new >/dev/null 2>&1 || true && \
+              echo '${{ secrets.DOCKERHUB_TOKEN }}' | docker login -u '${{ secrets.DOCKERHUB_USERNAME }}' --password-stdin && \
+              docker pull $IMAGE && \
+              docker run -d --name worker_new \
+                -e AWS_ACCESS_KEY_ID='${{ secrets.AWS_ACCESS_KEY_ID }}' \
+                -e AWS_SECRET_ACCESS_KEY='${{ secrets.AWS_SECRET_ACCESS_KEY }}' \
+                -e AWS_REGION='us-east-1' \
+                -e DB_HOST='$DB_HOST' \
+                -e DB_NAME='$DB_NAME' \
+                -e DB_USER='${{ secrets.DB_USER }}' \
+                -e DB_PASS='${{ secrets.DB_PASS }}' \
+                -e POLL_INTERVAL_SECONDS=60000 \
+                $IMAGE"
 
             sleep 20
-            STATUS=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-              "docker ps --filter 'name=worker_new' --filter 'status=running' | grep worker_new >/dev/null 2>&1; echo $?")
+            STATUS=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" "docker ps --filter 'name=worker_new' --filter 'status=running' | grep worker_new >/dev/null 2>&1; echo $?")
 
             if [ "$STATUS" -eq 0 ]; then
-              echo "✅ Success on $ID"
+              echo "Deployment succeeded on instance $ID"
               SUCCESSFUL+=("$ID")
-              # Promote new container
-              ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-                "docker rm -f worker >/dev/null 2>&1 || true && \
-                 docker rename worker_new worker"
             else
-              echo "❌ Failure on $ID. Rolling back..."
+              echo "Deployment failed on instance $ID"
+              echo "Fetching container logs before cleanup..."
+              ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" "docker logs worker_new || true"
+              echo "Removing failed container on $ID"
+              ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" "docker rm -f worker_new || true"
               FAILED=1
               break
             fi
           done
 
           if [ $FAILED -eq 1 ]; then
-            echo "Rolling back successful instances..."
-            for ENTRY in "${PREVIOUS_IMAGES[@]}"; do
-              IFS=: read -r ROLLBACK_ID ROLLBACK_IMAGE <<< "$ENTRY"
-              if [[ " ${SUCCESSFUL[*]} " =~ " $ROLLBACK_ID " ]]; then
-                IP=$(aws ec2 describe-instances --instance-ids $ROLLBACK_ID --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
-                ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-                  "docker rm -f worker >/dev/null 2>&1 || true && \
-                   docker run -d --name worker $ROLLBACK_IMAGE"
-              fi
+            echo "One or more instances failed. All successful instances will be cleaned up."
+            for ID in "${SUCCESSFUL[@]}"; do
+              IP=$(aws ec2 describe-instances --instance-ids $ID --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
+              echo "Removing worker_new container from $ID due to rollback."
+              ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" "docker rm -f worker_new || true"
             done
             exit 1
           fi
 
-          echo "worker_current_image=$IMAGE" >> $GITHUB_OUTPUT
-          echo "worker_previous_image=${PREVIOUS_IMAGES[*]}" >> $GITHUB_OUTPUT
-          echo "worker_instances=${SUCCESSFUL[*]}" >> $GITHUB_OUTPUT
-          echo "worker_status=success" >> $GITHUB_OUTPUT
-
-      - name: Set status outputs
-        id: set-status
-        run: echo "worker_status=${{ steps.deploy.outputs.worker_status }}" >> $GITHUB_OUTPUT
-
+          echo "All instances deployed successfully. Promotion (rename) will be handled in the final job."
 
 
 
