@@ -108,42 +108,46 @@ jobs:
         run: |
           IMAGE_REPO="multi-cloud-cost-and-service-status-dashboard-repo"
           USER="${{ secrets.DOCKERHUB_USERNAME }}"
-
+  
           WORKER_IMAGE=""
           BACKEND_IMAGE=""
           FRONTEND_IMAGE=""
-
+  
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             COMPONENTS="${{ needs.pre-check.outputs.components }}"
-
+  
             if [[ "$COMPONENTS" == "all" || "$COMPONENTS" == *"worker"* ]]; then
               TAG="${{ needs.pre-check.outputs.worker_version }}"
-              WORKER_IMAGE="$USER/$IMAGE_REPO-worker:$TAG"
+              FULL_WORKER_IMAGE="$USER/$IMAGE_REPO-worker:$TAG"
+              WORKER_IMAGE="${FULL_WORKER_IMAGE#*/}"  # remove username
             fi
-
+  
             if [[ "$COMPONENTS" == "all" || "$COMPONENTS" == *"backend"* ]]; then
               TAG="${{ needs.pre-check.outputs.backend_version }}"
-              BACKEND_IMAGE="$USER/$IMAGE_REPO-backend:$TAG"
+              FULL_BACKEND_IMAGE="$USER/$IMAGE_REPO-backend:$TAG"
+              BACKEND_IMAGE="${FULL_BACKEND_IMAGE#*/}"  # remove username
             fi
-
+  
             if [[ "$COMPONENTS" == "all" || "$COMPONENTS" == *"frontend"* ]]; then
               TAG="${{ needs.pre-check.outputs.frontend_version }}"
-              FRONTEND_IMAGE="$USER/$IMAGE_REPO-frontend:$TAG"
+              FULL_FRONTEND_IMAGE="$USER/$IMAGE_REPO-frontend:$TAG"
+              FRONTEND_IMAGE="${FULL_FRONTEND_IMAGE#*/}"  # remove username
             fi
           else
-            WORKER_IMAGE="${{ github.event.client_payload.worker }}"
-            BACKEND_IMAGE="${{ github.event.client_payload.backend }}"
-            FRONTEND_IMAGE="${{ github.event.client_payload.frontend }}"
+            WORKER_IMAGE="${{ github.event.client_payload.worker#*/ }}"
+            BACKEND_IMAGE="${{ github.event.client_payload.backend#*/ }}"
+            FRONTEND_IMAGE="${{ github.event.client_payload.frontend#*/ }}"
           fi
-
-          echo "Resolved images:"
+  
+          echo "Resolved images (without username):"
           echo "  Worker   : $WORKER_IMAGE"
           echo "  Backend  : $BACKEND_IMAGE"
           echo "  Frontend : $FRONTEND_IMAGE"
-
+  
           echo "worker_image=$WORKER_IMAGE" >> $GITHUB_OUTPUT
           echo "backend_image=$BACKEND_IMAGE" >> $GITHUB_OUTPUT
           echo "frontend_image=$FRONTEND_IMAGE" >> $GITHUB_OUTPUT
+
 
   ##########################
   # Deploy Worker
