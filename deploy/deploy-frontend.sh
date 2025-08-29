@@ -25,10 +25,7 @@ if [[ -z "${PEM_PATH:-}" ]]; then
   echo "ERROR: PEM_PATH env var is required"
   exit 1
 fi
-if [[ -z "${FRONTEND_IMAGE:-}" ]]; then
-  echo "ERROR: FRONTEND_IMAGE env var is required"
-  exit 1
-fi
+
 if [[ -z "${DOCKERHUB_USERNAME:-}" || -z "${DOCKERHUB_TOKEN:-}" ]]; then
   echo "ERROR: DOCKERHUB_USERNAME and DOCKERHUB_TOKEN env vars are required"
   exit 1
