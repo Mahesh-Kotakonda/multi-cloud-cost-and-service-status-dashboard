@@ -52,6 +52,9 @@ if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
       response=$(curl -s -u "${DOCKERHUB_USERNAME}:${DOCKERHUB_TOKEN}" \
         "https://hub.docker.com/v2/repositories/${USER}/${IMAGE_REPO}/tags/?page_size=100&page=$page")
   
+      echo "=== Docker Hub API response page $page ==="
+      echo "$response" | jq '.'  # Print the full JSON nicely
+  
       if [[ -z "$response" || "$response" == "null" ]]; then
         echo "❌ Failed to fetch tags for ${component}" >&2
         exit 1
@@ -59,6 +62,8 @@ if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
   
       # Collect tags that match component-v pattern
       page_tags=($(echo "$response" | jq -r ".results[]?.name | select(test(\"^${component}-v[0-9]+$\"))"))
+      echo "Matching tags on page $page: ${page_tags[*]}"
+  
       tags+=("${page_tags[@]}")
   
       # Check for next page
@@ -76,6 +81,7 @@ if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
   
     # Sort numerically by the version after '-v' and pick latest
     latest_tag=$(printf "%s\n" "${tags[@]}" | sed "s/^${component}-v//" | sort -n | tail -n 1)
+    echo "Latest tag for ${component}: ${component}-v${latest_tag}"
     echo "${component}-v${latest_tag}"
   }
 
