@@ -318,8 +318,9 @@ else
   INACTIVE_TG="$OLD_TG"
 fi
 
-# === SUCCESS outputs ===
-echo "Preparing deployment outputs..."
+# Strip Docker username from images
+CURRENT_IMAGE_SHORT=$(echo "$FULL_IMAGE" | awk -F/ '{print $NF}')
+PREVIOUS_IMAGE_SHORT=$(echo "$PREVIOUS_IMAGE" | awk -F/ '{print $NF}')
 
 # Write to both console and GitHub Actions output safely
 {
@@ -328,13 +329,14 @@ echo "Preparing deployment outputs..."
   echo "backend_inactive_env=$INACTIVE_ENV"
   echo "backend_active_tg=$ACTIVE_TG"
   echo "backend_inactive_tg=$INACTIVE_TG"
-  echo "backend_current_image=$FULL_IMAGE"
-  echo "backend_previous_image=$PREVIOUS_IMAGE"
+  echo "backend_current_image=$CURRENT_IMAGE_SHORT"
+  echo "backend_previous_image=$PREVIOUS_IMAGE_SHORT"
   echo "backend_first_deployment=$BACKEND_FIRST_DEPLOYMENT"
   echo "backend_deployed_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
   echo "backend_deployed_by=${GITHUB_ACTOR:-manual}"
   echo "backend_instance_ids=${INSTANCE_IDS}"
 } | tee >(cat) >> "$GITHUB_OUTPUT"
+
 
 
 echo "✅ Backend deployment completed. Active env: $ACTIVE_ENV"
