@@ -42,82 +42,22 @@ if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
     echo "❌ If you want to deploy all components, set components=all only."
     exit 1
   fi
+fi
 
-
-
-  get_latest_version() {
-    local component=$1
-    local page=1
-    local tags=()
-  
-    while : ; do
-      # Fetch tags from Docker Hub
-      echo "Fetching tags for ${component}, page $page..."
-      response=$(curl -s -u "${DOCKERHUB_USERNAME}:${DOCKERHUB_TOKEN}" \
-        "https://hub.docker.com/v2/repositories/${USER}/${IMAGE_REPO}/tags/?page_size=100&page=$page")
-  
-      # Print raw response
-      echo "=== Raw response page $page ==="
-      echo "$response"
-  
-      if [[ -z "$response" || "$response" == "null" ]]; then
-        echo "❌ Failed to fetch tags for ${component}" >&2
-        exit 1
-      fi
-  
-      # Extract matching tags
-      page_tags=($(echo "$response" | jq -r ".results[]?.name | select(test(\"^${component}-v[0-9]+$\"))"))
-      echo "Matching tags on page $page: ${page_tags[*]}"
-  
-      tags+=("${page_tags[@]}")
-  
-      # Check if there is a next page
-      next=$(echo "$response" | jq -r '.next')
-      if [[ "$next" == "null" || -z "$next" ]]; then
-        break
-      fi
-      page=$((page + 1))
-    done
-  
-    if [[ ${#tags[@]} -eq 0 ]]; then
-      echo "❌ No tags found for ${component}" >&2
-      exit 1
-    fi
-  
-    # Sort and pick latest
-    latest_tag=$(printf "%s\n" "${tags[@]}" | sed "s/^${component}-v//" | sort -n | tail -n 1)
-    echo "Latest tag for ${component}: ${component}-v${latest_tag}"
-    echo "${component}-v${latest_tag}"
-  }
-
-
-
-
-
+# === Step 3: Resolve images ===
+if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
   if [[ "$COMPONENTS" == "all" || "$COMPONENTS" == *"worker"* ]]; then
-    if [[ "$WORKER_VER" == "latest" || -z "$WORKER_VER" ]]; then
-      WORKER_VER=$(get_latest_version "worker")
-    fi
     WORKER_IMAGE="$USER/$IMAGE_REPO:worker-$WORKER_VER"
     WORKER_IMAGE="$(basename $WORKER_IMAGE)"
   fi
-
   if [[ "$COMPONENTS" == "all" || "$COMPONENTS" == *"backend"* ]]; then
-    if [[ "$BACKEND_VER" == "latest" || -z "$BACKEND_VER" ]]; then
-      BACKEND_VER=$(get_latest_version "backend")
-    fi
     BACKEND_IMAGE="$USER/$IMAGE_REPO:backend-$BACKEND_VER"
     BACKEND_IMAGE="$(basename $BACKEND_IMAGE)"
   fi
-
   if [[ "$COMPONENTS" == "all" || "$COMPONENTS" == *"frontend"* ]]; then
-    if [[ "$FRONTEND_VER" == "latest" || -z "$FRONTEND_VER" ]]; then
-      FRONTEND_VER=$(get_latest_version "frontend")
-    fi
     FRONTEND_IMAGE="$USER/$IMAGE_REPO:frontend-$FRONTEND_VER"
     FRONTEND_IMAGE="$(basename $FRONTEND_IMAGE)"
   fi
-
 else
   # Only run basename if variable is set
   if [[ -n "${CLIENT_PAYLOAD_WORKER:-}" ]]; then
@@ -131,6 +71,7 @@ else
   if [[ -n "${CLIENT_PAYLOAD_FRONTEND:-}" ]]; then
     FRONTEND_IMAGE="$(basename "$CLIENT_PAYLOAD_FRONTEND")"
   fi
+
 fi
 
 echo "==== ✅ Final Pre-deploy Results ===="
