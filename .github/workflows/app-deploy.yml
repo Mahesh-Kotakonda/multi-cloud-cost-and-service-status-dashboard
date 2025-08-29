@@ -84,6 +84,7 @@ jobs:
       worker_previous_image: ${{ steps.deploy.outputs.worker_previous_image }}
       worker_current_image: ${{ steps.deploy.outputs.worker_current_image }}
       worker_deploy_status: ${{ steps.deploy.outputs.worker_deploy_status }}
+      worker_first_deployment: ${{ steps.deploy.outputs.worker_first_deployment }}
       worker_deployed_instance_ids: ${{ steps.deploy.outputs.worker_deployed_instance_ids }}
   
     steps:
@@ -221,6 +222,8 @@ jobs:
       WORKER_PREVIOUS_IMAGE: ${{ needs.deploy_worker.outputs.worker_previous_image }}
       WORKER_STATUS: ${{ needs.deploy_worker.outputs.worker_deploy_status }}
       WORKER_INSTANCE_IDS: ${{ needs.deploy_worker.outputs.worker_deployed_instance_ids }}
+      WORKER_FIRST_DEPLOYMENT: ${{ needs.deploy_worker.outputs.worker_first_deployment }}
+   
   
       # Backend outputs
       BACKEND_CURRENT_IMAGE: ${{ needs.deploy_backend.outputs.backend_current_image }}
@@ -231,6 +234,7 @@ jobs:
       BACKEND_ACTIVE_TG: ${{ needs.deploy_backend.outputs.backend_active_tg }}
       BACKEND_INACTIVE_TG: ${{ needs.deploy_backend.outputs.backend_inactive_tg }}
       BACKEND_INSTANCE_IDS: ${{ needs.deploy_backend.outputs.backend_instance_ids }}
+      BACKEND_FIRST_DEPLOYMENT: ${{ needs.deploy_backend.outputs.backend_first_deployment }}
   
       # Frontend outputs
       FRONTEND_CURRENT_IMAGE: ${{ needs.deploy_frontend.outputs.frontend_current_image }}
@@ -241,6 +245,7 @@ jobs:
       FRONTEND_ACTIVE_TG: ${{ needs.deploy_frontend.outputs.frontend_active_tg }}
       FRONTEND_INACTIVE_TG: ${{ needs.deploy_frontend.outputs.frontend_inactive_tg }}
       FRONTEND_INSTANCE_IDS: ${{ needs.deploy_frontend.outputs.frontend_instance_ids }}
+      FRONTEND_FIRST_DEPLOYMENT: ${{ needs.deploy_frontend.outputs.frontend_first_deployment }}
   
     steps:
       - name: Checkout repository
