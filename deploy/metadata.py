@@ -162,12 +162,11 @@ if __name__ == "__main__":
     # Step 2: Deploy Backend ALB rules
     backend_tg = backend_inactive_tg if backend_active_env == "BLUE" else backend_active_tg
     deploy_service(listener_arn, backend_tg, ["/api/aws/*"], starting_priority=10)
-    deploy_containers(backend_instance_ids, pem_path, "backend", aws_access_key, aws_secret_key, aws_region)
+
 
     # Step 3: Deploy Frontend ALB rules
     frontend_tg = frontend_inactive_tg if frontend_active_env == "BLUE" else frontend_active_tg
     deploy_service(listener_arn, frontend_tg, ["/", "/favicon.ico", "/robots.txt", "/static/*"], starting_priority=500)
-    deploy_containers(frontend_instance_ids, pem_path, "frontend", aws_access_key, aws_secret_key, aws_region)
 
     # Prepare outputs
     outputs = {
