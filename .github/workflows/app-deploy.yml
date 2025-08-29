@@ -201,12 +201,9 @@ jobs:
 
 
 
-  ##########################
-  # Deploy Metadata
-  ##########################
   deploy_metadata:
     needs: [deploy_worker, deploy_backend, deploy_frontend]
-    if: needs.pre-check.outputs.can_deploy == 'true'
+    if: needs.pre-deploy.outputs.can_deploy == 'true'
     runs-on: self-hosted
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -216,9 +213,32 @@ jobs:
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
       IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
       DEPLOY_METADATA_S3_BUCKET: multi-cloud-cost-and-service-status-dashboard
-      WORKER_INSTANCE_IDS: ${{ needs.deploy_worker.outputs.deployed_instance_ids || '' }}
-      BACKEND_INSTANCE_IDS: ${{ needs.deploy_backend.outputs.backend_instance_ids || '' }}
-      FRONTEND_INSTANCE_IDS: ${{ needs.deploy_frontend.outputs.frontend_instance_ids || '' }}
+  
+      # Worker outputs
+      WORKER_CURRENT_IMAGE: ${{ needs.deploy_worker.outputs.worker_current_image }}
+      WORKER_PREVIOUS_IMAGE: ${{ needs.deploy_worker.outputs.worker_previous_image }}
+      WORKER_STATUS: ${{ needs.deploy_worker.outputs.worker_deploy_status }}
+      WORKER_INSTANCE_IDS: ${{ needs.deploy_worker.outputs.worker_deployed_instance_ids }}
+  
+      # Backend outputs
+      BACKEND_CURRENT_IMAGE: ${{ needs.deploy_backend.outputs.backend_current_image }}
+      BACKEND_PREVIOUS_IMAGE: ${{ needs.deploy_backend.outputs.backend_previous_image }}
+      BACKEND_STATUS: ${{ needs.deploy_backend.outputs.backend_status }}
+      BACKEND_ACTIVE_ENV: ${{ needs.deploy_backend.outputs.backend_active_env }}
+      BACKEND_INACTIVE_ENV: ${{ needs.deploy_backend.outputs.backend_inactive_env }}
+      BACKEND_ACTIVE_TG: ${{ needs.deploy_backend.outputs.backend_active_tg }}
+      BACKEND_INACTIVE_TG: ${{ needs.deploy_backend.outputs.backend_inactive_tg }}
+      BACKEND_INSTANCE_IDS: ${{ needs.deploy_backend.outputs.backend_instance_ids }}
+  
+      # Frontend outputs
+      FRONTEND_CURRENT_IMAGE: ${{ needs.deploy_frontend.outputs.frontend_current_image }}
+      FRONTEND_PREVIOUS_IMAGE: ${{ needs.deploy_frontend.outputs.frontend_previous_image }}
+      FRONTEND_STATUS: ${{ needs.deploy_frontend.outputs.frontend_status }}
+      FRONTEND_ACTIVE_ENV: ${{ needs.deploy_frontend.outputs.frontend_active_env }}
+      FRONTEND_INACTIVE_ENV: ${{ needs.deploy_frontend.outputs.frontend_inactive_env }}
+      FRONTEND_ACTIVE_TG: ${{ needs.deploy_frontend.outputs.frontend_active_tg }}
+      FRONTEND_INACTIVE_TG: ${{ needs.deploy_frontend.outputs.frontend_inactive_tg }}
+      FRONTEND_INSTANCE_IDS: ${{ needs.deploy_frontend.outputs.frontend_instance_ids }}
   
     steps:
       - name: Checkout repository
@@ -228,65 +248,40 @@ jobs:
         run: |
           S3_JSON_PATH="s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json"
           aws s3 cp "$S3_JSON_PATH" infra-outputs.json
-          echo "infra_outputs_json=infra-outputs.json" >> $GITHUB_ENV
+          echo "INFRA_OUTPUTS_JSON=infra-outputs.json" >> $GITHUB_ENV
   
-          INSTANCE_IDS=$(jq -r '.ec2_instance_ids | join(",")' infra-outputs.json)
-          echo "instance_ids=$INSTANCE_IDS" >> $GITHUB_ENV
-  
-          LISTENER_ARN=$(jq -r '.alb_listener_arn' infra-outputs.json)
-          echo "listener_arn=$LISTENER_ARN" >> $GITHUB_ENV
-  
-      - name: Print job outputs for debugging
+      - name: Print all outputs for debugging
         run: |
-          echo "Worker Current Image: ${{ needs.deploy_worker.outputs.worker_current_image }}"
-          echo "Worker Previous Image: ${{ needs.deploy_worker.outputs.worker_previous_image }}"
-          echo "Worker Status: ${{ needs.deploy_worker.outputs.worker_status }}"
-          echo "Worker Instances: ${{ env.WORKER_INSTANCE_IDS }}"
-          echo "Backend Current Image: ${{ needs.deploy_backend.outputs.backend_current_image }}"
-          echo "Backend Previous Image: ${{ needs.deploy_backend.outputs.backend_previous_image }}"
-          echo "Backend Instances: ${{ env.BACKEND_INSTANCE_IDS }}"
-          echo "Frontend Current Image: ${{ needs.deploy_frontend.outputs.frontend_current_image }}"
-          echo "Frontend Previous Image: ${{ needs.deploy_frontend.outputs.frontend_previous_image }}"
-          echo "Frontend Instances: ${{ env.FRONTEND_INSTANCE_IDS }}"
-          echo "Instance IDs: ${{ env.instance_ids }}"
-          echo "Listener ARN: ${{ env.listener_arn }}"
-          echo "Infra Outputs JSON: ${{ env.infra_outputs_json }}"
-          echo "DockerHub Username: ${{ env.DOCKERHUB_USERNAME }}"
-          echo "AWS Access Key: ${{ env.AWS_ACCESS_KEY_ID }}"
-          echo "AWS Region: ${{ env.AWS_REGION }}"
-          echo "Image Repo: ${{ env.IMAGE_REPO }}"
-          echo "S3 Bucket: ${{ env.DEPLOY_METADATA_S3_BUCKET }}"
-          echo "GitHub Actor: ${{ github.actor }}"
+          echo "=== Worker Outputs ==="
+          echo "Current Image: $WORKER_CURRENT_IMAGE"
+          echo "Previous Image: $WORKER_PREVIOUS_IMAGE"
+          echo "Status: $WORKER_STATUS"
+          echo "Instance IDs: $WORKER_INSTANCE_IDS"
+  
+          echo "=== Backend Outputs ==="
+          echo "Current Image: $BACKEND_CURRENT_IMAGE"
+          echo "Previous Image: $BACKEND_PREVIOUS_IMAGE"
+          echo "Status: $BACKEND_STATUS"
+          echo "Active Env: $BACKEND_ACTIVE_ENV"
+          echo "Inactive Env: $BACKEND_INACTIVE_ENV"
+          echo "Active TG: $BACKEND_ACTIVE_TG"
+          echo "Inactive TG: $BACKEND_INACTIVE_TG"
+          echo "Instance IDs: $BACKEND_INSTANCE_IDS"
+  
+          echo "=== Frontend Outputs ==="
+          echo "Current Image: $FRONTEND_CURRENT_IMAGE"
+          echo "Previous Image: $FRONTEND_PREVIOUS_IMAGE"
+          echo "Status: $FRONTEND_STATUS"
+          echo "Active Env: $FRONTEND_ACTIVE_ENV"
+          echo "Inactive Env: $FRONTEND_INACTIVE_ENV"
+          echo "Active TG: $FRONTEND_ACTIVE_TG"
+          echo "Inactive TG: $FRONTEND_INACTIVE_TG"
+          echo "Instance IDs: $FRONTEND_INSTANCE_IDS"
+  
+          echo "Infra Outputs JSON Path: $INFRA_OUTPUTS_JSON"
   
       - name: Run metadata.py
         run: |
-          python3 ./deploy/metadata.py \
-            --pem-path ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem \
-            --worker-current-image "${{ needs.deploy_worker.outputs.worker_current_image }}" \
-            --worker-previous-image "${{ needs.deploy_worker.outputs.worker_previous_image }}" \
-            --worker-status "${{ needs.deploy_worker.outputs.worker_status }}" \
-            --worker-instance-ids "$WORKER_INSTANCE_IDS" \
-            --backend-current-image "${{ needs.deploy_backend.outputs.backend_current_image }}" \
-            --backend-previous-image "${{ needs.deploy_backend.outputs.backend_previous_image }}" \
-            --backend-instance-ids "$BACKEND_INSTANCE_IDS" \
-            --frontend-current-image "${{ needs.deploy_frontend.outputs.frontend_current_image }}" \
-            --frontend-previous-image "${{ needs.deploy_frontend.outputs.frontend_previous_image }}" \
-            --frontend-instance-ids "$FRONTEND_INSTANCE_IDS" \
-            --instance-ids "${{ env.instance_ids }}" \
-            --backend-blue-tg "${{ needs.deploy_backend.outputs.backend_blue_tg }}" \
-            --backend-green-tg "${{ needs.deploy_backend.outputs.backend_green_tg }}" \
-            --backend-active-env "${{ needs.deploy_backend.outputs.backend_active_env }}" \
-            --frontend-blue-tg "${{ needs.deploy_frontend.outputs.frontend_blue_tg }}" \
-            --frontend-green-tg "${{ needs.deploy_frontend.outputs.frontend_green_tg }}" \
-            --frontend-active-env "${{ needs.deploy_frontend.outputs.frontend_active_env }}" \
-            --infra-outputs-json "${{ env.infra_outputs_json }}" \
-            --dockerhub-username "${{ env.DOCKERHUB_USERNAME }}" \
-            --dockerhub-token "${{ env.DOCKERHUB_TOKEN }}" \
-            --aws-access-key-id "${{ env.AWS_ACCESS_KEY_ID }}" \
-            --aws-secret-access-key "${{ env.AWS_SECRET_ACCESS_KEY }}" \
-            --aws-region "${{ env.AWS_REGION }}" \
-            --image-repo "${{ env.IMAGE_REPO }}" \
-            --listener-arn "${{ env.listener_arn }}" \
-            --s3-bucket "${{ env.DEPLOY_METADATA_S3_BUCKET }}" \
-            --github-actor "${{ github.actor }}"
+          python3 ./deploy/metadata.py --outputs-json "$INFRA_OUTPUTS_JSON"
+
 
