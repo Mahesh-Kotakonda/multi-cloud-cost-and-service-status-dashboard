@@ -263,6 +263,7 @@ jobs:
           echo "Previous Image: $WORKER_PREVIOUS_IMAGE"
           echo "Status: $WORKER_STATUS"
           echo "Instance IDs: $WORKER_INSTANCE_IDS"
+          echo "First Deployment: $WORKER_FIRST_DEPLOYMENT"
   
           echo "=== Backend Outputs ==="
           echo "Current Image: $BACKEND_CURRENT_IMAGE"
@@ -273,6 +274,7 @@ jobs:
           echo "Active TG: $BACKEND_ACTIVE_TG"
           echo "Inactive TG: $BACKEND_INACTIVE_TG"
           echo "Instance IDs: $BACKEND_INSTANCE_IDS"
+          echo "First Deployment: $BACKEND_FIRST_DEPLOYMENT"
   
           echo "=== Frontend Outputs ==="
           echo "Current Image: $FRONTEND_CURRENT_IMAGE"
@@ -283,6 +285,7 @@ jobs:
           echo "Active TG: $FRONTEND_ACTIVE_TG"
           echo "Inactive TG: $FRONTEND_INACTIVE_TG"
           echo "Instance IDs: $FRONTEND_INSTANCE_IDS"
+          echo "First Deployment: $FRONTEND_FIRST_DEPLOYMENT"
   
       - name: Run metadata.py
         run: |
