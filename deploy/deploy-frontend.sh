@@ -273,11 +273,10 @@ else
     DEPLOYED_INSTANCES+=("$instance")
   done
 
-  PREV_ACTIVE_ENV="$ACTIVE_ENV"
-  ACTIVE_ENV="$NEW_COLOR"
-  INACTIVE_ENV="$PREV_ACTIVE_ENV"
-  ACTIVE_TG="$NEW_TG"
-  INACTIVE_TG="$OLD_TG"
+  ACTIVE_ENV="$ACTIVE_ENV"
+  INACTIVE_ENV="$NEW_COLOR"
+  ACTIVE_TG="$OLD_TG"
+  INACTIVE_TG="$NEW_TG"
 fi
 
 # Strip Docker username from frontend images
@@ -299,5 +298,5 @@ PREVIOUS_IMAGE_SHORT=$(echo "$PREVIOUS_IMAGE" | awk -F/ '{print $NF}')
   echo "frontend_instance_ids=${INSTANCE_IDS}"
 } | tee >(cat) >> "$GITHUB_OUTPUT"
 
-echo "✅ Frontend deployment completed. Active env: $ACTIVE_ENV"
+echo "✅ Frontend deployment completed. frontend configuration will be done in the meta data job"
 exit 0
