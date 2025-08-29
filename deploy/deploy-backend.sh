@@ -4,182 +4,317 @@ set -euo pipefail
 #########################################
 # deploy-backend.sh
 # Blue-Green Deployment for Backend (Containers Only)
+#
+# Usage:
+#   ./deploy-backend.sh --outputs-json backend-outputs.json --pem-path ~/ssh/key.pem --worker-instances "i-aaa,i-bbb"
+#
+# Requirements:
+# - BACKEND_IMAGE env var set (full image ref, e.g. user/repo:tag)
+# - SSM_PARAM_NAME env var set (parameter contains JSON {"username":"...","password":"..."})
+# - AWS credentials & region in env (or instance profile)
+# - jq installed on runner
 #########################################
 
-# === DEFAULT CONFIG ===
 BACKEND_BLUE_PORT=8080
 BACKEND_GREEN_PORT=8081
 
 # === ARG PARSING ===
+OUTPUTS_JSON=""
+PEM_PATH=""
+WORKER_INSTANCES_CSV=""
+
 while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --outputs-json)          OUTPUTS_JSON="$2"; shift 2 ;;
-        --pem-path)              PEM_PATH="$2"; shift 2 ;;
-        --db-host)               DB_HOST="$2"; shift 2 ;;
-        --db-port)               DB_PORT="$2"; shift 2 ;;
-        --db-name)               DB_NAME="$2"; shift 2 ;;
-        --db-user)               DB_USER="$2"; shift 2 ;;
-        --db-pass)               DB_PASS="$2"; shift 2 ;;
-        --dockerhub-username)    DOCKERHUB_USERNAME="$2"; shift 2 ;;
-        --dockerhub-token)       DOCKERHUB_TOKEN="$2"; shift 2 ;;
-        --image-tag)             IMAGE_TAG="$2"; shift 2 ;;   # full image ref (username/repo:tag)
-        --instance-ids)          INSTANCE_IDS="$2"; shift 2 ;;
-        --blue-tg)               BACKEND_BLUE_TG="$2"; shift 2 ;;
-        --green-tg)              BACKEND_GREEN_TG="$2"; shift 2 ;;
-        --aws-access-key-id)     AWS_ACCESS_KEY_ID="$2"; shift 2 ;;
-        --aws-secret-access-key) AWS_SECRET_ACCESS_KEY="$2"; shift 2 ;;
-        --aws-region)            AWS_REGION="$2"; shift 2 ;;
-        *) echo "Unknown argument: $1"; exit 1 ;;
-    esac
+  case "$1" in
+    --outputs-json) OUTPUTS_JSON="$2"; shift 2 ;;
+    --pem-path)     PEM_PATH="$2"; shift 2 ;;
+    --worker-instances) WORKER_INSTANCES_CSV="$2"; shift 2 ;;
+    *) echo "Unknown argument: $1"; exit 1 ;;
+  esac
 done
 
-# === VALIDATE INPUTS ===
-if [[ -z "${OUTPUTS_JSON:-}" ]]; then echo "Must provide --outputs-json"; exit 1; fi
-if [[ -z "${INSTANCE_IDS:-}" ]]; then echo "Must provide --instance-ids"; exit 1; fi
-if [[ -z "${BACKEND_BLUE_TG:-}" || -z "${BACKEND_GREEN_TG:-}" ]]; then
-    echo "Must provide --blue-tg and --green-tg"; exit 1
+if [[ -z "${OUTPUTS_JSON:-}" ]]; then
+  echo "ERROR: --outputs-json is required"
+  exit 1
+fi
+if [[ -z "${PEM_PATH:-}" ]]; then
+  echo "ERROR: --pem-path is required"
+  exit 1
+fi
+if [[ -z "${BACKEND_IMAGE:-}" ]]; then
+  echo "ERROR: BACKEND_IMAGE environment variable is required"
+  exit 1
+fi
+if [[ -z "${SSM_PARAM_NAME:-}" ]]; then
+  echo "ERROR: SSM_PARAM_NAME environment variable is required"
+  exit 1
+fi
+
+# Export AWS creds if present in env
+export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION
+
+# === Read infra outputs from JSON ===
+INSTANCE_IDS=$(jq -r '.ec2_instance_ids | join(",")' "$OUTPUTS_JSON" 2>/dev/null || echo "")
+BACKEND_BLUE_TG=$(jq -r '.backend_blue_tg_arn' "$OUTPUTS_JSON" 2>/dev/null || echo "")
+BACKEND_GREEN_TG=$(jq -r '.backend_green_tg_arn' "$OUTPUTS_JSON" 2>/dev/null || echo "")
+LISTENER_ARN=$(jq -r '.alb_listener_arn' "$OUTPUTS_JSON" 2>/dev/null || echo "")
+
+DB_ENDPOINT=$(jq -r '.db.endpoint // empty' "$OUTPUTS_JSON" 2>/dev/null || echo "")
+DB_HOST=$(echo "$DB_ENDPOINT" | cut -d':' -f1)
+DB_PORT=$(echo "$DB_ENDPOINT" | cut -d':' -f2)
+DB_NAME=$(jq -r '.db.name // empty' "$OUTPUTS_JSON" 2>/dev/null || echo "")
+
+if [[ -z "$INSTANCE_IDS" ]]; then
+  echo "ERROR: no backend instance ids found in $OUTPUTS_JSON"
+  exit 1
 fi
 
 IFS=',' read -ra INSTANCES <<< "$INSTANCE_IDS"
 
-# === EXPORT AWS CREDS ===
-export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION
-
-# === FUNCTION TO FETCH CURRENT CONTAINER IMAGE ===
-get_current_container_image() {
-    local instance_id=$1
-    local color=$2
-    local container_name="backend_${color,,}"
-    IP=$(aws ec2 describe-instances --instance-ids "$instance_id" \
-        --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
-    ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-        "docker inspect --format '{{.Config.Image}}' $container_name" 2>/dev/null || echo ""
-}
-
-# === DEPLOY FUNCTION ===
-deploy_container() {
-    local instance_id=$1
-    local port=$2
-    local color=$3
-    local docker_image=$4
-    local container_name="backend_${color,,}"
-
-    IP=$(aws ec2 describe-instances --instance-ids "$instance_id" \
-        --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
-
-    echo "Deploying backend $color on $instance_id ($IP) with image $docker_image"
-
-    ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" bash <<EOF
-set -e
-if docker ps -a --format '{{.Names}}' | grep -q '^${container_name}\$'; then
-    echo "Stopping and removing existing container $container_name"
-    docker stop $container_name || true
-    docker rm $container_name || true
+# Worker instances (comma-separated, optional)
+WORKER_INSTANCES=()
+if [[ -n "${WORKER_INSTANCES_CSV:-}" ]]; then
+  IFS=',' read -ra WORKER_INSTANCES <<< "$WORKER_INSTANCES_CSV"
 fi
 
-echo "Logging in to Docker Hub..."
+# === Fetch DB credentials JSON from SSM and parse with jq ===
+PARAM_VALUE=$(aws ssm get-parameter --name "$SSM_PARAM_NAME" --with-decryption --query "Parameter.Value" --output text) || {
+  echo "ERROR: failed to read SSM parameter $SSM_PARAM_NAME"
+  exit 1
+}
+DB_USER=$(echo "$PARAM_VALUE" | jq -r '.username')
+DB_PASS=$(echo "$PARAM_VALUE" | jq -r '.password')
+
+# encode DB creds to base64 to safely inject into remote shell
+DB_USER_B64=$(printf '%s' "$DB_USER" | base64 | tr -d '\n')
+DB_PASS_B64=$(printf '%s' "$DB_PASS" | base64 | tr -d '\n')
+
+# === Helpers ===
+
+_get_ip() {
+  local instance_id=$1
+  aws ec2 describe-instances --instance-ids "$instance_id" \
+    --query "Reservations[0].Instances[0].PublicIpAddress" --output text
+}
+
+print_container_logs() {
+  local instance_id=$1
+  local container=$2
+  ip="$(_get_ip "$instance_id")"
+  echo "---- logs for $container on $instance_id ($ip) ----"
+  ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$ip" "docker logs $container || true"
+  echo "-----------------------------------------------"
+}
+
+# Deploy container on the remote instance.
+# Note: this expands local variables into the remote script safely using base64 for credentials.
+deploy_container() {
+  local instance_id=$1
+  local port=$2
+  local color=$3
+  local container_name="backend_${color,,}"
+
+  local ip
+  ip="$(_get_ip "$instance_id")"
+  if [[ -z "$ip" || "$ip" == "None" ]]; then
+    echo "ERROR: could not determine public IP for instance $instance_id"
+    return 2
+  fi
+
+  ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$ip" bash <<EOF
+set -e
+docker stop $container_name || true
+docker rm $container_name || true
+
+# DockerHub login (token expanded locally into the here-doc)
 echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
 
-echo "Pulling image $docker_image..."
-docker pull "$docker_image"
+docker pull "$BACKEND_IMAGE"
 
-echo "Running container $container_name on port $port..."
+# decode DB creds (base64 encoded locally)
+DB_USER=\$(echo '$DB_USER_B64' | base64 -d)
+DB_PASS=\$(echo '$DB_PASS_B64' | base64 -d)
+
 docker run -d -p $port:8000 \
-    --name $container_name \
-    -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
-    -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
-    -e AWS_REGION=$AWS_REGION \
-    -e DB_HOST=$DB_HOST \
-    -e DB_PORT=$DB_PORT \
-    -e DB_NAME=$DB_NAME \
-    -e DB_USER=$DB_USER \
-    -e DB_PASS=$DB_PASS \
-    "$docker_image"
+  --name $container_name \
+  -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
+  -e AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
+  -e AWS_REGION="$AWS_REGION" \
+  -e DB_HOST="$DB_HOST" \
+  -e DB_PORT="$DB_PORT" \
+  -e DB_NAME="$DB_NAME" \
+  -e DB_USER="\$DB_USER" \
+  -e DB_PASS="\$DB_PASS" \
+  "$BACKEND_IMAGE"
 EOF
 }
 
-# === FETCH CURRENT ACTIVE TG ===
-LISTENER_ARN=$(jq -r '.alb_listener_arn' "$OUTPUTS_JSON")
-if [[ -z "$LISTENER_ARN" || "$LISTENER_ARN" == "null" ]]; then
-    echo "Could not fetch alb_listener_arn from $OUTPUTS_JSON"
-    exit 1
-fi
+# Remove both backend_blue and backend_green on specified instances
+rollback_backend_both_on() {
+  if [[ $# -eq 0 ]]; then return; fi
+  echo "Rolling back BOTH backend_blue and backend_green on instances: $*"
+  for instance_id in "$@"; do
+    ip="$(_get_ip "$instance_id")"
+    ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$ip" \
+      "docker rm -f backend_blue backend_green || true"
+  done
+}
 
+# Remove only a given color container on specified instances
+rollback_backend_color_on() {
+  local color="$1"; shift
+  if [[ $# -eq 0 ]]; then return; fi
+  color="$(echo "$color" | tr '[:upper:]' '[:lower:]')"
+  echo "Rolling back backend_${color} on instances: $*"
+  for instance_id in "$@"; do
+    ip="$(_get_ip "$instance_id")"
+    ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$ip" \
+      "docker rm -f backend_${color} || true"
+  done
+}
+
+# Remove worker_new containers on worker instances (if any)
+rollback_worker_new() {
+  if [[ ${#WORKER_INSTANCES[@]} -eq 0 ]]; then
+    echo "No worker instances to rollback."
+    return
+  fi
+  echo "Rolling back worker_new on worker instances: ${WORKER_INSTANCES[*]}"
+  for instance_id in "${WORKER_INSTANCES[@]}"; do
+    ip="$(_get_ip "$instance_id")"
+    ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$ip" \
+      "docker rm -f worker_new || true"
+  done
+}
+
+# === Detect current active target-group from ALB listener ===
 CURRENT_TG=$(aws elbv2 describe-rules \
-    --listener-arn "$LISTENER_ARN" \
-    --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'/api/aws/*')]].Actions[0].ForwardConfig.TargetGroups[0].TargetGroupArn" \
-    --output text || echo "")
+  --listener-arn "$LISTENER_ARN" \
+  --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'/api/aws/*')]].Actions[0].ForwardConfig.TargetGroups[0].TargetGroupArn" \
+  --output text || echo "")
 
-echo "Current active backend Target Group ARN: $CURRENT_TG"
+echo "Current TG: $CURRENT_TG"
 
-# === FIRST-TIME DEPLOYMENT ===
+DEPLOYED_INSTANCES=()
+
+# === FIRST-TIME DEPLOY ===
 if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
-    echo "First-time backend deployment. Deploying BLUE and GREEN with same image but attaching BLUE only..."
-    for instance in "${INSTANCES[@]}"; do
-        deploy_container "$instance" "$BACKEND_BLUE_PORT" "BLUE" "$IMAGE_TAG"
-        deploy_container "$instance" "$BACKEND_GREEN_PORT" "GREEN" "$IMAGE_TAG"
-        echo "Registering BLUE instance $instance to target group $BACKEND_BLUE_TG"
-        aws elbv2 register-targets --target-group-arn "$BACKEND_BLUE_TG" --targets Id=$instance,Port=$BACKEND_BLUE_PORT
-    done
+  echo "First-time deploy: deploying BLUE + GREEN on each instance"
 
-    DEPLOYED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  for instance in "${INSTANCES[@]}"; do
+    echo "→ deploying BLUE on $instance"
+    set +e
+    deploy_container "$instance" $BACKEND_BLUE_PORT "BLUE"
+    status_blue=$?
+    set -e
 
-    # Strip username from image
-    IMAGE_CLEAN=$(echo "$IMAGE_TAG" | cut -d'/' -f2)
+    if [[ $status_blue -ne 0 ]]; then
+      echo "❌ BLUE failed on $instance (status $status_blue)"
+      print_container_logs "$instance" "backend_blue"
+      rollback_targets=("${DEPLOYED_INSTANCES[@]}" "$instance")
+      rollback_backend_both_on "${rollback_targets[@]}"
+      rollback_worker_new
+      {
+        echo "backend_status=failed"
+        echo "backend_active_env=NONE"
+        echo "backend_inactive_env=NONE"
+      } >> "$GITHUB_OUTPUT"
+      exit 1
+    fi
 
-    echo "backend_active_env=GREEN" >> $GITHUB_OUTPUT
-    echo "backend_current_image=$IMAGE_CLEAN" >> $GITHUB_OUTPUT
-    echo "backend_previous_image=$IMAGE_CLEAN" >> $GITHUB_OUTPUT
-    echo "backend_blue_tg=$BACKEND_BLUE_TG" >> $GITHUB_OUTPUT
-    echo "backend_green_tg=$BACKEND_GREEN_TG" >> $GITHUB_OUTPUT
-    echo "backend_deployed_at=$DEPLOYED_AT" >> $GITHUB_OUTPUT
-    echo "backend_deployed_by=$GITHUB_ACTOR" >> $GITHUB_OUTPUT
-    echo "backend_status=success" >> $GITHUB_OUTPUT
+    echo "→ deploying GREEN on $instance"
+    set +e
+    deploy_container "$instance" $BACKEND_GREEN_PORT "GREEN"
+    status_green=$?
+    set -e
 
-    echo "Backend BLUE is live."
-    exit 0
-fi
+    if [[ $status_green -ne 0 ]]; then
+      echo "❌ GREEN failed on $instance (status $status_green)"
+      print_container_logs "$instance" "backend_green"
+      rollback_targets=("${DEPLOYED_INSTANCES[@]}" "$instance")
+      rollback_backend_both_on "${rollback_targets[@]}"
+      rollback_worker_new
+      {
+        echo "backend_status=failed"
+        echo "backend_active_env=NONE"
+        echo "backend_inactive_env=NONE"
+      } >> "$GITHUB_OUTPUT"
+      exit 1
+    fi
 
-# === NORMAL BLUE/GREEN SWITCH ===
-if [[ "$CURRENT_TG" == *"blue"* ]]; then
-    CURRENT_COLOR="BLUE"
-    NEXT_COLOR="GREEN"
-    NEW_TG="$BACKEND_GREEN_TG"
-    NEW_PORT=$BACKEND_GREEN_PORT
+    # success for this instance (both colors)
+    DEPLOYED_INSTANCES+=("$instance")
+  done
+
+  # All instances succeeded: attach BLUE to listener (BLUE = active)
+  echo "Registering BLUE as active target group on listener..."
+  aws elbv2 modify-listener \
+    --listener-arn "$LISTENER_ARN" \
+    --default-actions "Type=forward,ForwardConfig={TargetGroups=[{TargetGroupArn=$BACKEND_BLUE_TG,Weight=1}]}"
+
+  ACTIVE_ENV="BLUE"
+  INACTIVE_ENV="GREEN"
+  ACTIVE_TG="$BACKEND_BLUE_TG"
+  INACTIVE_TG="$BACKEND_GREEN_TG"
+
+# === SUBSEQUENT DEPLOY ===
 else
-    CURRENT_COLOR="GREEN"
-    NEXT_COLOR="BLUE"
-    NEW_TG="$BACKEND_BLUE_TG"
-    NEW_PORT=$BACKEND_BLUE_PORT
+  if [[ "$CURRENT_TG" == "$BACKEND_BLUE_TG" ]]; then
+    ACTIVE_ENV="BLUE"; NEW_COLOR="GREEN"; NEW_PORT=$BACKEND_GREEN_PORT
+    NEW_TG="$BACKEND_GREEN_TG"; OLD_TG="$BACKEND_BLUE_TG"; INACTIVE_ENV="GREEN"
+  else
+    ACTIVE_ENV="GREEN"; NEW_COLOR="BLUE"; NEW_PORT=$BACKEND_BLUE_PORT
+    NEW_TG="$BACKEND_BLUE_TG"; OLD_TG="$BACKEND_GREEN_TG"; INACTIVE_ENV="BLUE"
+  fi
+
+  echo "Currently serving: $ACTIVE_ENV"
+  echo "Deploying NEW color: $NEW_COLOR"
+
+  for instance in "${INSTANCES[@]}"; do
+    echo "→ deploying $NEW_COLOR on $instance"
+    set +e
+    deploy_container "$instance" $NEW_PORT "$NEW_COLOR"
+    status=$?
+    set -e
+
+    if [[ $status -ne 0 ]]; then
+      echo "❌ Deploy of $NEW_COLOR failed on $instance (status $status)"
+      print_container_logs "$instance" "backend_${NEW_COLOR,,}"
+      rollback_targets=("${DEPLOYED_INSTANCES[@]}" "$instance")
+      rollback_backend_color_on "$NEW_COLOR" "${rollback_targets[@]}"
+      rollback_worker_new
+      {
+        echo "backend_status=failed"
+        echo "backend_active_env=$ACTIVE_ENV"
+        echo "backend_inactive_env=$NEW_COLOR"
+      } >> "$GITHUB_OUTPUT"
+      exit 1
+    fi
+    DEPLOYED_INSTANCES+=("$instance")
+  done
+
+  echo "Switching listener to NEW TG: $NEW_TG"
+  aws elbv2 modify-listener \
+    --listener-arn "$LISTENER_ARN" \
+    --default-actions "Type=forward,ForwardConfig={TargetGroups=[{TargetGroupArn=$NEW_TG,Weight=1}]}"
+
+  PREV_ACTIVE_ENV="$ACTIVE_ENV"
+  ACTIVE_ENV="$NEW_COLOR"
+  INACTIVE_ENV="$PREV_ACTIVE_ENV"
+  ACTIVE_TG="$NEW_TG"
+  INACTIVE_TG="$OLD_TG"
 fi
 
-echo "$CURRENT_COLOR active → deploying $NEXT_COLOR"
+# === SUCCESS outputs ===
+{
+  echo "backend_status=success"
+  echo "backend_active_env=$ACTIVE_ENV"
+  echo "backend_inactive_env=$INACTIVE_ENV"
+  echo "backend_active_tg=$ACTIVE_TG"
+  echo "backend_inactive_tg=$INACTIVE_TG"
+  echo "backend_current_image=$BACKEND_IMAGE"
+  echo "backend_deployed_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+  echo "backend_deployed_by=${GITHUB_ACTOR:-manual}"
+} >> "$GITHUB_OUTPUT"
 
-# === FETCH CURRENT IMAGE OF ACTIVE COLOR ===
-CURRENT_IMAGE=$(get_current_container_image "${INSTANCES[0]}" "$CURRENT_COLOR")
-NEW_IMAGE="$IMAGE_TAG"
-
-# Strip username from images for output
-NEW_IMAGE_CLEAN=$(echo "$NEW_IMAGE" | cut -d'/' -f2)
-CURRENT_IMAGE_CLEAN=$(echo "$CURRENT_IMAGE" | cut -d'/' -f2)
-
-# === DEPLOY NEW IMAGE TO NEXT COLOR ===
-for instance in "${INSTANCES[@]}"; do
-    deploy_container "$instance" "$NEW_PORT" "$NEXT_COLOR" "$NEW_IMAGE"
-    echo "Registering $NEXT_COLOR instance $instance to target group $NEW_TG"
-    aws elbv2 register-targets --target-group-arn "$NEW_TG" --targets Id=$instance,Port=$NEW_PORT
-done
-
-# === PUBLISH OUTPUTS ===
-DEPLOYED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
-echo "backend_current_image=$NEW_IMAGE_CLEAN" >> $GITHUB_OUTPUT
-echo "backend_previous_image=$CURRENT_IMAGE_CLEAN" >> $GITHUB_OUTPUT
-echo "backend_active_env=$CURRENT_COLOR" >> $GITHUB_OUTPUT
-echo "backend_blue_tg=$BACKEND_BLUE_TG" >> $GITHUB_OUTPUT
-echo "backend_green_tg=$BACKEND_GREEN_TG" >> $GITHUB_OUTPUT
-echo "backend_deployed_at=$DEPLOYED_AT" >> $GITHUB_OUTPUT
-echo "backend_deployed_by=$GITHUB_ACTOR" >> $GITHUB_OUTPUT
-echo "backend_status=success" >> $GITHUB_OUTPUT
-
-echo "Backend $NEXT_COLOR deployment complete."
+echo "✅ Backend deployment completed. Active env: $ACTIVE_ENV"
+exit 0
