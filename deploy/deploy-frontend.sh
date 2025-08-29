@@ -35,6 +35,27 @@ if [[ -z "${DOCKERHUB_USERNAME:-}" || -z "${DOCKERHUB_TOKEN:-}" ]]; then
 fi
 
 FULL_IMAGE="$DOCKERHUB_USERNAME/$FRONTEND_IMAGE"
+# === Short-circuit if FRONTEND_IMAGE is empty ===
+if [[ -z "${FRONTEND_IMAGE:-}" ]]; then
+  echo "⚠️ FRONTEND_IMAGE is empty. Skipping frontend deployment."
+
+  # Export skipped outputs to GitHub Actions
+  {
+    echo "frontend_status=skipped"
+    echo "frontend_active_env="
+    echo "frontend_inactive_env="
+    echo "frontend_active_tg="
+    echo "frontend_inactive_tg="
+    echo "frontend_current_image="
+    echo "frontend_previous_image="
+    echo "frontend_first_deployment="
+    echo "frontend_deployed_at="
+    echo "frontend_deployed_by="
+    echo "frontend_instance_ids="
+  } | tee >(cat) >> "$GITHUB_OUTPUT"
+
+  exit 0
+fi
 export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION
 
 INSTANCE_IDS=$(jq -r '.ec2_instance_ids | join(",")' "$OUTPUTS_JSON" 2>/dev/null || echo "")
