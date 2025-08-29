@@ -92,7 +92,7 @@ docker run -d --name worker_new \
   -e POLL_INTERVAL_SECONDS=60000 \
   "$DOCKERHUB_USERNAME/$WORKER_IMAGE"
 
-sleep 25
+sleep 10
 
 if ! docker ps --filter 'name=worker_new' --filter 'status=running' | grep -q worker_new; then
   echo "Health check failed for worker_new"
