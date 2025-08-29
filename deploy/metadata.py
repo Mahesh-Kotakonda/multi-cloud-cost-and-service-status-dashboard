@@ -166,14 +166,14 @@ if __name__ == "__main__":
         deploy_containers(worker_instance_ids, pem_path, "worker", aws_access_key, aws_secret_key, aws_region)
 
     # Step 2: Deploy Backend ALB rules
-    backend_tg = backend_inactive_tg if backend_active_env == "BLUE" else backend_active_tg
+    backend_tg = backend_inactive_tg
     if backend_status == "skipped":
         print("[INFO] Skipping Backend deployment because BACKEND_STATUS is 'skipped'.")
     else:
         deploy_service(listener_arn, backend_tg, ["/api/aws/*"], "Backend", starting_priority=10)
 
     # Step 3: Deploy Frontend ALB rules
-    frontend_tg = frontend_inactive_tg if frontend_active_env == "BLUE" else frontend_active_tg
+    frontend_tg = frontend_inactive_tg
     if frontend_status == "skipped":
         print("[INFO] Skipping Frontend deployment because FRONTEND_STATUS is 'skipped'.")
     else:
