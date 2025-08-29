@@ -187,14 +187,15 @@ if __name__ == "__main__":
     else:
         print("[INFO] Skipping Frontend deployment because FRONTEND_STATUS is 'skipped'.")
 
-    # Prepare outputs
+    # Prepare outputs with instance IDs
     outputs = {
         "worker": {
             "current_image": worker_current,
             "previous_image": worker_previous,
             "deployed_at": deployed_at,
             "deployed_by": github_actor,
-            "status": worker_status
+            "status": worker_status,
+            "instance_ids": worker_instance_ids.split(",") if worker_instance_ids else []
         },
         "backend": {
             "current_image": backend_current,
@@ -204,7 +205,8 @@ if __name__ == "__main__":
             "green_tg": backend_inactive_tg,
             "deployed_at": deployed_at,
             "deployed_by": github_actor,
-            "status": backend_status
+            "status": backend_status,
+            "instance_ids": backend_instance_ids.split(",") if backend_instance_ids else []
         },
         "frontend": {
             "current_image": frontend_current,
@@ -214,9 +216,11 @@ if __name__ == "__main__":
             "green_tg": frontend_inactive_tg,
             "deployed_at": deployed_at,
             "deployed_by": github_actor,
-            "status": frontend_status
+            "status": frontend_status,
+            "instance_ids": frontend_instance_ids.split(",") if frontend_instance_ids else []
         }
     }
+
 
     # Save and print S3 deployment metadata
     local_file = save_outputs_to_s3(outputs, aws_access_key, aws_secret_key, aws_region, s3_bucket)
