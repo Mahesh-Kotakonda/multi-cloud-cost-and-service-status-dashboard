@@ -2,262 +2,73 @@ name: Rollback Deployment
 
 on:
   workflow_dispatch:
-    inputs:
-      mode:
-        description: 'latest or specific'
-        required: true
-        default: 'latest'
-      s3_key:
-        description: 'S3 key of specific deployment JSON (required if mode=specific)'
-        required: false
-      reason:
-        description: 'Reason for rollback'
-        required: false
-      component:
-        description: 'Component(s) to rollback: worker, backend, frontend, comma-separated or all'
-        required: false
-        default: 'all'
-
-concurrency:
-  group: rollback-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
-  fetch_json:
+  prepare_rollback:
+    name: Prepare Rollback JSONs
     runs-on: self-hosted
-    outputs:
-      deployment_s3_key: ${{ steps.set_output.outputs.deployment_s3_key }}
-      infra_s3_path: ${{ steps.set_output.outputs.infra_s3_path }}
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_REGION: us-east-1
       S3_BUCKET: multi-cloud-cost-and-service-status-dashboard
-      S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
+      DEPLOYMENT_JSON_PREFIX: deployments/
+      INFRA_JSON_PATH: infra/multi-cloud-dashboard-outputs.json
+    outputs:
+      deployment_json_file: ${{ steps.download.outputs.deployment_json_file }}
+      infra_json_file: ${{ steps.download.outputs.infra_json_file }}
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
-  
-      - name: Configure AWS
+
+      - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-  
-      - name: Determine JSON keys
-        id: set_output
+
+      - name: Fetch Latest Deployment JSON from S3
+        id: download
         run: |
-          MODE="${{ github.event.inputs.mode }}"
-          if [ "$MODE" = "latest" ]; then
-            DEPLOY_KEY=$(aws s3api list-objects-v2 --bucket $S3_BUCKET --prefix "deployments/" \
-                          --query 'reverse(sort_by(Contents,&LastModified))[0].Key' --output text)
-          else
-            DEPLOY_KEY="${{ github.event.inputs.s3_key }}"
-            EXISTS=$(aws s3api head-object --bucket $S3_BUCKET --key "$DEPLOY_KEY" 2>/dev/null || echo "notfound")
-            if [ "$EXISTS" = "notfound" ]; then
-              echo "Deployment JSON key '$DEPLOY_KEY' does not exist in S3 bucket $S3_BUCKET"
-              exit 1
-            fi
+          # Get latest deployment JSON
+          DEPLOYMENT_KEY=$(aws s3api list-objects-v2 \
+                            --bucket $S3_BUCKET \
+                            --prefix "$DEPLOYMENT_JSON_PREFIX" \
+                            --query 'reverse(sort_by(Contents,&LastModified))[0].Key' \
+                            --output text)
+
+          if [ -z "$DEPLOYMENT_KEY" ] || [ "$DEPLOYMENT_KEY" = "None" ]; then
+            echo "No deployment JSON found in S3 at prefix $DEPLOYMENT_JSON_PREFIX"
+            exit 1
           fi
-  
-          if [ -z "$DEPLOY_KEY" ] || [ "$DEPLOY_KEY" = "None" ]; then
-            echo "No deployment JSON found"; exit 1
-          fi
-  
-          echo "deployment_s3_key=$DEPLOY_KEY" >> $GITHUB_OUTPUT
-          echo "infra_s3_path=${S3_JSON_PATH}" >> $GITHUB_OUTPUT
-  
 
+          echo "Fetching deployment JSON: $DEPLOYMENT_KEY"
+          aws s3 cp "s3://$S3_BUCKET/$DEPLOYMENT_KEY" ./latest-deployment.json
 
-  rollback_worker:
-    needs: fetch_json
-    if: contains(fromJSON('["all","worker"]'), github.event.inputs.component)
+          # Download infra JSON
+          echo "Fetching infra JSON: $INFRA_JSON_PATH"
+          aws s3 cp "s3://$S3_BUCKET/$INFRA_JSON_PATH" ./infra-outputs.json
+
+          # Export as outputs
+          echo "deployment_json_file=latest-deployment.json" >> $GITHUB_OUTPUT
+          echo "infra_json_file=infra-outputs.json" >> $GITHUB_OUTPUT
+
+  print_jsons:
+    name: Print Deployment and Infra JSONs
     runs-on: self-hosted
-    environment: production
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_REGION: us-east-1
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-      IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
-      S3_BUCKET: multi-cloud-cost-and-service-status-dashboard
-      SSM_PARAM_NAME: myapp_database_credentials
+    needs: prepare_rollback
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
-  
-      - name: Download deployment & infra JSON
-        run: |
-          aws s3 cp "s3://$S3_BUCKET/${{ needs.fetch_json.outputs.deployment_s3_key }}" deployment.json
-          aws s3 cp "${{ needs.fetch_json.outputs.infra_s3_path }}" infra.json
-  
-      - name: Fetch DB info from infra JSON and SSM
-        id: db_info
-        run: |
-          INFRA_JSON="infra.json"
-  
-          # DB endpoint and name from infra JSON
-          DB_HOST=$(jq -r '.db.endpoint' $INFRA_JSON | cut -d':' -f1)
-          DB_PORT=$(jq -r '.db.endpoint' $INFRA_JSON | cut -d':' -f2)
-          DB_NAME=$(jq -r '.db.name' $INFRA_JSON)
-  
-          # Fetch DB credentials from SSM using the fixed parameter name
-          PARAM_VALUE=$(aws ssm get-parameter --name "$SSM_PARAM_NAME" --with-decryption --region $AWS_REGION --query "Parameter.Value" --output text)
-          DB_USER=$(echo $PARAM_VALUE | jq -r '.username')
-          DB_PASS=$(echo $PARAM_VALUE | jq -r '.password')
-  
-          echo "DB_HOST=$DB_HOST" >> $GITHUB_ENV
-          echo "DB_PORT=$DB_PORT" >> $GITHUB_ENV
-          echo "DB_NAME=$DB_NAME" >> $GITHUB_ENV
-          echo "DB_USER=$DB_USER" >> $GITHUB_ENV
-          echo "DB_PASS=$DB_PASS" >> $GITHUB_ENV
-          echo "INFRA_JSON=$INFRA_JSON" >> $GITHUB_ENV
-  
-      - name: Run Worker Rollback
-        run: |
-          python3 ./deploy/rollback.py worker \
-            --deployment-json-path deployment.json \
-            --infra-json-path $INFRA_JSON \
-            --docker-username $DOCKERHUB_USERNAME \
-            --docker-password $DOCKERHUB_TOKEN \
-            --image-repo $IMAGE_REPO \
-            --db-host $DB_HOST \
-            --db-port $DB_PORT \
-            --db-user $DB_USER \
-            --db-pass $DB_PASS \
-            --s3-bucket $S3_BUCKET \
-            --pem-path ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem \
-            --reason "${{ github.event.inputs.reason }}"
 
-
-
-  rollback_backend:
-    needs: rollback_worker
-    if: contains(fromJSON('["all","backend"]'), github.event.inputs.component)
-    runs-on: self-hosted
-    environment: production
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_REGION: us-east-1
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-      IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
-      S3_BUCKET: multi-cloud-cost-and-service-status-dashboard
-      SSM_PARAM_NAME: myapp_database_credentials
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-  
-      - name: Download deployment & infra JSON
+      - name: Print JSON files
         run: |
-          aws s3 cp "s3://$S3_BUCKET/${{ needs.fetch_json.outputs.deployment_s3_key }}" deployment.json
-          aws s3 cp "${{ needs.fetch_json.outputs.infra_s3_path }}" infra.json
-  
-      - name: Fetch DB info from infra JSON and SSM
-        id: db_info
-        run: |
-          INFRA_JSON="infra.json"
-  
-          # DB endpoint and name from infra JSON
-          DB_HOST=$(jq -r '.db.endpoint' $INFRA_JSON | cut -d':' -f1)
-          DB_PORT=$(jq -r '.db.endpoint' $INFRA_JSON | cut -d':' -f2)
-          DB_NAME=$(jq -r '.db.name' $INFRA_JSON)
-  
-          # Fetch DB credentials from SSM using the fixed parameter name
-          PARAM_VALUE=$(aws ssm get-parameter --name "$SSM_PARAM_NAME" --with-decryption --region $AWS_REGION --query "Parameter.Value" --output text)
-          DB_USER=$(echo $PARAM_VALUE | jq -r '.username')
-          DB_PASS=$(echo $PARAM_VALUE | jq -r '.password')
-  
-          echo "DB_HOST=$DB_HOST" >> $GITHUB_ENV
-          echo "DB_PORT=$DB_PORT" >> $GITHUB_ENV
-          echo "DB_NAME=$DB_NAME" >> $GITHUB_ENV
-          echo "DB_USER=$DB_USER" >> $GITHUB_ENV
-          echo "DB_PASS=$DB_PASS" >> $GITHUB_ENV
-          echo "INFRA_JSON=$INFRA_JSON" >> $GITHUB_ENV
-  
-      - name: Run Backend Rollback
-        run: |
-          python3 ./deploy/rollback.py backend \
-            --deployment-json-path deployment.json \
-            --infra-json-path $INFRA_JSON \
-            --docker-username $DOCKERHUB_USERNAME \
-            --docker-password $DOCKERHUB_TOKEN \
-            --image-repo $IMAGE_REPO \
-            --db-host $DB_HOST \
-            --db-port $DB_PORT \
-            --db-user $DB_USER \
-            --db-pass $DB_PASS \
-            --s3-bucket $S3_BUCKET \
-            --pem-path ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem \
-            --reason "${{ github.event.inputs.reason }}"
-  
+          DEPLOY_JSON=${{ needs.prepare_rollback.outputs.deployment_json_file }}
+          INFRA_JSON=${{ needs.prepare_rollback.outputs.infra_json_file }}
 
-
-  ##########################
-  # Frontend Rollback
-  ##########################
-  rollback_frontend:
-    needs: rollback_backend
-    if: contains(fromJSON('["all","frontend"]'), github.event.inputs.component)
-    runs-on: self-hosted
-    environment: production
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-      IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
-      S3_BUCKET: multi-cloud-cost-and-service-status-dashboard
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-  
-      - name: Run Frontend Rollback
-        run: |
-          python3 ./deploy/rollback.py frontend \
-            --deployment-json-path ${{ needs.fetch_json.outputs.deployment_json_path }} \
-            --infra-json-path ${{ needs.fetch_json.outputs.infra_json_path }} \
-            --aws-access-key-id $AWS_ACCESS_KEY_ID \
-            --aws-secret-access-key $AWS_SECRET_ACCESS_KEY \
-            --docker-username $DOCKERHUB_USERNAME \
-            --docker-password $DOCKERHUB_TOKEN \
-            --image-repo $IMAGE_REPO \
-            --s3-bucket $S3_BUCKET \
-            --pem-path ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem \
-            --reason "${{ github.event.inputs.reason }}"
-
-
-  ##########################
-  # Metadata / Switch Targets
-  ##########################
-  rollback_metadata:
-    needs: [rollback_worker, rollback_backend, rollback_frontend]
-    runs-on: self-hosted
-    environment: production
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-      IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
-      S3_BUCKET: multi-cloud-cost-and-service-status-dashboard
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-  
-      - name: Apply Rollback Metadata
-        run: |
-          python3 ./deploy/rollback.py metadata \
-            --deployment-json-path ${{ needs.fetch_json.outputs.deployment_json_path }} \
-            --infra-json-path ${{ needs.fetch_json.outputs.infra_json_path }} \
-            --aws-access-key-id $AWS_ACCESS_KEY_ID \
-            --aws-secret-access-key $AWS_SECRET_ACCESS_KEY \
-            --docker-username $DOCKERHUB_USERNAME \
-            --docker-password $DOCKERHUB_TOKEN \
-            --image-repo $IMAGE_REPO \
-            --s3-bucket $S3_BUCKET \
-            --pem-path ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem \
-            --reason "${{ github.event.inputs.reason }}"
-
+          echo "===== Deployment JSON ====="
+          cat "$DEPLOY_JSON"
+          echo ""
+          echo "===== Infra JSON ====="
+          cat "$INFRA_JSON"
