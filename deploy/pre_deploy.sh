@@ -42,22 +42,40 @@ if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
     echo "❌ If you want to deploy all components, set components=all only."
     exit 1
   fi
-fi
 
-# === Step 3: Resolve images ===
-if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+  # === Step 3: Resolve "latest" versions ===
+  get_latest_version() {
+    local component=$1
+    curl -u "${DOCKERHUB_USERNAME}:${DOCKERHUB_TOKEN}" -s \
+      "https://hub.docker.com/v2/repositories/${USER}/${IMAGE_REPO}/tags/?page_size=1000" | \
+      jq -r ".results[] | select(.name | test(\"^${component}-\")).name" | \
+      sort -V | tail -n 1
+  }
+
   if [[ "$COMPONENTS" == "all" || "$COMPONENTS" == *"worker"* ]]; then
+    if [[ "$WORKER_VER" == "latest" || -z "$WORKER_VER" ]]; then
+      WORKER_VER=$(get_latest_version "worker")
+    fi
     WORKER_IMAGE="$USER/$IMAGE_REPO:worker-$WORKER_VER"
     WORKER_IMAGE="$(basename $WORKER_IMAGE)"
   fi
+
   if [[ "$COMPONENTS" == "all" || "$COMPONENTS" == *"backend"* ]]; then
+    if [[ "$BACKEND_VER" == "latest" || -z "$BACKEND_VER" ]]; then
+      BACKEND_VER=$(get_latest_version "backend")
+    fi
     BACKEND_IMAGE="$USER/$IMAGE_REPO:backend-$BACKEND_VER"
     BACKEND_IMAGE="$(basename $BACKEND_IMAGE)"
   fi
+
   if [[ "$COMPONENTS" == "all" || "$COMPONENTS" == *"frontend"* ]]; then
+    if [[ "$FRONTEND_VER" == "latest" || -z "$FRONTEND_VER" ]]; then
+      FRONTEND_VER=$(get_latest_version "frontend")
+    fi
     FRONTEND_IMAGE="$USER/$IMAGE_REPO:frontend-$FRONTEND_VER"
     FRONTEND_IMAGE="$(basename $FRONTEND_IMAGE)"
   fi
+
 else
   # Only run basename if variable is set
   if [[ -n "${CLIENT_PAYLOAD_WORKER:-}" ]]; then
@@ -71,7 +89,6 @@ else
   if [[ -n "${CLIENT_PAYLOAD_FRONTEND:-}" ]]; then
     FRONTEND_IMAGE="$(basename "$CLIENT_PAYLOAD_FRONTEND")"
   fi
-
 fi
 
 echo "==== ✅ Final Pre-deploy Results ===="
