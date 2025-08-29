@@ -59,7 +59,7 @@ jobs:
           CLIENT_PAYLOAD_WORKER: ${{ github.event.client_payload.worker || '' }}
           CLIENT_PAYLOAD_BACKEND: ${{ github.event.client_payload.backend || '' }}
           CLIENT_PAYLOAD_FRONTEND: ${{ github.event.client_payload.frontend || '' }}
-        run: ./.github/scripts/pre_deploy.sh
+        run: ./deploy/pre_deploy.sh
 
 
 
