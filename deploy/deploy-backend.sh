@@ -317,6 +317,8 @@ fi
 
 # === SUCCESS outputs ===
 echo "Preparing deployment outputs..."
+
+# Write to both console and GitHub Actions output safely
 {
   echo "backend_status=success"
   echo "backend_active_env=$ACTIVE_ENV"
@@ -328,7 +330,7 @@ echo "Preparing deployment outputs..."
   echo "backend_deployed_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
   echo "backend_deployed_by=${GITHUB_ACTOR:-manual}"
   echo "backend_instance_ids=${INSTANCE_IDS}"
-} | tee /dev/tty >> "$GITHUB_OUTPUT"
+} | tee >(cat) >> "$GITHUB_OUTPUT"
 
 
 echo "✅ Backend deployment completed. Active env: $ACTIVE_ENV"
