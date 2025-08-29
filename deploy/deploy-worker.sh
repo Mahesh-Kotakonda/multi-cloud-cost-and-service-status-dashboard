@@ -6,10 +6,10 @@ WORKER_IMAGE="${1:-}"
 # === Step 1: Check worker image ===
 if [ -z "$WORKER_IMAGE" ] || [ "$WORKER_IMAGE" = "null" ]; then
   echo "No worker image provided. Skipping deployment."
-  echo "previous_image=" >> "$GITHUB_OUTPUT"
-  echo "current_image=" >> "$GITHUB_OUTPUT"
-  echo "deployed_instance_ids=" >> "$GITHUB_OUTPUT"
-  echo "deploy_status=skipped" >> "$GITHUB_OUTPUT"
+  echo "worker_previous_image=" | tee -a "$GITHUB_OUTPUT"
+  echo "worker_current_image=" | tee -a "$GITHUB_OUTPUT"
+  echo "worker_deployed_instance_ids=" | tee -a "$GITHUB_OUTPUT"
+  echo "worker_deploy_status=skipped" | tee -a "$GITHUB_OUTPUT"
   exit 0
 fi
 
@@ -19,10 +19,10 @@ echo "Worker image: $WORKER_IMAGE"
 aws s3 cp "$S3_JSON_PATH" worker-outputs.json
 if [ ! -f worker-outputs.json ]; then
   echo "ERROR: Failed to download $S3_JSON_PATH"
-  echo "previous_image=" >> "$GITHUB_OUTPUT"
-  echo "current_image=$WORKER_IMAGE" >> "$GITHUB_OUTPUT"
-  echo "deployed_instance_ids=" >> "$GITHUB_OUTPUT"
-  echo "deploy_status=failed" >> "$GITHUB_OUTPUT"
+  echo "worker_previous_image=" | tee -a "$GITHUB_OUTPUT"
+  echo "worker_current_image=$WORKER_IMAGE" | tee -a "$GITHUB_OUTPUT"
+  echo "worker_deployed_instance_ids=" | tee -a "$GITHUB_OUTPUT"
+  echo "worker_deploy_status=failed" | tee -a "$GITHUB_OUTPUT"
   exit 1
 fi
 
@@ -32,10 +32,10 @@ INSTANCE_IDS=$(jq -r '.ec2_instance_ids[]' worker-outputs.json)
 
 if [ -z "$INSTANCE_IDS" ]; then
   echo "ERROR: No instance IDs found in infra outputs"
-  echo "previous_image=" >> "$GITHUB_OUTPUT"
-  echo "current_image=$WORKER_IMAGE" >> "$GITHUB_OUTPUT"
-  echo "deployed_instance_ids=" >> "$GITHUB_OUTPUT"
-  echo "deploy_status=failed" >> "$GITHUB_OUTPUT"
+  echo "worker_previous_image=" | tee -a "$GITHUB_OUTPUT"
+  echo "worker_current_image=$WORKER_IMAGE" | tee -a "$GITHUB_OUTPUT"
+  echo "worker_deployed_instance_ids=" | tee -a "$GITHUB_OUTPUT"
+  echo "worker_deploy_status=failed" | tee -a "$GITHUB_OUTPUT"
   exit 1
 fi
 
@@ -46,7 +46,7 @@ DB_PASS=$(echo "$PARAM_VALUE" | jq -r '.password')
 
 SUCCESSFUL=()
 FAILED=0
-PREVIOUS_IMAGE=""
+WORKER_PREVIOUS_IMAGE=""
 DEPLOYED_INSTANCE_IDS_LIST=()
 
 # === Step 4: Deploy to instances sequentially ===
@@ -61,15 +61,15 @@ for ID in $INSTANCE_IDS; do
   echo "Instance $ID IP: $IP"
 
   # Get previous image from first instance only
-  if [ -z "$PREVIOUS_IMAGE" ]; then
+  if [ -z "$WORKER_PREVIOUS_IMAGE" ]; then
     OLD_IMAGE=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
       "docker inspect -f '{{.Config.Image}}' worker 2>/dev/null || echo ''")
     if [ -z "$OLD_IMAGE" ]; then
-      echo "First deployment detected. Using current image as previous_image."
-      PREVIOUS_IMAGE="$WORKER_IMAGE"
+      echo "First deployment detected. Using current image as worker_previous_image."
+      WORKER_PREVIOUS_IMAGE="$WORKER_IMAGE"
     else
       echo "Previous image on $ID: $OLD_IMAGE"
-      PREVIOUS_IMAGE="$OLD_IMAGE"
+      WORKER_PREVIOUS_IMAGE="$OLD_IMAGE"
     fi
   fi
 
@@ -92,7 +92,6 @@ docker run -d --name worker_new \
   -e POLL_INTERVAL_SECONDS=60000 \
   "$DOCKERHUB_USERNAME/$WORKER_IMAGE"
 
-# Wait for container to stabilize
 sleep 25
 
 if ! docker ps --filter 'name=worker_new' --filter 'status=running' | grep -q worker_new; then
@@ -129,16 +128,16 @@ rollback_instances() {
 
 if [ "$FAILED" -eq 1 ]; then
   rollback_instances
-  echo "previous_image=$PREVIOUS_IMAGE" >> "$GITHUB_OUTPUT"
-  echo "current_image=$WORKER_IMAGE" >> "$GITHUB_OUTPUT"
-  echo "deployed_instance_ids=$(IFS=,; echo \"\${DEPLOYED_INSTANCE_IDS_LIST[*]}\")" >> "$GITHUB_OUTPUT"
-  echo "deploy_status=failed" >> "$GITHUB_OUTPUT"
+  echo "worker_previous_image=$WORKER_PREVIOUS_IMAGE" | tee -a "$GITHUB_OUTPUT"
+  echo "worker_current_image=$WORKER_IMAGE" | tee -a "$GITHUB_OUTPUT"
+  echo "worker_deployed_instance_ids=$(IFS=,; echo \"\${DEPLOYED_INSTANCE_IDS_LIST[*]}\")" | tee -a "$GITHUB_OUTPUT"
+  echo "worker_deploy_status=failed" | tee -a "$GITHUB_OUTPUT"
   exit 1
 fi
 
 # === Step 6: Success output ===
 DEPLOYED_CSV=$(IFS=,; echo "${DEPLOYED_INSTANCE_IDS_LIST[*]}")
-echo "previous_image=$PREVIOUS_IMAGE" >> "$GITHUB_OUTPUT"
-echo "current_image=$WORKER_IMAGE" >> "$GITHUB_OUTPUT"
-echo "deployed_instance_ids=$DEPLOYED_CSV" >> "$GITHUB_OUTPUT"
-echo "deploy_status=success" >> "$GITHUB_OUTPUT"
+echo "worker_previous_image=$WORKER_PREVIOUS_IMAGE" | tee -a "$GITHUB_OUTPUT"
+echo "worker_current_image=$WORKER_IMAGE" | tee -a "$GITHUB_OUTPUT"
+echo "worker_deployed_instance_ids=$DEPLOYED_CSV" | tee -a "$GITHUB_OUTPUT"
+echo "worker_deploy_status=success" | tee -a "$GITHUB_OUTPUT"
