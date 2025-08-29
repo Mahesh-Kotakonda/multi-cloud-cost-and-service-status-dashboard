@@ -113,16 +113,18 @@ deploy_container() {
   local color=$3
   local container_name="backend_${color,,}"
 
-  local ip="$(_get_ip "$instance_id")"
-  echo "Deploying container $container_name on $instance_id ($ip) port $port..."
+  local ip
+  ip="$(_get_ip "$instance_id" | tr -d '\n')"
+  echo "Deploying container $container_name on instance $instance_id with IP $ip on port $port..."
+
   if [[ -z "$ip" || "$ip" == "None" ]]; then
     echo "ERROR: could not determine IP for instance $instance_id"
     return 2
   fi
 
   ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$ip" bash <<EOF
-set -e
-echo "Stopping any existing container $container_name (ignore if not exist)..."
+set -euo pipefail
+echo "Stopping existing container $container_name if exists..."
 docker stop $container_name 2>/dev/null || true
 docker rm $container_name 2>/dev/null || true
 
@@ -147,9 +149,12 @@ docker run -d -p $port:8000 \
   -e DB_USER="\$DB_USER" \
   -e DB_PASS="\$DB_PASS" \
   "$FULL_IMAGE"
-echo "Container $container_name deployed successfully!"
+
+echo "✅ Container $container_name deployed successfully!"
 EOF
 }
+
+
 
 rollback_backend_both_on() {
   if [[ $# -eq 0 ]]; then return; fi
@@ -291,6 +296,7 @@ else
 fi
 
 # === SUCCESS outputs ===
+echo "Preparing deployment outputs..."
 {
   echo "backend_status=success"
   echo "backend_active_env=$ACTIVE_ENV"
@@ -302,7 +308,8 @@ fi
   echo "backend_deployed_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
   echo "backend_deployed_by=${GITHUB_ACTOR:-manual}"
   echo "backend_instance_ids=${INSTANCE_IDS}"
-} >> "$GITHUB_OUTPUT"
+} | tee /dev/tty >> "$GITHUB_OUTPUT"
+
 
 echo "✅ Backend deployment completed. Active env: $ACTIVE_ENV"
 exit 0
