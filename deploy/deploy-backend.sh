@@ -275,10 +275,10 @@ if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
     --listener-arn "$LISTENER_ARN" \
     --default-actions "Type=forward,ForwardConfig={TargetGroups=[{TargetGroupArn=$BACKEND_BLUE_TG,Weight=1}]}"
 
-  ACTIVE_ENV="BLUE"
-  INACTIVE_ENV="GREEN"
-  ACTIVE_TG="$BACKEND_BLUE_TG"
-  INACTIVE_TG="$BACKEND_GREEN_TG"
+  ACTIVE_ENV="GREEN"
+  INACTIVE_ENV="BLUE"
+  ACTIVE_TG="$BACKEND_GREEN_TG"
+  INACTIVE_TG="$BACKEND_BLUE_TG"
 else
   # Subsequent deploy: deploy new color
   if [[ "$CURRENT_TG" == "$BACKEND_BLUE_TG" ]]; then
