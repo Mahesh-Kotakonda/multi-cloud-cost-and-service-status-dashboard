@@ -21,7 +21,6 @@ def deploy_on_instance(instance_ip, pem_path, container_name):
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.connect(instance_ip, username="ec2-user", key_filename=pem_path)
 
-    # Remove old container if it exists
     remove_cmd = f"docker rm -f {container_name} || true"
     stdin, stdout, stderr = ssh.exec_command(remove_cmd)
     err = stderr.read().decode().strip()
@@ -30,7 +29,6 @@ def deploy_on_instance(instance_ip, pem_path, container_name):
     else:
         print(f"[{instance_ip}] Old {container_name} removed (if existed).")
 
-    # Rename new container
     rename_cmd = f"docker rename {container_name}_new {container_name} || true"
     stdin, stdout, stderr = ssh.exec_command(rename_cmd)
     err = stderr.read().decode().strip()
@@ -44,6 +42,9 @@ def deploy_on_instance(instance_ip, pem_path, container_name):
 
 # Deploy containers across multiple instances
 def deploy_containers(instance_ids, pem_path, container_name, aws_access_key, aws_secret_key, aws_region):
+    if not instance_ids:
+        print(f"[INFO] No instance IDs provided for {container_name}, skipping deployment.")
+        return
     ec2 = boto3.client(
         "ec2",
         aws_access_key_id=aws_access_key,
@@ -94,6 +95,10 @@ def deploy_service(listener_arn, target_group_arn, paths, service_name, starting
     for path in paths:
         create_or_update_rule(listener_arn, path, target_group_arn, priority, service_name)
         priority += 1
+
+# Swap active/inactive environment after successful deployment
+def swap_env(active_env, inactive_env):
+    return inactive_env, active_env
 
 # Upload deployment metadata to S3
 def save_outputs_to_s3(outputs, aws_access_key, aws_secret_key, aws_region, bucket_name):
@@ -166,18 +171,22 @@ if __name__ == "__main__":
         deploy_containers(worker_instance_ids, pem_path, "worker", aws_access_key, aws_secret_key, aws_region)
 
     # Step 2: Deploy Backend ALB rules
-    backend_tg = backend_inactive_tg
-    if backend_status == "skipped":
-        print("[INFO] Skipping Backend deployment because BACKEND_STATUS is 'skipped'.")
+    if backend_status != "skipped":
+        deploy_service(listener_arn, backend_inactive_tg, ["/api/aws/*"], "Backend", starting_priority=10)
+        # Swap active/inactive env after successful deployment
+        backend_active_env, backend_inactive_env = swap_env(backend_active_env, backend_inactive_env)
+        backend_active_tg, backend_inactive_tg = swap_env(backend_active_tg, backend_inactive_tg)
     else:
-        deploy_service(listener_arn, backend_tg, ["/api/aws/*"], "Backend", starting_priority=10)
+        print("[INFO] Skipping Backend deployment because BACKEND_STATUS is 'skipped'.")
 
     # Step 3: Deploy Frontend ALB rules
-    frontend_tg = frontend_inactive_tg
-    if frontend_status == "skipped":
-        print("[INFO] Skipping Frontend deployment because FRONTEND_STATUS is 'skipped'.")
+    if frontend_status != "skipped":
+        deploy_service(listener_arn, frontend_inactive_tg, ["/", "/favicon.ico", "/robots.txt", "/static/*"], "Frontend", starting_priority=500)
+        # Swap active/inactive env after successful deployment
+        frontend_active_env, frontend_inactive_env = swap_env(frontend_active_env, frontend_inactive_env)
+        frontend_active_tg, frontend_inactive_tg = swap_env(frontend_active_tg, frontend_inactive_tg)
     else:
-        deploy_service(listener_arn, frontend_tg, ["/", "/favicon.ico", "/robots.txt", "/static/*"], "Frontend", starting_priority=500)
+        print("[INFO] Skipping Frontend deployment because FRONTEND_STATUS is 'skipped'.")
 
     # Prepare outputs
     outputs = {
@@ -212,10 +221,11 @@ if __name__ == "__main__":
 
     save_outputs_to_s3(outputs, aws_access_key, aws_secret_key, aws_region, s3_bucket)
 
-    # GitHub Actions outputs
-    for svc in ["worker", "backend", "frontend"]:
-        for key, value in outputs[svc].items():
-            print(f"::set-output name={svc}_{key}::{value}")
+
+    print("Deployment metadata (uploaded to S3) contains the following values:")
+    with open("/tmp/deploy_metadata.json") as f:
+        s3_uploaded_contents = f.read()
+    print(s3_uploaded_contents)
 
     print("Deployment process completed successfully!")
     print(json.dumps(outputs, indent=2))
