@@ -115,6 +115,7 @@ def save_outputs_to_s3(outputs, aws_access_key, aws_secret_key, aws_region, buck
     )
     s3.upload_file(local_file, bucket_name, s3_file)
     print(f"Deployment metadata uploaded to s3://{bucket_name}/{s3_file}")
+    return local_file
 
 if __name__ == "__main__":
     import argparse
@@ -165,24 +166,22 @@ if __name__ == "__main__":
     deployed_at = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
     # Step 1: Deploy Worker
-    if worker_status == "skipped":
-        print("[INFO] Skipping Worker deployment because WORKER_STATUS is 'skipped'.")
-    else:
+    if worker_status != "skipped":
         deploy_containers(worker_instance_ids, pem_path, "worker", aws_access_key, aws_secret_key, aws_region)
+    else:
+        print("[INFO] Skipping Worker deployment because WORKER_STATUS is 'skipped'.")
 
-    # Step 2: Deploy Backend ALB rules
+    # Step 2: Deploy Backend ALB rules and swap environments
     if backend_status != "skipped":
         deploy_service(listener_arn, backend_inactive_tg, ["/api/aws/*"], "Backend", starting_priority=10)
-        # Swap active/inactive env after successful deployment
         backend_active_env, backend_inactive_env = swap_env(backend_active_env, backend_inactive_env)
         backend_active_tg, backend_inactive_tg = swap_env(backend_active_tg, backend_inactive_tg)
     else:
         print("[INFO] Skipping Backend deployment because BACKEND_STATUS is 'skipped'.")
 
-    # Step 3: Deploy Frontend ALB rules
+    # Step 3: Deploy Frontend ALB rules and swap environments
     if frontend_status != "skipped":
         deploy_service(listener_arn, frontend_inactive_tg, ["/", "/favicon.ico", "/robots.txt", "/static/*"], "Frontend", starting_priority=500)
-        # Swap active/inactive env after successful deployment
         frontend_active_env, frontend_inactive_env = swap_env(frontend_active_env, frontend_inactive_env)
         frontend_active_tg, frontend_inactive_tg = swap_env(frontend_active_tg, frontend_inactive_tg)
     else:
@@ -219,13 +218,9 @@ if __name__ == "__main__":
         }
     }
 
-    save_outputs_to_s3(outputs, aws_access_key, aws_secret_key, aws_region, s3_bucket)
-
-
+    # Save and print S3 deployment metadata
+    local_file = save_outputs_to_s3(outputs, aws_access_key, aws_secret_key, aws_region, s3_bucket)
+    print("\n=== Deployment Completed Successfully! ===")
     print("Deployment metadata (uploaded to S3) contains the following values:")
-    with open("/tmp/deploy_metadata.json") as f:
-        s3_uploaded_contents = f.read()
-    print(s3_uploaded_contents)
-
-    print("Deployment process completed successfully!")
-    print(json.dumps(outputs, indent=2))
+with open(local_file) as f:
+    print(f.read())
