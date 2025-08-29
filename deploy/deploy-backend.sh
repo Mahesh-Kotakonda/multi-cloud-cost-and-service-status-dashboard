@@ -225,7 +225,9 @@ DEPLOYED_INSTANCES=()
 if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
   echo "First-time deploy, no current TG. Using $FULL_IMAGE as previous image."
   PREVIOUS_IMAGE="$FULL_IMAGE"
+  BACKEND_FIRST_DEPLOYMENT=true
 else
+  BACKEND_FIRST_DEPLOYMENT=false
   if [[ "$CURRENT_TG" == "$BACKEND_BLUE_TG" ]]; then
     PREVIOUS_IMAGE=$(get_container_image "${INSTANCES[0]}" "backend_blue")
   else
@@ -234,6 +236,7 @@ else
   [[ -z "$PREVIOUS_IMAGE" || "$PREVIOUS_IMAGE" == "null" ]] && PREVIOUS_IMAGE="$FULL_IMAGE"
 fi
 echo "Previous image: $PREVIOUS_IMAGE"
+
 
 # === Deployment logic ===
 if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
@@ -327,6 +330,7 @@ echo "Preparing deployment outputs..."
   echo "backend_inactive_tg=$INACTIVE_TG"
   echo "backend_current_image=$FULL_IMAGE"
   echo "backend_previous_image=$PREVIOUS_IMAGE"
+  echo "backend_first_deployment=$BACKEND_FIRST_DEPLOYMENT"
   echo "backend_deployed_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
   echo "backend_deployed_by=${GITHUB_ACTOR:-manual}"
   echo "backend_instance_ids=${INSTANCE_IDS}"
