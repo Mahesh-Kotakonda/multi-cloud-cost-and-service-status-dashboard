@@ -204,13 +204,13 @@ if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
       { echo "frontend_status=failed"; echo "frontend_active_env=NONE"; echo "frontend_inactive_env=NONE"; echo "frontend_current_image=$FULL_IMAGE"; echo "frontend_previous_image=$PREVIOUS_IMAGE"; echo "frontend_instance_ids=${INSTANCE_IDS}"; } >> "$GITHUB_OUTPUT"
       exit 1
     fi
+
+    # === Register both BLUE and GREEN containers to their target groups ===
+    aws elbv2 register-targets --target-group-arn "$FRONTEND_BLUE_TG" --targets Id="$instance",Port=$FRONTEND_BLUE_PORT
+    aws elbv2 register-targets --target-group-arn "$FRONTEND_GREEN_TG" --targets Id="$instance",Port=$FRONTEND_GREEN_PORT
+
     DEPLOYED_INSTANCES+=("$instance")
   done
-
-  echo "Registering BLUE as active target group..."
-  aws elbv2 modify-listener \
-    --listener-arn "$LISTENER_ARN" \
-    --default-actions "Type=forward,ForwardConfig={TargetGroups=[{TargetGroupArn=$FRONTEND_BLUE_TG,Weight=1}]}"
 
   ACTIVE_ENV="GREEN"
   INACTIVE_ENV="BLUE"
@@ -241,13 +241,16 @@ else
       { echo "frontend_status=failed"; echo "frontend_active_env=$ACTIVE_ENV"; echo "frontend_inactive_env=$NEW_COLOR"; echo "frontend_current_image=$FULL_IMAGE"; echo "frontend_previous_image=$PREVIOUS_IMAGE"; echo "frontend_instance_ids=${INSTANCE_IDS}"; } >> "$GITHUB_OUTPUT"
       exit 1
     fi
+
+    # === Register the NEW color to its target group instead of modifying listener ===
+    if [[ "$NEW_COLOR" == "BLUE" ]]; then
+      aws elbv2 register-targets --target-group-arn "$FRONTEND_BLUE_TG" --targets Id="$instance",Port=$FRONTEND_BLUE_PORT
+    else
+      aws elbv2 register-targets --target-group-arn "$FRONTEND_GREEN_TG" --targets Id="$instance",Port=$FRONTEND_GREEN_PORT
+    fi
+
     DEPLOYED_INSTANCES+=("$instance")
   done
-
-  echo "Switching listener to NEW TG: $NEW_TG"
-  aws elbv2 modify-listener \
-    --listener-arn "$LISTENER_ARN" \
-    --default-actions "Type=forward,ForwardConfig={TargetGroups=[{TargetGroupArn=$NEW_TG,Weight=1}]}"
 
   PREV_ACTIVE_ENV="$ACTIVE_ENV"
   ACTIVE_ENV="$NEW_COLOR"
@@ -274,7 +277,6 @@ PREVIOUS_IMAGE_SHORT=$(echo "$PREVIOUS_IMAGE" | awk -F/ '{print $NF}')
   echo "frontend_deployed_by=${GITHUB_ACTOR:-manual}"
   echo "frontend_instance_ids=${INSTANCE_IDS}"
 } | tee >(cat) >> "$GITHUB_OUTPUT"
-
 
 echo "✅ Frontend deployment completed. Active env: $ACTIVE_ENV"
 exit 0
