@@ -84,10 +84,11 @@ echo "Defining helper functions..."
 
 _get_ip() {
   local instance_id=$1
-  echo "Fetching public IP for instance $instance_id..."
+  # Only output the IP, no extra echos
   aws ec2 describe-instances --instance-ids "$instance_id" \
-    --query "Reservations[0].Instances[0].PublicIpAddress" --output text
+    --query "Reservations[0].Instances[0].PublicIpAddress" --output text | tr -d '\n'
 }
+
 
 get_container_image() {
   local instance_id=$1
@@ -114,7 +115,7 @@ deploy_container() {
   local container_name="backend_${color,,}"
 
   local ip
-  ip="$(_get_ip "$instance_id" | tr -d '\n')"
+  ip="$(_get_ip "$instance_id")"
   echo "Deploying container $container_name on instance $instance_id with IP $ip on port $port..."
 
   if [[ -z "$ip" || "$ip" == "None" ]]; then
