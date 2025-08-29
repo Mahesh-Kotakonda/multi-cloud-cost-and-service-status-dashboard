@@ -43,43 +43,42 @@ if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
     exit 1
   fi
 
-get_latest_version() {
-  local component=$1
-  local page=1
-  local tags=()
-
-  while : ; do
-    # Fetch a page of tags from Docker Hub
-    response=$(curl -s -u "${DOCKERHUB_USERNAME}:${DOCKERHUB_TOKEN}" \
-      "https://hub.docker.com/v2/repositories/${USER}/${IMAGE_REPO}/tags/?page_size=100&page=$page")
-
-    # Exit if response is invalid
-    if [[ -z "$response" || "$response" == "null" ]]; then
-      echo "❌ Failed to fetch tags for ${component}" >&2
+  get_latest_version() {
+    local component=$1
+    local page=1
+    local tags=()
+  
+    while : ; do
+      response=$(curl -s -u "${DOCKERHUB_USERNAME}:${DOCKERHUB_TOKEN}" \
+        "https://hub.docker.com/v2/repositories/${USER}/${IMAGE_REPO}/tags/?page_size=100&page=$page")
+  
+      if [[ -z "$response" || "$response" == "null" ]]; then
+        echo "❌ Failed to fetch tags for ${component}" >&2
+        exit 1
+      fi
+  
+      # Collect tags that match component-v pattern
+      page_tags=($(echo "$response" | jq -r ".results[]?.name | select(test(\"^${component}-v[0-9]+$\"))"))
+      tags+=("${page_tags[@]}")
+  
+      # Check for next page
+      next=$(echo "$response" | jq -r '.next')
+      if [[ "$next" == "null" || -z "$next" ]]; then
+        break
+      fi
+      page=$((page + 1))
+    done
+  
+    if [[ ${#tags[@]} -eq 0 ]]; then
+      echo "❌ No tags found for ${component}" >&2
       exit 1
     fi
+  
+    # Sort numerically by the version after '-v' and pick latest
+    latest_tag=$(printf "%s\n" "${tags[@]}" | sed "s/^${component}-v//" | sort -n | tail -n 1)
+    echo "${component}-v${latest_tag}"
+  }
 
-    # Extract matching tags
-    page_tags=($(echo "$response" | jq -r ".results[]?.name | select(test(\"^${component}-\"))"))
-    tags+=("${page_tags[@]}")
-
-    # Check if there is a next page
-    next=$(echo "$response" | jq -r '.next')
-    if [[ "$next" == "null" || -z "$next" ]]; then
-      break
-    fi
-    page=$((page + 1))
-  done
-
-  # Sort version numbers and pick the latest
-  if [[ ${#tags[@]} -eq 0 ]]; then
-    echo "❌ No tags found for ${component}" >&2
-    exit 1
-  fi
-
-  latest_tag=$(printf "%s\n" "${tags[@]}" | sort -V | tail -n 1)
-  echo "$latest_tag"
-}
 
 
 
