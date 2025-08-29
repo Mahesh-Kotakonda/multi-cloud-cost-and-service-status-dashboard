@@ -59,9 +59,19 @@ if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
     FRONTEND_IMAGE="$(basename $FRONTEND_IMAGE)"
   fi
 else
-  WORKER_IMAGE="$(basename ${CLIENT_PAYLOAD_WORKER})"
-  BACKEND_IMAGE="$(basename ${CLIENT_PAYLOAD_BACKEND})"
-  FRONTEND_IMAGE="$(basename ${CLIENT_PAYLOAD_FRONTEND})"
+  # Only run basename if variable is set
+  if [[ -n "${CLIENT_PAYLOAD_WORKER:-}" ]]; then
+    WORKER_IMAGE="$(basename "$CLIENT_PAYLOAD_WORKER")"
+  fi
+  
+  if [[ -n "${CLIENT_PAYLOAD_BACKEND:-}" ]]; then
+    BACKEND_IMAGE="$(basename "$CLIENT_PAYLOAD_BACKEND")"
+  fi
+  
+  if [[ -n "${CLIENT_PAYLOAD_FRONTEND:-}" ]]; then
+    FRONTEND_IMAGE="$(basename "$CLIENT_PAYLOAD_FRONTEND")"
+  fi
+
 fi
 
 echo "==== ✅ Final Pre-deploy Results ===="
