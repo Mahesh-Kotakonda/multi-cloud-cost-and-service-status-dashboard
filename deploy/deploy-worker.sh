@@ -67,9 +67,11 @@ for ID in $INSTANCE_IDS; do
     if [ -z "$OLD_IMAGE" ]; then
       echo "First deployment detected. Using current image as worker_previous_image."
       WORKER_PREVIOUS_IMAGE="$WORKER_IMAGE"
+      FIRST_DEPLOYMENT=true
     else
       echo "Previous image on $ID: $OLD_IMAGE"
       WORKER_PREVIOUS_IMAGE="$OLD_IMAGE"
+      FIRST_DEPLOYMENT=false
     fi
   fi
 
@@ -142,3 +144,4 @@ echo "worker_previous_image=$WORKER_PREVIOUS_IMAGE" | tee -a "$GITHUB_OUTPUT"
 echo "worker_current_image=$WORKER_IMAGE" | tee -a "$GITHUB_OUTPUT"
 echo "worker_deployed_instance_ids=$DEPLOYED_CSV" | tee -a "$GITHUB_OUTPUT"
 echo "worker_deploy_status=success" | tee -a "$GITHUB_OUTPUT"
+echo "worker_first_deployment=$FIRST_DEPLOYMENT" | tee -a "$GITHUB_OUTPUT"
