@@ -21,28 +21,28 @@ def deploy_on_instance(instance_ip, pem_path, container_name):
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.connect(instance_ip, username="ec2-user", key_filename=pem_path)
 
-    # Remove old container
+    # Remove old container if it exists
     remove_cmd = f"docker rm -f {container_name} || true"
     stdin, stdout, stderr = ssh.exec_command(remove_cmd)
-    out, err = stdout.read().decode(), stderr.read().decode()
-    if err.strip():
-        print(f"[{instance_ip}] Remove old {container_name} error: {err.strip()}")
+    err = stderr.read().decode().strip()
+    if err:
+        print(f"[{instance_ip}] Remove old {container_name} error: {err}")
     else:
         print(f"[{instance_ip}] Old {container_name} removed (if existed).")
 
     # Rename new container
     rename_cmd = f"docker rename {container_name}_new {container_name} || true"
     stdin, stdout, stderr = ssh.exec_command(rename_cmd)
-    out, err = stdout.read().decode(), stderr.read().decode()
-    if err.strip():
-        print(f"[{instance_ip}] Rename {container_name}_new error: {err.strip()}")
+    err = stderr.read().decode().strip()
+    if err:
+        print(f"[{instance_ip}] Rename {container_name}_new error: {err}")
     else:
         print(f"[{instance_ip}] {container_name}_new renamed to {container_name}.")
 
     ssh.close()
     print(f"[{instance_ip}] {container_name} deployment completed.")
 
-# Deploy across multiple instances
+# Deploy containers across multiple instances
 def deploy_containers(instance_ids, pem_path, container_name, aws_access_key, aws_secret_key, aws_region):
     ec2 = boto3.client(
         "ec2",
@@ -85,7 +85,7 @@ def create_or_update_rule(listener_arn, path, target_group_arn, priority):
             f"--actions Type=forward,TargetGroupArn={target_group_arn}"
         )
 
-# Deploy ALB rules
+# Deploy ALB rules for a service
 def deploy_service(listener_arn, target_group_arn, paths, starting_priority=10):
     priority = starting_priority
     for path in paths:
@@ -115,13 +115,13 @@ if __name__ == "__main__":
     parser.add_argument("--outputs-json", required=True)
     args = parser.parse_args()
 
-    # Load infra JSON (only for listener ARN)
+    # Load infra JSON
     with open(args.outputs_json) as f:
         infra = json.load(f)
     listener_arn = infra.get("alb_listener_arn")
 
     # Environment variables
-    pem_path = os.environ["PEM_PATH"]
+    pem_path = os.path.expanduser(os.environ["PEM_PATH"])
     aws_access_key = os.environ["AWS_ACCESS_KEY_ID"]
     aws_secret_key = os.environ["AWS_SECRET_ACCESS_KEY"]
     aws_region = os.environ["AWS_REGION"]
@@ -129,14 +129,14 @@ if __name__ == "__main__":
     github_actor = os.environ.get("GITHUB_ACTOR", "unknown")
 
     # Worker
-    worker_current = os.environ["WORKER_CURRENT_IMAGE"]
-    worker_previous = os.environ["WORKER_PREVIOUS_IMAGE"]
+    worker_current = os.environ["WORKER_CURRENT_IMAGE"].split("/")[-1]
+    worker_previous = os.environ["WORKER_PREVIOUS_IMAGE"].split("/")[-1]
     worker_status = os.environ["WORKER_STATUS"]
     worker_instance_ids = os.environ["WORKER_INSTANCE_IDS"]
 
     # Backend
-    backend_current = os.environ["BACKEND_CURRENT_IMAGE"]
-    backend_previous = os.environ["BACKEND_PREVIOUS_IMAGE"]
+    backend_current = os.environ["BACKEND_CURRENT_IMAGE"].split("/")[-1]
+    backend_previous = os.environ["BACKEND_PREVIOUS_IMAGE"].split("/")[-1]
     backend_status = os.environ["BACKEND_STATUS"]
     backend_active_env = os.environ["BACKEND_ACTIVE_ENV"].upper()
     backend_inactive_env = os.environ["BACKEND_INACTIVE_ENV"].upper()
@@ -145,8 +145,8 @@ if __name__ == "__main__":
     backend_instance_ids = os.environ["BACKEND_INSTANCE_IDS"]
 
     # Frontend
-    frontend_current = os.environ["FRONTEND_CURRENT_IMAGE"]
-    frontend_previous = os.environ["FRONTEND_PREVIOUS_IMAGE"]
+    frontend_current = os.environ["FRONTEND_CURRENT_IMAGE"].split("/")[-1]
+    frontend_previous = os.environ["FRONTEND_PREVIOUS_IMAGE"].split("/")[-1]
     frontend_status = os.environ["FRONTEND_STATUS"]
     frontend_active_env = os.environ["FRONTEND_ACTIVE_ENV"].upper()
     frontend_inactive_env = os.environ["FRONTEND_INACTIVE_ENV"].upper()
@@ -202,7 +202,7 @@ if __name__ == "__main__":
 
     save_outputs_to_s3(outputs, aws_access_key, aws_secret_key, aws_region, s3_bucket)
 
-    # Set GitHub outputs
+    # GitHub Actions outputs
     for svc in ["worker", "backend", "frontend"]:
         for key, value in outputs[svc].items():
             print(f"::set-output name={svc}_{key}::{value}")
