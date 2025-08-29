@@ -43,14 +43,31 @@ if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
     exit 1
   fi
 
-  # === Step 3: Resolve "latest" versions ===
-  get_latest_version() {
-    local component=$1
-    curl -u "${DOCKERHUB_USERNAME}:${DOCKERHUB_TOKEN}" -s \
-      "https://hub.docker.com/v2/repositories/${USER}/${IMAGE_REPO}/tags/?page_size=1000" | \
-      jq -r ".results[] | select(.name | test(\"^${component}-\")).name" | \
-      sort -V | tail -n 1
-  }
+get_latest_version() {
+  local component=$1
+  # Query Docker Hub tags
+  local response
+  response=$(curl -s -u "${DOCKERHUB_USERNAME}:${DOCKERHUB_TOKEN}" \
+    "https://hub.docker.com/v2/repositories/${USER}/${IMAGE_REPO}/tags/?page_size=100")
+
+  # Check if response is valid
+  if [[ -z "$response" || "$response" == "null" ]]; then
+    echo "❌ Failed to fetch tags for ${component}" >&2
+    exit 1
+  fi
+
+  # Parse tags that match the component prefix
+  local latest_tag
+  latest_tag=$(echo "$response" | jq -r ".results[]?.name | select(startswith(\"${component}-\"))" | sort -V | tail -n 1)
+
+  if [[ -z "$latest_tag" ]]; then
+    echo "❌ No tags found for ${component}" >&2
+    exit 1
+  fi
+
+  echo "$latest_tag"  # Return the latest tag
+}
+
 
   if [[ "$COMPONENTS" == "all" || "$COMPONENTS" == *"worker"* ]]; then
     if [[ "$WORKER_VER" == "latest" || -z "$WORKER_VER" ]]; then
