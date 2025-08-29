@@ -80,10 +80,10 @@ jobs:
       PEM_PATH: ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
   
     outputs:
-      previous_image: ${{ steps.deploy.outputs.previous_image }}
-      current_image: ${{ steps.deploy.outputs.current_image }}
-      deployed_instance_ids: ${{ steps.deploy.outputs.deployed_instance_ids }}
-      deploy_status: ${{ steps.deploy.outputs.deploy_status }}
+      worker_previous_image: ${{ steps.deploy.outputs.worker_previous_image }}
+      worker_current_image: ${{ steps.deploy.outputs.worker_current_image }}
+      worker_deploy_status: ${{ steps.deploy.outputs.worker_deploy_status }}
+      worker_deployed_instance_ids: ${{ steps.deploy.outputs.worker_deployed_instance_ids }}
   
     steps:
       - name: Checkout repository
