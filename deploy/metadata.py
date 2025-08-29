@@ -195,7 +195,7 @@ if __name__ == "__main__":
             "deployed_at": deployed_at,
             "deployed_by": github_actor,
             "status": worker_status,
-            "instance_ids": worker_instance_ids.split(",") if worker_instance_ids else []
+            "instance_ids": worker_instance_ids.split(",") if worker_instance_ids else [],
             "first_deployment": os.environ.get("WORKER_FIRST_DEPLOYMENT", "false").lower() == "true"
         },
         "backend": {
@@ -207,7 +207,7 @@ if __name__ == "__main__":
             "deployed_at": deployed_at,
             "deployed_by": github_actor,
             "status": backend_status,
-            "instance_ids": backend_instance_ids.split(",") if backend_instance_ids else []
+            "instance_ids": backend_instance_ids.split(",") if backend_instance_ids else [],
             "first_deployment": os.environ.get("BACKEND_FIRST_DEPLOYMENT", "false").lower() == "true"
         },
         "frontend": {
@@ -219,7 +219,7 @@ if __name__ == "__main__":
             "deployed_at": deployed_at,
             "deployed_by": github_actor,
             "status": frontend_status,
-            "instance_ids": frontend_instance_ids.split(",") if frontend_instance_ids else []
+            "instance_ids": frontend_instance_ids.split(",") if frontend_instance_ids else [],
             "first_deployment": os.environ.get("FRONTEND_FIRST_DEPLOYMENT", "false").lower() == "true"
         }
     }
