@@ -45,28 +45,42 @@ if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
 
 get_latest_version() {
   local component=$1
-  # Query Docker Hub tags
-  local response
-  response=$(curl -s -u "${DOCKERHUB_USERNAME}:${DOCKERHUB_TOKEN}" \
-    "https://hub.docker.com/v2/repositories/${USER}/${IMAGE_REPO}/tags/?page_size=100")
+  local page=1
+  local tags=()
 
-  # Check if response is valid
-  if [[ -z "$response" || "$response" == "null" ]]; then
-    echo "❌ Failed to fetch tags for ${component}" >&2
-    exit 1
-  fi
+  while : ; do
+    # Fetch a page of tags from Docker Hub
+    response=$(curl -s -u "${DOCKERHUB_USERNAME}:${DOCKERHUB_TOKEN}" \
+      "https://hub.docker.com/v2/repositories/${USER}/${IMAGE_REPO}/tags/?page_size=100&page=$page")
 
-  # Parse tags that match the component prefix
-  local latest_tag
-  latest_tag=$(echo "$response" | jq -r ".results[]?.name | select(startswith(\"${component}-\"))" | sort -V | tail -n 1)
+    # Exit if response is invalid
+    if [[ -z "$response" || "$response" == "null" ]]; then
+      echo "❌ Failed to fetch tags for ${component}" >&2
+      exit 1
+    fi
 
-  if [[ -z "$latest_tag" ]]; then
+    # Extract matching tags
+    page_tags=($(echo "$response" | jq -r ".results[]?.name | select(test(\"^${component}-\"))"))
+    tags+=("${page_tags[@]}")
+
+    # Check if there is a next page
+    next=$(echo "$response" | jq -r '.next')
+    if [[ "$next" == "null" || -z "$next" ]]; then
+      break
+    fi
+    page=$((page + 1))
+  done
+
+  # Sort version numbers and pick the latest
+  if [[ ${#tags[@]} -eq 0 ]]; then
     echo "❌ No tags found for ${component}" >&2
     exit 1
   fi
 
-  echo "$latest_tag"  # Return the latest tag
+  latest_tag=$(printf "%s\n" "${tags[@]}" | sort -V | tail -n 1)
+  echo "$latest_tag"
 }
+
 
 
   if [[ "$COMPONENTS" == "all" || "$COMPONENTS" == *"worker"* ]]; then
