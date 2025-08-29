@@ -267,5 +267,5 @@ PREVIOUS_IMAGE_SHORT=$(echo "$PREVIOUS_IMAGE" | awk -F/ '{print $NF}')
   echo "backend_instance_ids=${INSTANCE_IDS}"
 } | tee >(cat) >> "$GITHUB_OUTPUT"
 
-echo "✅ Backend deployment completed. configuration will be done in the metadata job
+echo "✅ Backend deployment completed. configuration will be done in the metadata job"
 exit 0
