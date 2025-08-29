@@ -127,10 +127,11 @@ jobs:
       backend_active_tg: ${{ steps.deploy_backend.outputs.backend_active_tg }}
       backend_inactive_tg: ${{ steps.deploy_backend.outputs.backend_inactive_tg }}
       backend_current_image: ${{ steps.deploy_backend.outputs.backend_current_image }}
+      backend_previous_image: ${{ steps.deploy_backend.outputs.backend_previous_image }}
       backend_deployed_at: ${{ steps.deploy_backend.outputs.backend_deployed_at }}
       backend_deployed_by: ${{ steps.deploy_backend.outputs.backend_deployed_by }}
       backend_instance_ids: ${{ steps.deploy_backend.outputs.backend_instance_ids }}
-  
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -164,6 +165,8 @@ jobs:
       S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
       PEM_PATH: ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
       WORKER_INSTANCE_IDS: ${{ needs.deploy_worker.outputs.worker_deployed_instance_ids }}
+      BACKEND_INSTANCE_IDS: ${{ needs.deploy_backend.outputs.backend_instance_ids }}  # Backend instance IDs
+      BACKEND_INACTIVE_ENV: ${{ needs.deploy_backend.outputs.backend_inactive_env }}  # Backend inactive env
       FRONTEND_IMAGE: ${{ needs.pre-deploy.outputs.frontend_image }}
       FRONTEND_INSTANCE_IDS: ${{ needs.deploy_backend.outputs.backend_instance_ids }} # or your frontend instance list
     outputs:
@@ -190,6 +193,7 @@ jobs:
         run: |
           ./deploy/deploy-frontend.sh \
             --outputs-json frontend-outputs.json
+
 
 
 
