@@ -11,7 +11,7 @@ set -euo pipefail
 # Requirements (via env):
 # - BACKEND_IMAGE (just repo:tag, e.g. app:1.2.3)
 # - DOCKERHUB_USERNAME / DOCKERHUB_TOKEN
-# - SSM_PARAM_NAME (SSM JSON with {"username":"...","password":"..."})
+# - SSM_PARAM_NAME (SSM JSON with {"username":"...","password":"..."} )
 # - PEM_PATH (ssh key for ec2-user)
 # - WORKER_INSTANCE_IDS (optional, comma-separated list)
 # - AWS credentials & region in env
@@ -20,7 +20,6 @@ set -euo pipefail
 
 BACKEND_BLUE_PORT=8080
 BACKEND_GREEN_PORT=8081
-
 OUTPUTS_JSON=""
 
 while [[ $# -gt 0 ]]; do
@@ -43,11 +42,12 @@ if [[ -z "${SSM_PARAM_NAME:-}" ]]; then
   exit 1
 fi
 
-# Full image reference for pulling
+echo "Full image: $DOCKERHUB_USERNAME/$BACKEND_IMAGE"
 FULL_IMAGE="$DOCKERHUB_USERNAME/$BACKEND_IMAGE"
 
 export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION
 
+echo "Reading instance IDs and target groups from $OUTPUTS_JSON..."
 INSTANCE_IDS=$(jq -r '.ec2_instance_ids | join(",")' "$OUTPUTS_JSON" 2>/dev/null || echo "")
 BACKEND_BLUE_TG=$(jq -r '.backend_blue_tg_arn' "$OUTPUTS_JSON" 2>/dev/null || echo "")
 BACKEND_GREEN_TG=$(jq -r '.backend_green_tg_arn' "$OUTPUTS_JSON" 2>/dev/null || echo "")
@@ -64,26 +64,27 @@ if [[ -z "$INSTANCE_IDS" ]]; then
 fi
 
 IFS=',' read -ra INSTANCES <<< "$INSTANCE_IDS"
-
 WORKER_INSTANCES=()
 if [[ -n "${WORKER_INSTANCE_IDS:-}" ]]; then
   IFS=',' read -ra WORKER_INSTANCES <<< "$WORKER_INSTANCE_IDS"
 fi
 
+echo "Fetching DB credentials from SSM parameter $SSM_PARAM_NAME..."
 PARAM_VALUE=$(aws ssm get-parameter --name "$SSM_PARAM_NAME" --with-decryption --query "Parameter.Value" --output text) || {
   echo "ERROR: failed to read SSM parameter $SSM_PARAM_NAME"
   exit 1
 }
 DB_USER=$(echo "$PARAM_VALUE" | jq -r '.username')
 DB_PASS=$(echo "$PARAM_VALUE" | jq -r '.password')
-
 DB_USER_B64=$(printf '%s' "$DB_USER" | base64 | tr -d '\n')
 DB_PASS_B64=$(printf '%s' "$DB_PASS" | base64 | tr -d '\n')
 
 # === Helpers ===
+echo "Defining helper functions..."
 
 _get_ip() {
   local instance_id=$1
+  echo "Fetching public IP for instance $instance_id..."
   aws ec2 describe-instances --instance-ids "$instance_id" \
     --query "Reservations[0].Instances[0].PublicIpAddress" --output text
 }
@@ -92,6 +93,7 @@ get_container_image() {
   local instance_id=$1
   local container=$2
   local ip="$(_get_ip "$instance_id")"
+  echo "Getting image of container $container on $instance_id ($ip)..."
   ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$ip" \
     "docker inspect --format='{{.Config.Image}}' $container 2>/dev/null || echo ''"
 }
@@ -112,6 +114,7 @@ deploy_container() {
   local container_name="backend_${color,,}"
 
   local ip="$(_get_ip "$instance_id")"
+  echo "Deploying container $container_name on $instance_id ($ip) port $port..."
   if [[ -z "$ip" || "$ip" == "None" ]]; then
     echo "ERROR: could not determine IP for instance $instance_id"
     return 2
@@ -119,15 +122,20 @@ deploy_container() {
 
   ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$ip" bash <<EOF
 set -e
-docker stop $container_name || true
-docker rm $container_name || true
+echo "Stopping any existing container $container_name (ignore if not exist)..."
+docker stop $container_name 2>/dev/null || true
+docker rm $container_name 2>/dev/null || true
 
+echo "Logging into Docker Hub..."
 echo "\$DOCKERHUB_TOKEN" | docker login -u "\$DOCKERHUB_USERNAME" --password-stdin
+
+echo "Pulling image $FULL_IMAGE..."
 docker pull "$FULL_IMAGE"
 
 DB_USER=\$(echo '$DB_USER_B64' | base64 -d)
 DB_PASS=\$(echo '$DB_PASS_B64' | base64 -d)
 
+echo "Running container $container_name..."
 docker run -d -p $port:8000 \
   --name $container_name \
   -e AWS_ACCESS_KEY_ID="\$AWS_ACCESS_KEY_ID" \
@@ -139,6 +147,7 @@ docker run -d -p $port:8000 \
   -e DB_USER="\$DB_USER" \
   -e DB_PASS="\$DB_PASS" \
   "$FULL_IMAGE"
+echo "Container $container_name deployed successfully!"
 EOF
 }
 
@@ -148,7 +157,7 @@ rollback_backend_both_on() {
   for instance_id in "$@"; do
     ip="$(_get_ip "$instance_id")"
     ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$ip" \
-      "docker rm -f backend_blue backend_green || true"
+      "docker rm -f backend_blue backend_green 2>/dev/null || true"
   done
 }
 
@@ -160,7 +169,7 @@ rollback_backend_color_on() {
   for instance_id in "$@"; do
     ip="$(_get_ip "$instance_id")"
     ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$ip" \
-      "docker rm -f backend_${color} || true"
+      "docker rm -f backend_${color} 2>/dev/null || true"
   done
 }
 
@@ -173,10 +182,12 @@ rollback_worker_new() {
   for instance_id in "${WORKER_INSTANCES[@]}"; do
     ip="$(_get_ip "$instance_id")"
     ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$ip" \
-      "docker rm -f worker_new || true"
+      "docker rm -f worker_new 2>/dev/null || true"
   done
 }
 
+# === Main deployment ===
+echo "Fetching current target group..."
 CURRENT_TG=$(aws elbv2 describe-rules \
   --listener-arn "$LISTENER_ARN" \
   --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'/api/aws/*')]].Actions[0].ForwardConfig.TargetGroups[0].TargetGroupArn" \
@@ -185,23 +196,23 @@ CURRENT_TG=$(aws elbv2 describe-rules \
 echo "Current TG: $CURRENT_TG"
 DEPLOYED_INSTANCES=()
 
-# === Determine PREVIOUS IMAGE ===
+# Determine PREVIOUS IMAGE
 if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
-  PREVIOUS_IMAGE="$FULL_IMAGE"   # first time deploy, no history
+  echo "First-time deploy, no current TG. Using $FULL_IMAGE as previous image."
+  PREVIOUS_IMAGE="$FULL_IMAGE"
 else
   if [[ "$CURRENT_TG" == "$BACKEND_BLUE_TG" ]]; then
     PREVIOUS_IMAGE=$(get_container_image "${INSTANCES[0]}" "backend_blue")
   else
     PREVIOUS_IMAGE=$(get_container_image "${INSTANCES[0]}" "backend_green")
   fi
-  if [[ -z "$PREVIOUS_IMAGE" || "$PREVIOUS_IMAGE" == "null" ]]; then
-    PREVIOUS_IMAGE="$FULL_IMAGE"
-  fi
+  [[ -z "$PREVIOUS_IMAGE" || "$PREVIOUS_IMAGE" == "null" ]] && PREVIOUS_IMAGE="$FULL_IMAGE"
 fi
+echo "Previous image: $PREVIOUS_IMAGE"
 
-# === DEPLOYMENT LOGIC ===
+# === Deployment logic ===
 if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
-  # First-time deploy: deploy both BLUE and GREEN
+  # First-time deployment: deploy both BLUE and GREEN
   for instance in "${INSTANCES[@]}"; do
     echo "→ deploying BLUE on $instance"
     set +e
@@ -240,7 +251,6 @@ if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
   INACTIVE_ENV="GREEN"
   ACTIVE_TG="$BACKEND_BLUE_TG"
   INACTIVE_TG="$BACKEND_GREEN_TG"
-
 else
   # Subsequent deploy: deploy new color
   if [[ "$CURRENT_TG" == "$BACKEND_BLUE_TG" ]]; then
