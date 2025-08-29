@@ -26,7 +26,7 @@ def deploy_on_instance(instance_ip, pem_path, container_name):
     stdin, stdout, stderr = ssh.exec_command(remove_cmd)
     err = stderr.read().decode().strip()
     if err:
-        print(f"[{instance_ip}] Remove old {container_name} error: {err}")
+        print(f"[{instance_ip}] Error removing old {container_name}: {err}")
     else:
         print(f"[{instance_ip}] Old {container_name} removed (if existed).")
 
@@ -35,7 +35,7 @@ def deploy_on_instance(instance_ip, pem_path, container_name):
     stdin, stdout, stderr = ssh.exec_command(rename_cmd)
     err = stderr.read().decode().strip()
     if err:
-        print(f"[{instance_ip}] Rename {container_name}_new error: {err}")
+        print(f"[{instance_ip}] Error renaming {container_name}_new: {err}")
     else:
         print(f"[{instance_ip}] {container_name}_new renamed to {container_name}.")
 
@@ -57,28 +57,28 @@ def deploy_containers(instance_ids, pem_path, container_name, aws_access_key, aw
             if public_ip:
                 deploy_on_instance(public_ip, pem_path, container_name)
             else:
-                print(f"Instance {inst['InstanceId']} has no public IP, skipping {container_name} deployment.")
+                print(f"[INFO] Skipping {container_name} deployment for instance {inst['InstanceId']}: No public IP available.")
 
 # ALB rule management
-def create_or_update_rule(listener_arn, path, target_group_arn, priority):
+def create_or_update_rule(listener_arn, path, target_group_arn, priority, service_name):
     if not target_group_arn:
-        print(f"Skipping ALB rule for path '{path}', target group ARN not found.")
+        print(f"[INFO] Skipping ALB rule creation for {service_name} path '{path}': Target group ARN not found.")
         return
-    print(f"Processing ALB rule: path='{path}' -> TG='{target_group_arn}'")
+    print(f"Processing ALB rule for {service_name}: path='{path}' -> TG='{target_group_arn}'")
     rule_arn = run_command(
         f"aws elbv2 describe-rules --listener-arn {listener_arn} "
         f"--query \"Rules[?Conditions[?Field=='path-pattern' && contains(Values,'{path}')]].RuleArn\" "
         "--output text"
     ) or ""
     if not rule_arn or rule_arn == "None":
-        print(f"Creating new rule for {path}")
+        print(f"[INFO] Creating new ALB rule for {service_name} path '{path}'")
         run_command(
             f"aws elbv2 create-rule --listener-arn {listener_arn} --priority {priority} "
             f"--conditions Field=path-pattern,Values={path} "
             f"--actions Type=forward,TargetGroupArn={target_group_arn}"
         )
     else:
-        print(f"Updating existing rule for {path}")
+        print(f"[INFO] Updating existing ALB rule for {service_name} path '{path}'")
         run_command(
             f"aws elbv2 modify-rule --rule-arn {rule_arn} "
             f"--conditions Field=path-pattern,Values={path} "
@@ -86,10 +86,13 @@ def create_or_update_rule(listener_arn, path, target_group_arn, priority):
         )
 
 # Deploy ALB rules for a service
-def deploy_service(listener_arn, target_group_arn, paths, starting_priority=10):
+def deploy_service(listener_arn, target_group_arn, paths, service_name, starting_priority=10):
+    if not target_group_arn:
+        print(f"[INFO] Skipping {service_name} ALB rule deployment: Target group ARN not provided.")
+        return
     priority = starting_priority
     for path in paths:
-        create_or_update_rule(listener_arn, path, target_group_arn, priority)
+        create_or_update_rule(listener_arn, path, target_group_arn, priority, service_name)
         priority += 1
 
 # Upload deployment metadata to S3
@@ -131,42 +134,50 @@ if __name__ == "__main__":
     # Worker
     worker_current = os.environ["WORKER_CURRENT_IMAGE"].split("/")[-1]
     worker_previous = os.environ["WORKER_PREVIOUS_IMAGE"].split("/")[-1]
-    worker_status = os.environ["WORKER_STATUS"]
-    worker_instance_ids = os.environ["WORKER_INSTANCE_IDS"]
+    worker_status = os.environ["WORKER_STATUS"].lower()
+    worker_instance_ids = os.environ.get("WORKER_INSTANCE_IDS", "")
 
     # Backend
     backend_current = os.environ["BACKEND_CURRENT_IMAGE"].split("/")[-1]
     backend_previous = os.environ["BACKEND_PREVIOUS_IMAGE"].split("/")[-1]
-    backend_status = os.environ["BACKEND_STATUS"]
+    backend_status = os.environ["BACKEND_STATUS"].lower()
     backend_active_env = os.environ["BACKEND_ACTIVE_ENV"].upper()
     backend_inactive_env = os.environ["BACKEND_INACTIVE_ENV"].upper()
-    backend_active_tg = os.environ["BACKEND_ACTIVE_TG"]
-    backend_inactive_tg = os.environ["BACKEND_INACTIVE_TG"]
-    backend_instance_ids = os.environ["BACKEND_INSTANCE_IDS"]
+    backend_active_tg = os.environ.get("BACKEND_ACTIVE_TG", "")
+    backend_inactive_tg = os.environ.get("BACKEND_INACTIVE_TG", "")
+    backend_instance_ids = os.environ.get("BACKEND_INSTANCE_IDS", "")
 
     # Frontend
     frontend_current = os.environ["FRONTEND_CURRENT_IMAGE"].split("/")[-1]
     frontend_previous = os.environ["FRONTEND_PREVIOUS_IMAGE"].split("/")[-1]
-    frontend_status = os.environ["FRONTEND_STATUS"]
+    frontend_status = os.environ["FRONTEND_STATUS"].lower()
     frontend_active_env = os.environ["FRONTEND_ACTIVE_ENV"].upper()
     frontend_inactive_env = os.environ["FRONTEND_INACTIVE_ENV"].upper()
-    frontend_active_tg = os.environ["FRONTEND_ACTIVE_TG"]
-    frontend_inactive_tg = os.environ["FRONTEND_INACTIVE_TG"]
-    frontend_instance_ids = os.environ["FRONTEND_INSTANCE_IDS"]
+    frontend_active_tg = os.environ.get("FRONTEND_ACTIVE_TG", "")
+    frontend_inactive_tg = os.environ.get("FRONTEND_INACTIVE_TG", "")
+    frontend_instance_ids = os.environ.get("FRONTEND_INSTANCE_IDS", "")
 
     deployed_at = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
     # Step 1: Deploy Worker
-    deploy_containers(worker_instance_ids, pem_path, "worker", aws_access_key, aws_secret_key, aws_region)
+    if worker_status == "skipped":
+        print("[INFO] Skipping Worker deployment because WORKER_STATUS is 'skipped'.")
+    else:
+        deploy_containers(worker_instance_ids, pem_path, "worker", aws_access_key, aws_secret_key, aws_region)
 
     # Step 2: Deploy Backend ALB rules
     backend_tg = backend_inactive_tg if backend_active_env == "BLUE" else backend_active_tg
-    deploy_service(listener_arn, backend_tg, ["/api/aws/*"], starting_priority=10)
-
+    if backend_status == "skipped":
+        print("[INFO] Skipping Backend deployment because BACKEND_STATUS is 'skipped'.")
+    else:
+        deploy_service(listener_arn, backend_tg, ["/api/aws/*"], "Backend", starting_priority=10)
 
     # Step 3: Deploy Frontend ALB rules
     frontend_tg = frontend_inactive_tg if frontend_active_env == "BLUE" else frontend_active_tg
-    deploy_service(listener_arn, frontend_tg, ["/", "/favicon.ico", "/robots.txt", "/static/*"], starting_priority=500)
+    if frontend_status == "skipped":
+        print("[INFO] Skipping Frontend deployment because FRONTEND_STATUS is 'skipped'.")
+    else:
+        deploy_service(listener_arn, frontend_tg, ["/", "/favicon.ico", "/robots.txt", "/static/*"], "Frontend", starting_priority=500)
 
     # Prepare outputs
     outputs = {
