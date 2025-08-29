@@ -37,14 +37,16 @@ fi
 FULL_IMAGE="$DOCKERHUB_USERNAME/$FRONTEND_IMAGE"
 export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION
 
-INSTANCE_IDS=$(jq -r '.frontend_instance_ids | join(",")' "$OUTPUTS_JSON" 2>/dev/null || echo "")
+INSTANCE_IDS=$(jq -r '.ec2_instance_ids | join(",")' "$OUTPUTS_JSON" 2>/dev/null || echo "")
 FRONTEND_BLUE_TG=$(jq -r '.frontend_blue_tg_arn' "$OUTPUTS_JSON" 2>/dev/null || echo "")
 FRONTEND_GREEN_TG=$(jq -r '.frontend_green_tg_arn' "$OUTPUTS_JSON" 2>/dev/null || echo "")
 LISTENER_ARN=$(jq -r '.alb_listener_arn' "$OUTPUTS_JSON" 2>/dev/null || echo "")
 
-BACKEND_INSTANCE_IDS=$(jq -r '.backend_instance_ids | join(",")' "$OUTPUTS_JSON" 2>/dev/null || echo "")
-BACKEND_INACTIVE_ENV=$(jq -r '.backend_inactive_env // empty' "$OUTPUTS_JSON" 2>/dev/null || echo "")
-BACKEND_FIRST_DEPLOYMENT=$(jq -r '.backend_first_deployment // false' "$OUTPUTS_JSON" 2>/dev/null || echo "false")
+BACKEND_INSTANCE_IDS="${BACKEND_INSTANCE_IDS:-}"
+IFS=',' read -ra BACKEND_INSTANCES <<< "$BACKEND_INSTANCE_IDS"
+BACKEND_INACTIVE_ENV="${BACKEND_INACTIVE_ENV:-}"
+BACKEND_FIRST_DEPLOYMENT="${BACKEND_FIRST_DEPLOYMENT:-false}"
+
 
 if [[ -z "$INSTANCE_IDS" ]]; then
   echo "ERROR: no frontend instance ids found in $OUTPUTS_JSON"
