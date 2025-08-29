@@ -4,18 +4,6 @@ set -euo pipefail
 #########################################
 # deploy-frontend.sh
 # Blue-Green Deployment for Frontend (Containers Only)
-#
-# Usage:
-#   ./deploy-frontend.sh --outputs-json frontend-outputs.json
-#
-# Requirements (via env):
-# - FRONTEND_IMAGE (repo:tag)
-# - DOCKERHUB_USERNAME / DOCKERHUB_TOKEN
-# - PEM_PATH (ssh key for ec2-user)
-# - WORKER_INSTANCE_IDS (optional)
-# - BACKEND_INSTANCE_IDS (optional)
-# - AWS credentials & region in env
-# - jq installed
 #########################################
 
 FRONTEND_BLUE_PORT=3000
@@ -49,11 +37,14 @@ fi
 FULL_IMAGE="$DOCKERHUB_USERNAME/$FRONTEND_IMAGE"
 export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION
 
-echo "Reading instance IDs and target groups from $OUTPUTS_JSON..."
 INSTANCE_IDS=$(jq -r '.frontend_instance_ids | join(",")' "$OUTPUTS_JSON" 2>/dev/null || echo "")
 FRONTEND_BLUE_TG=$(jq -r '.frontend_blue_tg_arn' "$OUTPUTS_JSON" 2>/dev/null || echo "")
 FRONTEND_GREEN_TG=$(jq -r '.frontend_green_tg_arn' "$OUTPUTS_JSON" 2>/dev/null || echo "")
 LISTENER_ARN=$(jq -r '.alb_listener_arn' "$OUTPUTS_JSON" 2>/dev/null || echo "")
+
+BACKEND_INSTANCE_IDS=$(jq -r '.backend_instance_ids | join(",")' "$OUTPUTS_JSON" 2>/dev/null || echo "")
+BACKEND_INACTIVE_ENV=$(jq -r '.backend_inactive_env // empty' "$OUTPUTS_JSON" 2>/dev/null || echo "")
+BACKEND_FIRST_DEPLOYMENT=$(jq -r '.backend_first_deployment // false' "$OUTPUTS_JSON" 2>/dev/null || echo "false")
 
 if [[ -z "$INSTANCE_IDS" ]]; then
   echo "ERROR: no frontend instance ids found in $OUTPUTS_JSON"
@@ -61,19 +52,9 @@ if [[ -z "$INSTANCE_IDS" ]]; then
 fi
 
 IFS=',' read -ra INSTANCES <<< "$INSTANCE_IDS"
-WORKER_INSTANCES=()
-if [[ -n "${WORKER_INSTANCE_IDS:-}" ]]; then
-  IFS=',' read -ra WORKER_INSTANCES <<< "$WORKER_INSTANCE_IDS"
-fi
-
-BACKEND_INSTANCES=()
-if [[ -n "${BACKEND_INSTANCE_IDS:-}" ]]; then
-  IFS=',' read -ra BACKEND_INSTANCES <<< "$BACKEND_INSTANCE_IDS"
-fi
+IFS=',' read -ra BACKEND_INSTANCES <<< "$BACKEND_INSTANCE_IDS"
 
 # === Helpers ===
-echo "Defining helper functions..."
-
 _get_ip() {
   local instance_id=$1
   aws ec2 describe-instances --instance-ids "$instance_id" \
@@ -84,7 +65,6 @@ get_container_image() {
   local instance_id=$1
   local container=$2
   local ip="$(_get_ip "$instance_id")"
-  echo "Getting image of container $container on $instance_id ($ip)..."
   ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$ip" \
     "docker inspect --format='{{.Config.Image}}' $container 2>/dev/null || echo ''"
 }
@@ -93,9 +73,7 @@ print_container_logs() {
   local instance_id=$1
   local container=$2
   ip="$(_get_ip "$instance_id")"
-  echo "---- logs for $container on $instance_id ($ip) ----"
   ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$ip" "docker logs $container || true"
-  echo "-----------------------------------------------"
 }
 
 deploy_container() {
@@ -103,18 +81,9 @@ deploy_container() {
   local port=$2
   local color=$3
   local container_name="frontend_${color,,}"
+  local ip="$(_get_ip "$instance_id")"
 
-  local ip
-  ip="$(_get_ip "$instance_id")"
-  echo "Deploying container $container_name on instance $instance_id with IP $ip on port $port..."
-
-  if [[ -z "$ip" || "$ip" == "None" ]]; then
-    echo "ERROR: could not determine IP for instance $instance_id"
-    return 2
-  fi
-
-  ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" \
-      ec2-user@"$ip" \
+  ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$ip" \
       DOCKERHUB_USERNAME="$DOCKERHUB_USERNAME" \
       DOCKERHUB_TOKEN="$DOCKERHUB_TOKEN" \
       FULL_IMAGE="$FULL_IMAGE" \
@@ -122,27 +91,15 @@ deploy_container() {
       PORT="$port" \
       bash <<'EOF'
 set -euo pipefail
-
-echo "Stopping existing container $CONTAINER_NAME if exists..."
 docker stop "$CONTAINER_NAME" 2>/dev/null || true
 docker rm "$CONTAINER_NAME" 2>/dev/null || true
-
-echo "Logging into Docker Hub..."
 echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
-
-echo "Pulling image $FULL_IMAGE..."
 docker pull "$FULL_IMAGE"
-
-echo "Running container $CONTAINER_NAME..."
 docker run -d -p "$PORT":3000 --name "$CONTAINER_NAME" "$FULL_IMAGE"
-
-echo "✅ Container $CONTAINER_NAME deployed successfully!"
 EOF
 }
 
 rollback_frontend_both_on() {
-  if [[ $# -eq 0 ]]; then return; fi
-  echo "Rolling back BOTH frontend_blue and frontend_green on instances: $*"
   for instance_id in "$@"; do
     ip="$(_get_ip "$instance_id")"
     ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$ip" \
@@ -152,9 +109,7 @@ rollback_frontend_both_on() {
 
 rollback_frontend_color_on() {
   local color="$1"; shift
-  if [[ $# -eq 0 ]]; then return; fi
   color="$(echo "$color" | tr '[:upper:]' '[:lower:]')"
-  echo "Rolling back frontend_${color} on instances: $*"
   for instance_id in "$@"; do
     ip="$(_get_ip "$instance_id")"
     ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$ip" \
@@ -163,12 +118,7 @@ rollback_frontend_color_on() {
 }
 
 rollback_worker_new() {
-  if [[ ${#WORKER_INSTANCES[@]} -eq 0 ]]; then
-    echo "No worker instances to rollback."
-    return
-  fi
-  echo "Rolling back worker_new on worker instances: ${WORKER_INSTANCES[*]}"
-  for instance_id in "${WORKER_INSTANCES[@]}"; do
+  for instance_id in "${WORKER_INSTANCES[@]:-}"; do
     ip="$(_get_ip "$instance_id")"
     ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$ip" \
       "docker rm -f worker_new 2>/dev/null || true"
@@ -176,33 +126,42 @@ rollback_worker_new() {
 }
 
 rollback_backend_all() {
-  if [[ ${#BACKEND_INSTANCES[@]} -eq 0 ]]; then
-    echo "No backend instances to rollback."
-    return
+  local backend_first_deployment=$1
+  local backend_inactive_env=$2
+  shift 2
+  local backend_instances=("$@")
+
+  if [[ "$backend_first_deployment" == "true" ]]; then
+    echo "Rolling back ALL backend containers on instances: ${backend_instances[*]}"
+    for instance_id in "${backend_instances[@]}"; do
+      ip="$(_get_ip "$instance_id")"
+      ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$ip" \
+        "docker rm -f backend_blue backend_green 2>/dev/null || true"
+    done
+  else
+    echo "Rolling back only INACTIVE backend ($backend_inactive_env) on instances: ${backend_instances[*]}"
+    color="${backend_inactive_env,,}"
+    for instance_id in "${backend_instances[@]}"; do
+      ip="$(_get_ip "$instance_id")"
+      ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$ip" \
+        "docker rm -f backend_${color} 2>/dev/null || true"
+    done
   fi
-  echo "Rolling back backend containers on backend instances: ${BACKEND_INSTANCES[*]}"
-  for instance_id in "${BACKEND_INSTANCES[@]}"; do
-    ip="$(_get_ip "$instance_id")"
-    ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$ip" \
-      "docker rm -f backend_blue backend_green 2>/dev/null || true"
-  done
 }
 
 # === Main deployment ===
-echo "Fetching current frontend target group..."
 CURRENT_TG=$(aws elbv2 describe-rules \
   --listener-arn "$LISTENER_ARN" \
   --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'/')]].Actions[0].ForwardConfig.TargetGroups[0].TargetGroupArn" \
   --output text || echo "")
 
-echo "Current TG: $CURRENT_TG"
 DEPLOYED_INSTANCES=()
 
-# Determine PREVIOUS IMAGE
 if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
-  echo "First-time deploy, using $FULL_IMAGE as previous image."
+  FRONTEND_FIRST_DEPLOYMENT=true
   PREVIOUS_IMAGE="$FULL_IMAGE"
 else
+  FRONTEND_FIRST_DEPLOYMENT=false
   if [[ "$CURRENT_TG" == "$FRONTEND_BLUE_TG" ]]; then
     PREVIOUS_IMAGE=$(get_container_image "${INSTANCES[0]}" "frontend_blue")
   else
@@ -296,7 +255,6 @@ else
 fi
 
 # === SUCCESS outputs ===
-echo "Preparing deployment outputs..."
 {
   echo "frontend_status=success"
   echo "frontend_active_env=$ACTIVE_ENV"
@@ -305,6 +263,7 @@ echo "Preparing deployment outputs..."
   echo "frontend_inactive_tg=$INACTIVE_TG"
   echo "frontend_current_image=$FULL_IMAGE"
   echo "frontend_previous_image=$PREVIOUS_IMAGE"
+  echo "frontend_first_deployment=$FRONTEND_FIRST_DEPLOYMENT"
   echo "frontend_deployed_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
   echo "frontend_deployed_by=${GITHUB_ACTOR:-manual}"
   echo "frontend_instance_ids=${INSTANCE_IDS}"
