@@ -151,7 +151,7 @@ jobs:
   ##########################
   deploy_frontend:
     needs: [pre-deploy, deploy_worker, deploy_backend]
-    if: needs.pre-deploy.outputs.can_deploy == 'true' && needs.pre-deploy.outputs.frontend_image != ''
+    if: needs.pre-deploy.outputs.can_deploy == 'true'
     runs-on: self-hosted
     environment: production
     env:
@@ -164,26 +164,33 @@ jobs:
       S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
       PEM_PATH: ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
       WORKER_INSTANCE_IDS: ${{ needs.deploy_worker.outputs.worker_deployed_instance_ids }}
-      BACKEND_INSTANCE_IDS: ${{ needs.deploy_backend.outputs.backend_instance_ids }}
       FRONTEND_IMAGE: ${{ needs.pre-deploy.outputs.frontend_image }}
+      FRONTEND_INSTANCE_IDS: ${{ needs.deploy_backend.outputs.backend_instance_ids }} # or your frontend instance list
     outputs:
       frontend_status: ${{ steps.deploy_frontend.outputs.frontend_status }}
       frontend_active_env: ${{ steps.deploy_frontend.outputs.frontend_active_env }}
+      frontend_inactive_env: ${{ steps.deploy_frontend.outputs.frontend_inactive_env }}
+      frontend_active_tg: ${{ steps.deploy_frontend.outputs.frontend_active_tg }}
+      frontend_inactive_tg: ${{ steps.deploy_frontend.outputs.frontend_inactive_tg }}
       frontend_current_image: ${{ steps.deploy_frontend.outputs.frontend_current_image }}
       frontend_previous_image: ${{ steps.deploy_frontend.outputs.frontend_previous_image }}
-
+      frontend_deployed_at: ${{ steps.deploy_frontend.outputs.frontend_deployed_at }}
+      frontend_deployed_by: ${{ steps.deploy_frontend.outputs.frontend_deployed_by }}
+      frontend_instance_ids: ${{ steps.deploy_frontend.outputs.frontend_instance_ids }}
+  
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
+  
       - name: Download frontend infra outputs
         run: aws s3 cp "$S3_JSON_PATH" frontend-outputs.json
-
+  
       - name: Deploy Frontend (Blue-Green)
         id: deploy_frontend
         run: |
           ./deploy/deploy-frontend.sh \
-            --outputs-json frontend-outputs.json 
+            --outputs-json frontend-outputs.json
+
 
 
 
