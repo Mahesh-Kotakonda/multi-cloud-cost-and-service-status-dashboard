@@ -256,6 +256,10 @@ else
   INACTIVE_TG="$OLD_TG"
 fi
 
+# Strip Docker username from frontend images
+CURRENT_IMAGE_SHORT=$(echo "$FULL_IMAGE" | awk -F/ '{print $NF}')
+PREVIOUS_IMAGE_SHORT=$(echo "$PREVIOUS_IMAGE" | awk -F/ '{print $NF}')
+
 # === SUCCESS outputs ===
 {
   echo "frontend_status=success"
@@ -263,13 +267,14 @@ fi
   echo "frontend_inactive_env=$INACTIVE_ENV"
   echo "frontend_active_tg=$ACTIVE_TG"
   echo "frontend_inactive_tg=$INACTIVE_TG"
-  echo "frontend_current_image=$FULL_IMAGE"
-  echo "frontend_previous_image=$PREVIOUS_IMAGE"
+  echo "frontend_current_image=$CURRENT_IMAGE_SHORT"
+  echo "frontend_previous_image=$PREVIOUS_IMAGE_SHORT"
   echo "frontend_first_deployment=$FRONTEND_FIRST_DEPLOYMENT"
   echo "frontend_deployed_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
   echo "frontend_deployed_by=${GITHUB_ACTOR:-manual}"
   echo "frontend_instance_ids=${INSTANCE_IDS}"
 } | tee >(cat) >> "$GITHUB_OUTPUT"
+
 
 echo "✅ Frontend deployment completed. Active env: $ACTIVE_ENV"
 exit 0
