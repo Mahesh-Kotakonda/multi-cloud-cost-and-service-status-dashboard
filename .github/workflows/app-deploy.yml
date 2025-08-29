@@ -100,17 +100,12 @@ jobs:
         id: deploy
         run: ./deploy/deploy-worker.sh "${{ needs.pre-deploy.outputs.worker_image }}"
 
-
-
-
-
-
   ##########################
   # Deploy Backend
   ##########################
   deploy_backend:
     needs: [pre-deploy, deploy_worker]
-    if: needs.pre-deploy.outputs.can_deploy == 'true' && needs.pre-deploy.outputs.backend_image != ''
+    if: needs.pre-deploy.outputs.can_deploy == 'true'
     runs-on: self-hosted
     environment: production
     env:
@@ -124,28 +119,31 @@ jobs:
       PEM_PATH: ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
       WORKER_INSTANCE_IDS: ${{ needs.deploy_worker.outputs.worker_deployed_instance_ids }}
       BACKEND_IMAGE: ${{ needs.pre-deploy.outputs.backend_image }}
+      SSM_PARAM_NAME: ${{ secrets.SSM_PARAM_NAME }}
     outputs:
       backend_status: ${{ steps.deploy_backend.outputs.backend_status }}
       backend_active_env: ${{ steps.deploy_backend.outputs.backend_active_env }}
+      backend_inactive_env: ${{ steps.deploy_backend.outputs.backend_inactive_env }}
+      backend_active_tg: ${{ steps.deploy_backend.outputs.backend_active_tg }}
+      backend_inactive_tg: ${{ steps.deploy_backend.outputs.backend_inactive_tg }}
       backend_current_image: ${{ steps.deploy_backend.outputs.backend_current_image }}
-      backend_previous_image: ${{ steps.deploy_backend.outputs.backend_previous_image }}
+      backend_deployed_at: ${{ steps.deploy_backend.outputs.backend_deployed_at }}
+      backend_deployed_by: ${{ steps.deploy_backend.outputs.backend_deployed_by }}
       backend_instance_ids: ${{ steps.deploy_backend.outputs.backend_instance_ids }}
-
+  
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
+  
       - name: Download backend infra outputs
         run: aws s3 cp "$S3_JSON_PATH" backend-outputs.json
-
+  
       - name: Deploy Backend (Blue-Green)
         id: deploy_backend
         run: |
           ./deploy/deploy-backend.sh \
-            --outputs-json backend-outputs.json \
-            --pem-path "$PEM_PATH" \
-            --image-tag "$BACKEND_IMAGE" \
-            --worker-instance-ids "$WORKER_INSTANCE_IDS"
+            --outputs-json backend-outputs.json
+
 
 
   ##########################
@@ -185,11 +183,7 @@ jobs:
         id: deploy_frontend
         run: |
           ./deploy/deploy-frontend.sh \
-            --outputs-json frontend-outputs.json \
-            --pem-path "$PEM_PATH" \
-            --image-tag "$FRONTEND_IMAGE" \
-            --worker-instance-ids "$WORKER_INSTANCE_IDS" \
-            --backend-instance-ids "$BACKEND_INSTANCE_IDS"
+            --outputs-json frontend-outputs.json 
 
 
 
