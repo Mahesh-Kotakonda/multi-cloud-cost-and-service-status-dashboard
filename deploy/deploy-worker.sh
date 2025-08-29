@@ -47,7 +47,7 @@ DB_PASS=$(echo "$PARAM_VALUE" | jq -r '.password')
 SUCCESSFUL=()
 FAILED=0
 WORKER_PREVIOUS_IMAGE=""
-DEPLOYED_INSTANCE_IDS_LIST=()
+FAILED_INSTANCE=""
 
 # === Step 4: Deploy to instances sequentially ===
 for ID in $INSTANCE_IDS; do
@@ -95,6 +95,7 @@ docker run -d --name worker_new \
 sleep 25
 
 if ! docker ps --filter 'name=worker_new' --filter 'status=running' | grep -q worker_new; then
+  echo "Health check failed for worker_new"
   docker logs worker_new || true
   docker rm -f worker_new || true
   exit 2
@@ -105,11 +106,11 @@ EOF
   if [ "$RC" -eq 0 ]; then
     echo "Deployment succeeded on $ID"
     SUCCESSFUL+=("$ID")
-    DEPLOYED_INSTANCE_IDS_LIST+=("$ID")
   else
     echo "Deployment failed on $ID"
     FAILED=1
-    break
+    FAILED_INSTANCE="$ID"
+    break   # stop immediately, don’t try next instances
   fi
 done
 
@@ -130,13 +131,13 @@ if [ "$FAILED" -eq 1 ]; then
   rollback_instances
   echo "worker_previous_image=$WORKER_PREVIOUS_IMAGE" | tee -a "$GITHUB_OUTPUT"
   echo "worker_current_image=$WORKER_IMAGE" | tee -a "$GITHUB_OUTPUT"
-  echo "worker_deployed_instance_ids=$(IFS=,; echo \"\${DEPLOYED_INSTANCE_IDS_LIST[*]}\")" | tee -a "$GITHUB_OUTPUT"
+  echo "worker_deployed_instance_ids=" | tee -a "$GITHUB_OUTPUT"   # empty on failure
   echo "worker_deploy_status=failed" | tee -a "$GITHUB_OUTPUT"
   exit 1
 fi
 
 # === Step 6: Success output ===
-DEPLOYED_CSV=$(IFS=,; echo "${DEPLOYED_INSTANCE_IDS_LIST[*]}")
+DEPLOYED_CSV=$(IFS=,; echo "${SUCCESSFUL[*]}")
 echo "worker_previous_image=$WORKER_PREVIOUS_IMAGE" | tee -a "$GITHUB_OUTPUT"
 echo "worker_current_image=$WORKER_IMAGE" | tee -a "$GITHUB_OUTPUT"
 echo "worker_deployed_instance_ids=$DEPLOYED_CSV" | tee -a "$GITHUB_OUTPUT"
