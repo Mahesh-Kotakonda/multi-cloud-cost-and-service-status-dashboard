@@ -212,7 +212,7 @@ jobs:
   # Deploy Frontend
   ##########################
   deploy_frontend:
-    needs: [pre-check, resolve-images, deploy_worker, deploy_backend]
+    needs: [pre-deploy, deploy_worker, deploy_backend]
     if: needs.pre-check.outputs.can_deploy == 'true' && (needs.resolve-images.outputs.frontend_image != '')
     runs-on: self-hosted
     environment: production
