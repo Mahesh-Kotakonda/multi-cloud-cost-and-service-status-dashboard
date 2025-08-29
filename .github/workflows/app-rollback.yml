@@ -2,10 +2,28 @@ name: Rollback Deployment
 
 on:
   workflow_dispatch:
+    inputs:
+      deployment_source:
+        description: "Choose whether to rollback from latest or a specific deployment JSON"
+        required: true
+        default: "latest"
+        type: choice
+        options:
+          - latest
+          - specific
+      deployment_key:
+        description: "S3 key of the deployment JSON (required if source is specific)"
+        required: false
+        type: string
+      components:
+        description: "Components to rollback: either 'all' or comma separated (frontend,backend,worker)"
+        required: true
+        default: "all"
+        type: string
 
 jobs:
   prepare_rollback:
-    name: Fetch Latest Deployment & Infra JSONs
+    name: Fetch & Validate Deployment JSON
     runs-on: self-hosted
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -14,6 +32,7 @@ jobs:
       S3_BUCKET: multi-cloud-cost-and-service-status-dashboard
       DEPLOYMENT_JSON_PREFIX: deployments/
       INFRA_JSON_PATH: infra/multi-cloud-dashboard-outputs.json
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -25,25 +44,88 @@ jobs:
           aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Download Latest Deployment JSON
+      - name: Validate Components Input
         run: |
-          # Get latest deployment JSON from S3
-          DEPLOYMENT_KEY=$(aws s3api list-objects-v2 \
-                            --bucket $S3_BUCKET \
-                            --prefix "$DEPLOYMENT_JSON_PREFIX" \
-                            --query 'reverse(sort_by(Contents,&LastModified))[0].Key' \
-                            --output text)
+          COMPONENTS="${{ github.event.inputs.components }}"
 
-          if [ -z "$DEPLOYMENT_KEY" ] || [ "$DEPLOYMENT_KEY" = "None" ]; then
-            echo "No deployment JSON found in S3 at prefix $DEPLOYMENT_JSON_PREFIX"
+          if [[ "$COMPONENTS" == "all" ]]; then
+            echo "✅ Components set to 'all'."
+            exit 0
+          fi
+
+          # Reject invalid cases like "all,frontend"
+          if [[ "$COMPONENTS" == *"all"* ]]; then
+            echo "❌ Error: 'all' cannot be combined with other components."
             exit 1
           fi
 
-          echo "Downloading deployment JSON: $DEPLOYMENT_KEY"
+          echo "✅ Components input format looks valid."
+
+      - name: Determine Deployment JSON Key
+        id: deployment_key
+        run: |
+          SOURCE="${{ github.event.inputs.deployment_source }}"
+          DEPLOYMENT_KEY_INPUT="${{ github.event.inputs.deployment_key }}"
+
+          if [ "$SOURCE" = "specific" ]; then
+            if [ -z "$DEPLOYMENT_KEY_INPUT" ]; then
+              echo "❌ Error: deployment_key must be provided when source is 'specific'"
+              exit 1
+            fi
+            if ! aws s3api head-object --bucket "$S3_BUCKET" --key "$DEPLOYMENT_KEY_INPUT" >/dev/null 2>&1; then
+              echo "❌ Error: deployment_key '$DEPLOYMENT_KEY_INPUT' not found in S3"
+              exit 1
+            fi
+            echo "key=$DEPLOYMENT_KEY_INPUT" >> $GITHUB_OUTPUT
+          else
+            DEPLOYMENT_KEY=$(aws s3api list-objects-v2 \
+                              --bucket $S3_BUCKET \
+                              --prefix "$DEPLOYMENT_JSON_PREFIX" \
+                              --query 'reverse(sort_by(Contents,&LastModified))[0].Key' \
+                              --output text)
+            if [ -z "$DEPLOYMENT_KEY" ] || [ "$DEPLOYMENT_KEY" = "None" ]; then
+              echo "❌ Error: No deployment JSON found in S3 at prefix $DEPLOYMENT_JSON_PREFIX"
+              exit 1
+            fi
+            echo "key=$DEPLOYMENT_KEY" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download Deployment & Infra JSON
+        run: |
+          DEPLOYMENT_KEY="${{ steps.deployment_key.outputs.key }}"
+          echo "📥 Downloading deployment JSON: $DEPLOYMENT_KEY"
           aws s3 cp "s3://$S3_BUCKET/$DEPLOYMENT_KEY" ./latest-deployment.json
 
-          echo "Downloading infra JSON: $INFRA_JSON_PATH"
+          echo "📥 Downloading infra JSON: $INFRA_JSON_PATH"
           aws s3 cp "s3://$S3_BUCKET/$INFRA_JSON_PATH" ./infra-outputs.json
+
+      - name: Validate Components in Deployment JSON
+        run: |
+          COMPONENTS="${{ github.event.inputs.components }}"
+
+          if [ "$COMPONENTS" = "all" ]; then
+            echo "✅ Skipping component validation since 'all' selected."
+            exit 0
+          fi
+
+          IFS=',' read -ra USER_COMPONENTS <<< "$COMPONENTS"
+
+          for comp in "${USER_COMPONENTS[@]}"; do
+            # Check if component exists in JSON
+            EXISTS=$(jq -r --arg c "$comp" 'has($c)' ./latest-deployment.json)
+            if [ "$EXISTS" != "true" ]; then
+              echo "❌ Error: Component '$comp' not found in deployment JSON."
+              exit 1
+            fi
+
+            STATUS=$(jq -r --arg c "$comp" '.[$c].status' ./latest-deployment.json)
+            if [ "$STATUS" = "skipped" ]; then
+              echo "❌ Error: Component '$comp' has status=skipped in JSON. Cannot rollback."
+              exit 1
+            fi
+
+            echo "✅ Component '$comp' is valid (status=$STATUS)."
+          done
 
       - name: Upload JSONs as Artifacts
         uses: actions/upload-artifact@v4
