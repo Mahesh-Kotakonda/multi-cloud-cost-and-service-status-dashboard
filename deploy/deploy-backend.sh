@@ -123,7 +123,7 @@ deploy_container() {
     return 2
   fi
 
-  # Pass necessary variables explicitly to SSH
+  # Pass variables explicitly and expand them correctly
   ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" \
       ec2-user@"$ip" \
       DOCKERHUB_USERNAME="$DOCKERHUB_USERNAME" \
@@ -131,21 +131,20 @@ deploy_container() {
       AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
       AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
       AWS_REGION="$AWS_REGION" \
+      FULL_IMAGE="$FULL_IMAGE" \
+      CONTAINER_NAME="$container_name" \
+      PORT="$port" \
+      DB_USER_B64="$DB_USER_B64" \
+      DB_PASS_B64="$DB_PASS_B64" \
+      DB_HOST="$DB_HOST" \
+      DB_PORT="$DB_PORT" \
+      DB_NAME="$DB_NAME" \
       bash <<'EOF'
 set -euo pipefail
 
-container_name='"$container_name"'
-port='"$port"'
-FULL_IMAGE='"$FULL_IMAGE"'
-DB_USER_B64='"$DB_USER_B64"'
-DB_PASS_B64='"$DB_PASS_B64"'
-DB_HOST='"$DB_HOST"'
-DB_PORT='"$DB_PORT"'
-DB_NAME='"$DB_NAME"'
-
-echo "Stopping existing container $container_name if exists..."
-docker stop $container_name 2>/dev/null || true
-docker rm $container_name 2>/dev/null || true
+echo "Stopping existing container $CONTAINER_NAME if exists..."
+docker stop "$CONTAINER_NAME" 2>/dev/null || true
+docker rm "$CONTAINER_NAME" 2>/dev/null || true
 
 echo "Logging into Docker Hub..."
 echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
@@ -156,9 +155,9 @@ docker pull "$FULL_IMAGE"
 DB_USER=$(echo "$DB_USER_B64" | base64 -d)
 DB_PASS=$(echo "$DB_PASS_B64" | base64 -d)
 
-echo "Running container $container_name..."
-docker run -d -p $port:8000 \
-  --name $container_name \
+echo "Running container $CONTAINER_NAME..."
+docker run -d -p "$PORT":8000 \
+  --name "$CONTAINER_NAME" \
   -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
   -e AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
   -e AWS_REGION="$AWS_REGION" \
@@ -169,9 +168,10 @@ docker run -d -p $port:8000 \
   -e DB_PASS="$DB_PASS" \
   "$FULL_IMAGE"
 
-echo "✅ Container $container_name deployed successfully!"
+echo "✅ Container $CONTAINER_NAME deployed successfully!"
 EOF
 }
+
 
 
 
