@@ -32,6 +32,29 @@ fi
 
 echo "Full image: $DOCKERHUB_USERNAME/$BACKEND_IMAGE"
 FULL_IMAGE="$DOCKERHUB_USERNAME/$BACKEND_IMAGE"
+
+# === Short-circuit if BACKEND_IMAGE is empty ===
+if [[ -z "${BACKEND_IMAGE:-}" ]]; then
+  echo "⚠️ BACKEND_IMAGE is empty. Skipping backend deployment."
+
+  # Export skipped outputs to GitHub Actions
+  {
+    echo "backend_status=skipped"
+    echo "backend_active_env="
+    echo "backend_inactive_env="
+    echo "backend_active_tg="
+    echo "backend_inactive_tg="
+    echo "backend_current_image="
+    echo "backend_previous_image="
+    echo "backend_first_deployment="
+    echo "backend_deployed_at="
+    echo "backend_deployed_by="
+    echo "backend_instance_ids="
+  } | tee >(cat) >> "$GITHUB_OUTPUT"
+
+  exit 0
+fi
+
 export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION
 
 echo "Reading instance IDs and target groups from $OUTPUTS_JSON..."
