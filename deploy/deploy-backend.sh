@@ -123,37 +123,56 @@ deploy_container() {
     return 2
   fi
 
-  ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$ip" bash <<EOF
+  # Pass necessary variables explicitly to SSH
+  ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" \
+      ec2-user@"$ip" \
+      DOCKERHUB_USERNAME="$DOCKERHUB_USERNAME" \
+      DOCKERHUB_TOKEN="$DOCKERHUB_TOKEN" \
+      AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
+      AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
+      AWS_REGION="$AWS_REGION" \
+      bash <<'EOF'
 set -euo pipefail
+
+container_name='"$container_name"'
+port='"$port"'
+FULL_IMAGE='"$FULL_IMAGE"'
+DB_USER_B64='"$DB_USER_B64"'
+DB_PASS_B64='"$DB_PASS_B64"'
+DB_HOST='"$DB_HOST"'
+DB_PORT='"$DB_PORT"'
+DB_NAME='"$DB_NAME"'
+
 echo "Stopping existing container $container_name if exists..."
 docker stop $container_name 2>/dev/null || true
 docker rm $container_name 2>/dev/null || true
 
 echo "Logging into Docker Hub..."
-echo "\$DOCKERHUB_TOKEN" | docker login -u "\$DOCKERHUB_USERNAME" --password-stdin
+echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
 
 echo "Pulling image $FULL_IMAGE..."
 docker pull "$FULL_IMAGE"
 
-DB_USER=\$(echo '$DB_USER_B64' | base64 -d)
-DB_PASS=\$(echo '$DB_PASS_B64' | base64 -d)
+DB_USER=$(echo "$DB_USER_B64" | base64 -d)
+DB_PASS=$(echo "$DB_PASS_B64" | base64 -d)
 
 echo "Running container $container_name..."
 docker run -d -p $port:8000 \
   --name $container_name \
-  -e AWS_ACCESS_KEY_ID="\$AWS_ACCESS_KEY_ID" \
-  -e AWS_SECRET_ACCESS_KEY="\$AWS_SECRET_ACCESS_KEY" \
-  -e AWS_REGION="\$AWS_REGION" \
+  -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
+  -e AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
+  -e AWS_REGION="$AWS_REGION" \
   -e DB_HOST="$DB_HOST" \
   -e DB_PORT="$DB_PORT" \
   -e DB_NAME="$DB_NAME" \
-  -e DB_USER="\$DB_USER" \
-  -e DB_PASS="\$DB_PASS" \
+  -e DB_USER="$DB_USER" \
+  -e DB_PASS="$DB_PASS" \
   "$FULL_IMAGE"
 
 echo "✅ Container $container_name deployed successfully!"
 EOF
 }
+
 
 
 
