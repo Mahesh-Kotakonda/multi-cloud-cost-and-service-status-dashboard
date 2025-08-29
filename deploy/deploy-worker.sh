@@ -137,10 +137,10 @@ if [ "$FAILED" -eq 1 ]; then
   echo "worker_deploy_status=failed" | tee -a "$GITHUB_OUTPUT"
   exit 1
 fi
-
+WORKER_PREVIOUS_IMAGE_NAME=$(echo "$WORKER_PREVIOUS_IMAGE" | awk -F/ '{print $NF}')
 # === Step 6: Success output ===
 DEPLOYED_CSV=$(IFS=,; echo "${SUCCESSFUL[*]}")
-echo "worker_previous_image=$WORKER_PREVIOUS_IMAGE" | tee -a "$GITHUB_OUTPUT"
+echo "worker_previous_image=$WORKER_PREVIOUS_IMAGE_NAME" | tee -a "$GITHUB_OUTPUT"
 echo "worker_current_image=$WORKER_IMAGE" | tee -a "$GITHUB_OUTPUT"
 echo "worker_deployed_instance_ids=$DEPLOYED_CSV" | tee -a "$GITHUB_OUTPUT"
 echo "worker_deploy_status=success" | tee -a "$GITHUB_OUTPUT"
