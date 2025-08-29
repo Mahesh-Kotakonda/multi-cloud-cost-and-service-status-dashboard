@@ -28,135 +28,44 @@ concurrency:
 
 jobs:
   ##########################
-  # Pre-check deployment
+  # Pre-deploy
   ##########################
-  pre-check:
+  pre-deploy:
     runs-on: self-hosted
     outputs:
-      can_deploy: ${{ steps.set-output.outputs.can_deploy }}
-      components: ${{ steps.parse-inputs.outputs.components }}
-      worker_version: ${{ steps.parse-inputs.outputs.worker_version }}
-      backend_version: ${{ steps.parse-inputs.outputs.backend_version }}
-      frontend_version: ${{ steps.parse-inputs.outputs.frontend_version }}
+      can_deploy: ${{ steps.pre.outputs.can_deploy }}
+      components: ${{ steps.pre.outputs.components }}
+      worker_version: ${{ steps.pre.outputs.worker_version }}
+      backend_version: ${{ steps.pre.outputs.backend_version }}
+      frontend_version: ${{ steps.pre.outputs.frontend_version }}
+      worker_image: ${{ steps.pre.outputs.worker_image }}
+      backend_image: ${{ steps.pre.outputs.backend_image }}
+      frontend_image: ${{ steps.pre.outputs.frontend_image }}
     steps:
-      - name: Check if deployment should run
-        id: set-output
-        run: |
-          CAN_DEPLOY=false
-          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            CAN_DEPLOY=true
-          fi
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.actor }}" = "Mahesh-Kotakonda" ]; then
-            CAN_DEPLOY=true
-          fi
-          echo "can_deploy=$CAN_DEPLOY" >> $GITHUB_OUTPUT
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Parse and validate inputs (manual only)
-        id: parse-inputs
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            COMPONENTS="${{ github.event.inputs.components }}"
-            WORKER_VER="${{ github.event.inputs.worker_version }}"
-            BACKEND_VER="${{ github.event.inputs.backend_version }}"
-            FRONTEND_VER="${{ github.event.inputs.frontend_version }}"
-
-            COMPONENTS=$(echo "$COMPONENTS" | tr '[:upper:]' '[:lower:]')
-
-            VALID_COMPONENTS=(all worker backend frontend)
-            for comp in $(echo $COMPONENTS | tr ',' ' '); do
-              if [[ ! " ${VALID_COMPONENTS[@]} " =~ " $comp " ]]; then
-                echo "Invalid component: $comp. Allowed: all, worker, backend, frontend."
-                exit 1
-              fi
-            done
-
-            if [[ "$COMPONENTS" == *"all"* && "$COMPONENTS" != "all" ]]; then
-              echo "If you want to deploy all components, you must set components=all only. Do not combine 'all' with others."
-              exit 1
-            fi
-
-            echo "Manual inputs received:"
-            echo "  components=$COMPONENTS"
-            echo "  worker_version=$WORKER_VER"
-            echo "  backend_version=$BACKEND_VER"
-            echo "  frontend_version=$FRONTEND_VER"
-          else
-            COMPONENTS=""
-            WORKER_VER=""
-            BACKEND_VER=""
-            FRONTEND_VER=""
-          fi
-
-          echo "components=$COMPONENTS" >> $GITHUB_OUTPUT
-          echo "worker_version=$WORKER_VER" >> $GITHUB_OUTPUT
-          echo "backend_version=$BACKEND_VER" >> $GITHUB_OUTPUT
-          echo "frontend_version=$FRONTEND_VER" >> $GITHUB_OUTPUT
-
-  ##########################
-  # Resolve Images
-  ##########################
-  resolve-images:
-    needs: pre-check
-    if: needs.pre-check.outputs.can_deploy == 'true'
-    runs-on: self-hosted
-    outputs:
-      worker_image: ${{ steps.resolve.outputs.worker_image }}
-      backend_image: ${{ steps.resolve.outputs.backend_image }}
-      frontend_image: ${{ steps.resolve.outputs.frontend_image }}
-    steps:
-      - name: Resolve images
-        id: resolve
-        run: |
-          IMAGE_REPO="multi-cloud-cost-and-service-status-dashboard-repo"
-          USER="${{ secrets.DOCKERHUB_USERNAME }}"
-  
-          WORKER_IMAGE=""
-          BACKEND_IMAGE=""
-          FRONTEND_IMAGE=""
-  
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            COMPONENTS="${{ needs.pre-check.outputs.components }}"
-  
-            if [[ "$COMPONENTS" == "all" || "$COMPONENTS" == *"worker"* ]]; then
-              TAG="${{ needs.pre-check.outputs.worker_version }}"
-              FULL_WORKER_IMAGE="$USER/$IMAGE_REPO:worker-$TAG"
-              WORKER_IMAGE="$(basename $FULL_WORKER_IMAGE)"  # take only repo:image:tag
-            fi
-  
-            if [[ "$COMPONENTS" == "all" || "$COMPONENTS" == *"backend"* ]]; then
-              TAG="${{ needs.pre-check.outputs.backend_version }}"
-              FULL_BACKEND_IMAGE="$USER/$IMAGE_REPO:backend-$TAG"
-              BACKEND_IMAGE="$(basename $FULL_BACKEND_IMAGE)"
-            fi
-  
-            if [[ "$COMPONENTS" == "all" || "$COMPONENTS" == *"frontend"* ]]; then
-              TAG="${{ needs.pre-check.outputs.frontend_version }}"
-              FULL_FRONTEND_IMAGE="$USER/$IMAGE_REPO:frontend-$TAG"
-              FRONTEND_IMAGE="$(basename $FULL_FRONTEND_IMAGE)"
-            fi
-          else
-            WORKER_IMAGE="$(basename ${{ github.event.client_payload.worker }})"
-            BACKEND_IMAGE="$(basename ${{ github.event.client_payload.backend }})"
-            FRONTEND_IMAGE="$(basename ${{ github.event.client_payload.frontend }})"
-          fi
-  
-          echo "Resolved images (repo and image only):"
-          echo "  Worker   : $WORKER_IMAGE"
-          echo "  Backend  : $BACKEND_IMAGE"
-          echo "  Frontend : $FRONTEND_IMAGE"
-  
-          echo "worker_image=$WORKER_IMAGE" >> $GITHUB_OUTPUT
-          echo "backend_image=$BACKEND_IMAGE" >> $GITHUB_OUTPUT
-          echo "frontend_image=$FRONTEND_IMAGE" >> $GITHUB_OUTPUT
-  
+      - name: Run pre-deploy script
+        id: pre
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          GITHUB_REF: ${{ github.ref }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          INPUT_COMPONENTS: ${{ github.event.inputs.components || '' }}
+          INPUT_WORKER_VERSION: ${{ github.event.inputs.worker_version || '' }}
+          INPUT_BACKEND_VERSION: ${{ github.event.inputs.backend_version || '' }}
+          INPUT_FRONTEND_VERSION: ${{ github.event.inputs.frontend_version || '' }}
+          CLIENT_PAYLOAD_WORKER: ${{ github.event.client_payload.worker || '' }}
+          CLIENT_PAYLOAD_BACKEND: ${{ github.event.client_payload.backend || '' }}
+          CLIENT_PAYLOAD_FRONTEND: ${{ github.event.client_payload.frontend || '' }}
+        run: ./.github/scripts/pre_deploy.sh
 
 
-  ##########################
-  # Deploy Worker
-  ##########################
+
   deploy_worker:
-    needs: [pre-check, resolve-images]
-    if: needs.pre-check.outputs.can_deploy == 'true' && needs.resolve-images.outputs.worker_image
+    needs: [pre-deploy]
+    if: needs.pre-check.outputs.can_deploy == 'true'
     runs-on: self-hosted
     environment: production
     env:
@@ -168,13 +77,17 @@ jobs:
       IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
       S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
       SSM_PARAM_NAME: myapp_database_credentials
+      PEM_PATH: ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
+  
+    outputs:
+      previous_image: ${{ steps.deploy.outputs.previous_image }}
+      current_image: ${{ steps.deploy.outputs.current_image }}
+      deployed_instance_ids: ${{ steps.deploy.outputs.deployed_instance_ids }}
+      deploy_status: ${{ steps.deploy.outputs.deploy_status }}
+  
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-  
-      - name: Print resolved worker image
-        run: |
-          echo "Resolved Worker Image: ${{ needs.resolve-images.outputs.worker_image }}"
   
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -183,128 +96,10 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
   
-      - name: Set worker image from resolve-images
-        run: |
-          if [ -z "${{ needs.resolve-images.outputs.worker_image }}" ]; then
-            echo "Skipping worker deployment: no worker image provided."
-            exit 0
-          fi
-          echo "Deploying Worker image: ${{ needs.resolve-images.outputs.worker_image }}"
-          echo "WORKER_IMAGE=${{ needs.resolve-images.outputs.worker_image }}" >> $GITHUB_ENV
-  
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-  
-      - name: Deploy worker to instances
-        run: |
-          PEM_PATH=~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
-  
-          echo "Downloading infra outputs..."
-          aws s3 cp "$S3_JSON_PATH" worker-outputs.json
-  
-          DB_HOST=$(jq -r '.db.endpoint | split(":")[0]' worker-outputs.json)
-          DB_NAME=$(jq -r '.db.name' worker-outputs.json)
-          INSTANCE_IDS=$(jq -r '.ec2_instance_ids[]' worker-outputs.json)
-  
-          SUCCESSFUL=()
-          FAILED=0
-          PREVIOUS_IMAGE=""
-  
-          # Fetch DB credentials from SSM Parameter Store
-          PARAM_VALUE=$(aws ssm get-parameter --name "$SSM_PARAM_NAME" --with-decryption --query "Parameter.Value" --output text)
-          DB_USER=$(echo $PARAM_VALUE | jq -r '.username')
-          DB_PASS=$(echo $PARAM_VALUE | jq -r '.password')
-  
-          for ID in $INSTANCE_IDS; do
-            IP=$(aws ec2 describe-instances --instance-ids $ID --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
-            echo "Checking previous worker container on instance $ID ($IP)..."
-  
-            # Check old production container named "worker"
-            OLD_IMAGE=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-              "docker inspect -f '{{.Config.Image}}' worker || echo ''")
-  
-            # Capture previous image from the first instance only
-            if [ -z "$PREVIOUS_IMAGE" ]; then
-              if [ -z "$OLD_IMAGE" ]; then
-                echo "No previous worker container found on $ID. First deployment."
-                PREVIOUS_IMAGE=$WORKER_IMAGE
-              else
-                echo "Previous worker container image on $ID: $OLD_IMAGE"
-                PREVIOUS_IMAGE=$OLD_IMAGE
-              fi
-            fi
-  
+      - name: Run worker deployment script
+        id: deploy
+        run: ./deploy/deploy_worker.sh "${{ needs.resolve-images.outputs.worker_image }}"
 
-            echo "Deploying worker_new to instance $ID with image $WORKER_IMAGE"
-            
-            ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" "
-              # Check if worker_new exists
-              if docker ps -a --format '{{.Names}}' | grep -q '^worker_new\$'; then
-                echo 'Found existing worker_new container. Removing...'
-                docker rm -f worker_new >/dev/null 2>&1 || true
-              else
-                echo 'No existing worker_new container found.'
-              fi
-            
-              # Login and run new container
-              echo '$DOCKERHUB_TOKEN' | docker login -u '$DOCKERHUB_USERNAME' --password-stdin
-              docker pull $DOCKERHUB_USERNAME/$WORKER_IMAGE
-              docker run -d --name worker_new \
-                -e AWS_ACCESS_KEY_ID='$AWS_ACCESS_KEY_ID' \
-                -e AWS_SECRET_ACCESS_KEY='$AWS_SECRET_ACCESS_KEY' \
-                -e AWS_REGION='$AWS_REGION' \
-                -e DB_HOST='$DB_HOST' \
-                -e DB_NAME='$DB_NAME' \
-                -e DB_USER='$DB_USER' \
-                -e DB_PASS='$DB_PASS' \
-                -e POLL_INTERVAL_SECONDS=60000 \
-                $DOCKERHUB_USERNAME/$WORKER_IMAGE
-            "
-
-  
-            sleep 20
-            STATUS=$(ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" \
-              "docker ps --filter 'name=worker_new' --filter 'status=running' | grep worker_new >/dev/null 2>&1; echo $?")
-  
-            if [ "$STATUS" -eq 0 ]; then
-              echo "Deployment succeeded on instance $ID"
-              SUCCESSFUL+=("$ID")
-            else
-              echo "Deployment failed on instance $ID"
-              echo "Fetching container logs before cleanup..."
-              ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" "docker logs worker_new || true"
-              echo "Removing failed container on $ID"
-              ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" "docker rm -f worker_new || true"
-              FAILED=1
-              break
-            fi
-          done
-  
-          # Rollback logic
-          if [ $FAILED -eq 1 ]; then
-            echo "One or more instances failed. Rolling back successful instances."
-            for ID in "${SUCCESSFUL[@]}"; do
-              IP=$(aws ec2 describe-instances --instance-ids $ID --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
-              echo "Removing worker_new container from $ID due to rollback."
-              ssh -o StrictHostKeyChecking=no -i "$PEM_PATH" ec2-user@"$IP" "docker rm -f worker_new || true"
-            done
-            exit 1
-          fi
-  
-          echo "All worker instances deployed successfully."
-  
-          # Convert instance IDs to comma-separated for GitHub output
-          DEPLOYED_INSTANCE_IDS=$(echo ${INSTANCE_IDS} | tr ' ' ',')
-  
-          # Export deployment summary as GitHub outputs
-          echo "previous_image=$PREVIOUS_IMAGE" >> $GITHUB_OUTPUT
-          echo "current_image=$WORKER_IMAGE" >> $GITHUB_OUTPUT
-          echo "deployed_instance_ids=$DEPLOYED_INSTANCE_IDS" >> $GITHUB_OUTPUT
-          echo "deploy_status=success" >> $GITHUB_OUTPUT
-  
 
 
 
@@ -313,7 +108,7 @@ jobs:
   # Deploy Backend
   ##########################
   deploy_backend:
-    needs: [pre-check, resolve-images, deploy_worker]
+    needs: [pre-deploy, deploy_worker]
     if: needs.pre-check.outputs.can_deploy == 'true' && (needs.resolve-images.outputs.backend_image != '')
     runs-on: self-hosted
     environment: production
