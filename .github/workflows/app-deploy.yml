@@ -130,6 +130,7 @@ jobs:
       backend_previous_image: ${{ steps.deploy_backend.outputs.backend_previous_image }}
       backend_deployed_at: ${{ steps.deploy_backend.outputs.backend_deployed_at }}
       backend_deployed_by: ${{ steps.deploy_backend.outputs.backend_deployed_by }}
+      backend_first_deployment: ${{ steps.deploy_backend.outputs.backend_first_deployment }} 
       backend_instance_ids: ${{ steps.deploy_backend.outputs.backend_instance_ids }}
     
     steps:
@@ -164,6 +165,7 @@ jobs:
       IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
       S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
       PEM_PATH: ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
+      BACKEND_FIRST_DEPLOYMENT: ${{ needs.deploy_backend.outputs.backend_first_deployment }}
       WORKER_INSTANCE_IDS: ${{ needs.deploy_worker.outputs.worker_deployed_instance_ids }}
       BACKEND_INSTANCE_IDS: ${{ needs.deploy_backend.outputs.backend_instance_ids }}  # Backend instance IDs
       BACKEND_INACTIVE_ENV: ${{ needs.deploy_backend.outputs.backend_inactive_env }}  # Backend inactive env
@@ -179,6 +181,7 @@ jobs:
       frontend_previous_image: ${{ steps.deploy_frontend.outputs.frontend_previous_image }}
       frontend_deployed_at: ${{ steps.deploy_frontend.outputs.frontend_deployed_at }}
       frontend_deployed_by: ${{ steps.deploy_frontend.outputs.frontend_deployed_by }}
+      backend_first_deployment: ${{ needs.deploy_backend.outputs.backend_first_deployment }}
       frontend_instance_ids: ${{ steps.deploy_frontend.outputs.frontend_instance_ids }}
   
     steps:
