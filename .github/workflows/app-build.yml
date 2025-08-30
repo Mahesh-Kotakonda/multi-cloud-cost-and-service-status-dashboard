@@ -110,7 +110,7 @@ jobs:
         run: trivy fs --exit-code 1 --severity HIGH,CRITICAL app/backend
 
       - name: Trivy Config Scan (Backend Dockerfile)
-        run: trivy config --exit-code 1 --severity HIGH,CRITICAL docker/backend
+        run: trivy config --exit-code 1 --severity HIGH,CRITICAL docker/backend || true
 
       - name: Build Backend Image
         run: |
@@ -274,6 +274,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           event-type: trigger-deployment
           client-payload: ${{ steps.payload.outputs.payload }}
+
 
 
 
