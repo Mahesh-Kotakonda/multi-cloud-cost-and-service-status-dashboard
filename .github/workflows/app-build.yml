@@ -147,7 +147,7 @@ jobs:
 
 
   build-backend:
-    needs: determine-services
+    needs: [determine-services, sonar-backend]
     if: needs.determine-services.outputs.build_backend == 'true' && (github.ref == 'refs/heads/main')
     runs-on: self-hosted
     concurrency:
@@ -195,7 +195,7 @@ jobs:
           docker push "$DOCKERHUB_USERNAME/$IMAGE_REPO:backend-${VERSION}"
 
   build-worker:
-    needs: determine-services
+    needs: [determine-services, sonar-worker]
     if: needs.determine-services.outputs.build_worker == 'true' && (github.ref == 'refs/heads/main')
     runs-on: self-hosted
     concurrency:
@@ -243,7 +243,7 @@ jobs:
           docker push "$DOCKERHUB_USERNAME/$IMAGE_REPO:worker-${VERSION}"
 
   build-frontend:
-    needs: determine-services
+    needs: [determine-services, sonar-frontend]
     if: needs.determine-services.outputs.build_frontend == 'true' && (github.ref == 'refs/heads/main')
     runs-on: self-hosted
     concurrency:
@@ -337,6 +337,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           event-type: trigger-deployment
           client-payload: ${{ steps.payload.outputs.payload }}
+
 
 
 
