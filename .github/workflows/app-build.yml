@@ -53,7 +53,7 @@ jobs:
           echo "build_backend=false" >> $GITHUB_OUTPUT
           echo "build_worker=false" >> $GITHUB_OUTPUT
           echo "build_frontend=false" >> $GITHUB_OUTPUT
-
+      
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             INPUT="${{ github.event.inputs.services }}"
             if [[ "$INPUT" == "all" ]]; then
@@ -70,6 +70,7 @@ jobs:
             [[ "${{ steps.changes.outputs.worker }}" == "true" ]] && echo "build_worker=true" >> $GITHUB_OUTPUT
             [[ "${{ steps.changes.outputs.frontend }}" == "true" ]] && echo "build_frontend=true" >> $GITHUB_OUTPUT
           fi
+
 
 # ---------------- SONARQUBE SCAN JOBS ---------------- #
 
@@ -287,3 +288,4 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           event-type: trigger-deployment
           client-payload: ${{ steps.payload.outputs.payload }}
+
