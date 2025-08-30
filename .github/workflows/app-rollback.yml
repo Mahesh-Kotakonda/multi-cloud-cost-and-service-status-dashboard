@@ -21,10 +21,21 @@ on:
         default: "all"
         type: string
 
+concurrency:
+  group: rollback-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  prepare_rollback:
-    name: Fetch & Validate Deployment JSON
+  #############################
+  # Pre-Rollback Validation
+  #############################
+  pre-rollback:
+    name: Validate Rollback
     runs-on: self-hosted
+    outputs:
+      can_rollback: ${{ steps.checks.outputs.can_rollback }}
+      deployment_key: ${{ steps.deployment_key.outputs.key }}
+      components: ${{ github.event.inputs.components }}
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -32,17 +43,32 @@ jobs:
       S3_BUCKET: multi-cloud-cost-and-service-status-dashboard
       DEPLOYMENT_JSON_PREFIX: deployments/
       INFRA_JSON_PATH: infra/multi-cloud-dashboard-outputs.json
+      ALLOWED_ACTOR: your-github-username   # <-- replace with your username
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
+      - name: User & Branch Validation
+        id: checks
+        run: |
+          ACTOR="${{ github.actor }}"
+          BRANCH="${{ github.ref }}"
+
+          if [ "$ACTOR" != "$ALLOWED_ACTOR" ]; then
+            echo "❌ Error: Rollback can only be triggered by $ALLOWED_ACTOR"
+            echo "can_rollback=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          if [ "$BRANCH" != "refs/heads/main" ]; then
+            echo "❌ Error: Rollback can only run on main branch."
+            echo "can_rollback=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "✅ Rollback validation passed."
+          echo "can_rollback=true" >> $GITHUB_OUTPUT
 
       - name: Validate Components Input
         run: |
@@ -53,13 +79,10 @@ jobs:
             exit 0
           fi
 
-          # Reject invalid cases like "all,frontend"
           if [[ "$COMPONENTS" == *"all"* ]]; then
             echo "❌ Error: 'all' cannot be combined with other components."
             exit 1
           fi
-
-          echo "✅ Components input format looks valid."
 
       - name: Determine Deployment JSON Key
         id: deployment_key
@@ -84,7 +107,7 @@ jobs:
                               --query 'reverse(sort_by(Contents,&LastModified))[0].Key' \
                               --output text)
             if [ -z "$DEPLOYMENT_KEY" ] || [ "$DEPLOYMENT_KEY" = "None" ]; then
-              echo "❌ Error: No deployment JSON found in S3 at prefix $DEPLOYMENT_JSON_PREFIX"
+              echo "❌ Error: No deployment JSON found in S3"
               exit 1
             fi
             echo "key=$DEPLOYMENT_KEY" >> $GITHUB_OUTPUT
@@ -93,39 +116,8 @@ jobs:
       - name: Download Deployment & Infra JSON
         run: |
           DEPLOYMENT_KEY="${{ steps.deployment_key.outputs.key }}"
-          echo "📥 Downloading deployment JSON: $DEPLOYMENT_KEY"
           aws s3 cp "s3://$S3_BUCKET/$DEPLOYMENT_KEY" ./latest-deployment.json
-
-          echo "📥 Downloading infra JSON: $INFRA_JSON_PATH"
           aws s3 cp "s3://$S3_BUCKET/$INFRA_JSON_PATH" ./infra-outputs.json
-
-      - name: Validate Components in Deployment JSON
-        run: |
-          COMPONENTS="${{ github.event.inputs.components }}"
-
-          if [ "$COMPONENTS" = "all" ]; then
-            echo "✅ Skipping component validation since 'all' selected."
-            exit 0
-          fi
-
-          IFS=',' read -ra USER_COMPONENTS <<< "$COMPONENTS"
-
-          for comp in "${USER_COMPONENTS[@]}"; do
-            # Check if component exists in JSON
-            EXISTS=$(jq -r --arg c "$comp" 'has($c)' ./latest-deployment.json)
-            if [ "$EXISTS" != "true" ]; then
-              echo "❌ Error: Component '$comp' not found in deployment JSON."
-              exit 1
-            fi
-
-            STATUS=$(jq -r --arg c "$comp" '.[$c].status' ./latest-deployment.json)
-            if [ "$STATUS" = "skipped" ]; then
-              echo "❌ Error: Component '$comp' has status=skipped in JSON. Cannot rollback."
-              exit 1
-            fi
-
-            echo "✅ Component '$comp' is valid (status=$STATUS)."
-          done
 
       - name: Upload JSONs as Artifacts
         uses: actions/upload-artifact@v4
@@ -135,24 +127,148 @@ jobs:
             latest-deployment.json
             infra-outputs.json
 
-  print_jsons:
-    name: Print Deployment and Infra JSONs
+  #############################
+  # Frontend Rollback
+  #############################
+  rollback_frontend:
+    needs: pre-rollback
+    if: needs.pre-rollback.outputs.can_rollback == 'true'
     runs-on: self-hosted
-    needs: prepare_rollback
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: us-east-1
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
+      S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
+      PEM_PATH: ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
+      SSM_PARAM_NAME: myapp_database_credentials
+    outputs:
+      frontend_status: ${{ steps.rollback.outputs.frontend_status }}
+      frontend_previous_image: ${{ steps.rollback.outputs.frontend_previous_image }}
+      frontend_current_image: ${{ steps.rollback.outputs.frontend_current_image }}
+      frontend_instance_ids: ${{ steps.rollback.outputs.frontend_instance_ids }}
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Download JSON Artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
         with:
           name: rollback-jsons
           path: ./json-files
-
-      - name: Print JSON files
+      - name: Rollback Frontend
+        id: rollback
         run: |
-          echo "===== Deployment JSON ====="
-          cat ./json-files/latest-deployment.json
-          echo ""
-          echo "===== Infra JSON ====="
-          cat ./json-files/infra-outputs.json
+          ./deploy/rollback-frontend.sh \
+            --deployment-json ./json-files/latest-deployment.json \
+            --infra-json ./json-files/infra-outputs.json
+
+  #############################
+  # Backend Rollback
+  #############################
+  rollback_backend:
+    needs: rollback_frontend
+    if: needs.pre-rollback.outputs.can_rollback == 'true'
+    runs-on: self-hosted
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: us-east-1
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
+      S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
+      PEM_PATH: ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
+      SSM_PARAM_NAME: myapp_database_credentials
+    outputs:
+      backend_status: ${{ steps.rollback.outputs.backend_status }}
+      backend_previous_image: ${{ steps.rollback.outputs.backend_previous_image }}
+      backend_current_image: ${{ steps.rollback.outputs.backend_current_image }}
+      backend_instance_ids: ${{ steps.rollback.outputs.backend_instance_ids }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: rollback-jsons
+          path: ./json-files
+      - name: Rollback Backend
+        id: rollback
+        run: |
+          ./deploy/rollback-backend.sh \
+            --deployment-json ./json-files/latest-deployment.json \
+            --infra-json ./json-files/infra-outputs.json
+
+  #############################
+  # Worker Rollback
+  #############################
+  rollback_worker:
+    needs: rollback_backend
+    if: needs.pre-rollback.outputs.can_rollback == 'true'
+    runs-on: self-hosted
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: us-east-1
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
+      PEM_PATH: ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
+      SSM_PARAM_NAME: myapp_database_credentials
+    outputs:
+      worker_status: ${{ steps.rollback.outputs.worker_status }}
+      worker_previous_image: ${{ steps.rollback.outputs.worker_previous_image }}
+      worker_current_image: ${{ steps.rollback.outputs.worker_current_image }}
+      worker_instance_ids: ${{ steps.rollback.outputs.worker_instance_ids }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: rollback-jsons
+          path: ./json-files
+      - name: Rollback Worker
+        id: rollback
+        run: |
+          ./deploy/rollback-worker.sh \
+            --deployment-json ./json-files/latest-deployment.json
+
+  #############################
+  # Metadata Rollback
+  #############################
+  rollback_metadata:
+    needs: [rollback_worker, rollback_backend, rollback_frontend]
+    if: needs.pre-rollback.outputs.can_rollback == 'true'
+    runs-on: self-hosted
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: us-east-1
+      DEPLOY_METADATA_S3_BUCKET: multi-cloud-cost-and-service-status-dashboard
+
+      # Worker outputs
+      WORKER_STATUS: ${{ needs.rollback_worker.outputs.worker_status }}
+      WORKER_CURRENT_IMAGE: ${{ needs.rollback_worker.outputs.worker_current_image }}
+      WORKER_PREVIOUS_IMAGE: ${{ needs.rollback_worker.outputs.worker_previous_image }}
+      WORKER_INSTANCE_IDS: ${{ needs.rollback_worker.outputs.worker_instance_ids }}
+
+      # Backend outputs
+      BACKEND_STATUS: ${{ needs.rollback_backend.outputs.backend_status }}
+      BACKEND_CURRENT_IMAGE: ${{ needs.rollback_backend.outputs.backend_current_image }}
+      BACKEND_PREVIOUS_IMAGE: ${{ needs.rollback_backend.outputs.backend_previous_image }}
+      BACKEND_INSTANCE_IDS: ${{ needs.rollback_backend.outputs.backend_instance_ids }}
+
+      # Frontend outputs
+      FRONTEND_STATUS: ${{ needs.rollback_frontend.outputs.frontend_status }}
+      FRONTEND_CURRENT_IMAGE: ${{ needs.rollback_frontend.outputs.frontend_current_image }}
+      FRONTEND_PREVIOUS_IMAGE: ${{ needs.rollback_frontend.outputs.frontend_previous_image }}
+      FRONTEND_INSTANCE_IDS: ${{ needs.rollback_frontend.outputs.frontend_instance_ids }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: rollback-jsons
+          path: ./json-files
+      - name: Finalize Rollback Metadata
+        run: |
+          python3 ./deploy/rollback_metadata.py \
+            --deployment-json ./json-files/latest-deployment.json \
+            --infra-json ./json-files/infra-outputs.json
