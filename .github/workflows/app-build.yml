@@ -53,7 +53,7 @@ jobs:
           echo "build_backend=false" >> $GITHUB_OUTPUT
           echo "build_worker=false" >> $GITHUB_OUTPUT
           echo "build_frontend=false" >> $GITHUB_OUTPUT
-      
+
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             INPUT="${{ github.event.inputs.services }}"
             if [[ "$INPUT" == "all" ]]; then
@@ -61,15 +61,28 @@ jobs:
               echo "build_worker=true" >> $GITHUB_OUTPUT
               echo "build_frontend=true" >> $GITHUB_OUTPUT
             else
-              [[ "$INPUT" == *"backend"* ]] && echo "build_backend=true" >> $GITHUB_OUTPUT
-              [[ "$INPUT" == *"worker"* ]] && echo "build_worker=true" >> $GITHUB_OUTPUT
-              [[ "$INPUT" == *"frontend"* ]] && echo "build_frontend=true" >> $GITHUB_OUTPUT
+              if [[ "$INPUT" == *"backend"* ]]; then
+                echo "build_backend=true" >> $GITHUB_OUTPUT
+              fi
+              if [[ "$INPUT" == *"worker"* ]]; then
+                echo "build_worker=true" >> $GITHUB_OUTPUT
+              fi
+              if [[ "$INPUT" == *"frontend"* ]]; then
+                echo "build_frontend=true" >> $GITHUB_OUTPUT
+              fi
             fi
           else
-            [[ "${{ steps.changes.outputs.backend }}" == "true" ]] && echo "build_backend=true" >> $GITHUB_OUTPUT
-            [[ "${{ steps.changes.outputs.worker }}" == "true" ]] && echo "build_worker=true" >> $GITHUB_OUTPUT
-            [[ "${{ steps.changes.outputs.frontend }}" == "true" ]] && echo "build_frontend=true" >> $GITHUB_OUTPUT
+            if [[ "${{ steps.changes.outputs.backend }}" == "true" ]]; then
+              echo "build_backend=true" >> $GITHUB_OUTPUT
+            fi
+            if [[ "${{ steps.changes.outputs.worker }}" == "true" ]]; then
+              echo "build_worker=true" >> $GITHUB_OUTPUT
+            fi
+            if [[ "${{ steps.changes.outputs.frontend }}" == "true" ]]; then
+              echo "build_frontend=true" >> $GITHUB_OUTPUT
+            fi
           fi
+
 
 
 # ---------------- SONARQUBE SCAN JOBS ---------------- #
@@ -288,4 +301,5 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           event-type: trigger-deployment
           client-payload: ${{ steps.payload.outputs.payload }}
+
 
