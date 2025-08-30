@@ -119,7 +119,7 @@ jobs:
                        -f docker/backend/Dockerfile .
 
       - name: Trivy Image Scan (Backend)
-        run: trivy image --exit-code 1 --severity HIGH,CRITICAL "$DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest"
+        run: trivy image --scanners vuln --exit-code 1 --severity HIGH,CRITICAL "$DOCKERHUB_USERNAME/$IMAGE_REPO:backend-latest"
 
       - uses: docker/login-action@v3
         with:
@@ -167,7 +167,7 @@ jobs:
                        -f docker/worker/Dockerfile .
 
       - name: Trivy Image Scan (Worker)
-        run: trivy image --exit-code 1 --severity HIGH,CRITICAL "$DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest"
+        run: trivy image --scanners vuln --exit-code 1 --severity HIGH,CRITICAL "$DOCKERHUB_USERNAME/$IMAGE_REPO:worker-latest"
 
       - uses: docker/login-action@v3
         with:
@@ -215,7 +215,7 @@ jobs:
                        -f docker/frontend/Dockerfile .
 
       - name: Trivy Image Scan (Frontend)
-        run: trivy image --exit-code 1 --severity HIGH,CRITICAL "$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
+        run: trivy image --scanners vuln --exit-code 1 --severity HIGH,CRITICAL "$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-latest"
 
       - uses: docker/login-action@v3
         with:
@@ -274,3 +274,4 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           event-type: trigger-deployment
           client-payload: ${{ steps.payload.outputs.payload }}
+
