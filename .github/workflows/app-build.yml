@@ -145,14 +145,18 @@ jobs:
       - name: Verify SonarScanner CLI
         run: sonar-scanner --version
   
-      - name: Run SonarQube Scan (Frontend)
+      - name: Run SonarQube Scan (Frontend - Optimized)
         run: |
           sonar-scanner \
             -Dsonar.projectKey=frontend-service \
             -Dsonar.projectName='Frontend Service' \
             -Dsonar.sources=app/frontend \
             -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
-            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+            -Dsonar.token=${{ secrets.SONAR_TOKEN }} \
+            -Dsonar.scm.disabled=true \
+            -Dsonar.coverage.jacoco.xmlReportPaths=none \
+            -Dsonar.javascript.node.maxspace=512
+
 
 
 # ---------------- DOCKER BUILD JOBS ---------------- #
@@ -315,6 +319,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           event-type: trigger-deployment
           client-payload: ${{ steps.payload.outputs.payload }}
+
 
 
 
