@@ -79,13 +79,10 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
-
       - name: Add SonarScanner to PATH
         run: echo "/opt/sonar-scanner/bin" >> $GITHUB_PATH
-
       - name: Verify SonarScanner CLI
         run: sonar-scanner --version
-
       - name: Run SonarQube Scan (Backend)
         run: sonar-scanner \
               -Dsonar.projectKey=backend-service \
@@ -100,13 +97,10 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
-
       - name: Add SonarScanner to PATH
         run: echo "/opt/sonar-scanner/bin" >> $GITHUB_PATH
-
       - name: Verify SonarScanner CLI
         run: sonar-scanner --version
-
       - name: Run SonarQube Scan (Worker)
         run: sonar-scanner \
               -Dsonar.projectKey=worker-service \
@@ -121,13 +115,10 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
-
       - name: Add SonarScanner to PATH
         run: echo "/opt/sonar-scanner/bin" >> $GITHUB_PATH
-
       - name: Verify SonarScanner CLI
         run: sonar-scanner --version
-
       - name: Run SonarQube Scan (Frontend)
         run: sonar-scanner \
               -Dsonar.projectKey=frontend-service \
