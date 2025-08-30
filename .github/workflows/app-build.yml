@@ -107,10 +107,10 @@ jobs:
           trivy --version
 
       - name: Trivy FS Scan (Backend Source Code)
-        run: trivy fs --exit-code 1 --severity HIGH,CRITICAL app/backend || true
+        run: trivy fs --exit-code 1 --severity HIGH,CRITICAL app/backend
 
       - name: Trivy Config Scan (Backend Dockerfile)
-        run: trivy config --exit-code 1 --severity HIGH,CRITICAL docker/backend || true
+        run: trivy config --exit-code 1 --severity HIGH,CRITICAL docker/backend
 
       - name: Build Backend Image
         run: |
@@ -155,10 +155,10 @@ jobs:
           trivy --version
 
       - name: Trivy FS Scan (Worker Source Code)
-        run: trivy fs --exit-code 1 --severity HIGH,CRITICAL app/worker || true
+        run: trivy fs --exit-code 1 --severity HIGH,CRITICAL app/worker
 
       - name: Trivy Config Scan (Worker Dockerfile)
-        run: trivy config --exit-code 1 --severity HIGH,CRITICAL docker/worker || true
+        run: trivy config --exit-code 1 --severity HIGH,CRITICAL docker/worker
 
       - name: Build Worker Image
         run: |
@@ -203,10 +203,10 @@ jobs:
           trivy --version
 
       - name: Trivy FS Scan (Frontend Source Code)
-        run: trivy fs --exit-code 1 --severity HIGH,CRITICAL app/frontend || true
+        run: trivy fs --exit-code 1 --severity HIGH,CRITICAL app/frontend
 
       - name: Trivy Config Scan (Frontend Dockerfile)
-        run: trivy config --exit-code 1 --severity HIGH,CRITICAL docker/frontend || true
+        run: trivy config --exit-code 1 --severity HIGH,CRITICAL docker/frontend
 
       - name: Build Frontend Image
         run: |
@@ -274,5 +274,6 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           event-type: trigger-deployment
           client-payload: ${{ steps.payload.outputs.payload }}
+
 
 
