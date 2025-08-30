@@ -83,6 +83,71 @@ jobs:
             fi
           fi
 
+# ---------------- SONARQUBE SCAN JOBS ---------------- #
+
+  sonar-backend:
+    needs: determine-services
+    if: needs.determine-services.outputs.build_backend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Verify SonarScanner CLI
+        run: sonar-scanner --version
+
+      - name: Run SonarQube Scan (Backend)
+        run: sonar-scanner \
+              -Dsonar.projectKey=backend \
+              -Dsonar.projectName=backend \
+              -Dsonar.sources=app/backend \
+              -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
+              -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+
+  sonar-worker:
+    needs: determine-services
+    if: needs.determine-services.outputs.build_worker == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Verify SonarScanner CLI
+        run: sonar-scanner --version
+
+      - name: Run SonarQube Scan (Worker)
+        run: sonar-scanner \
+              -Dsonar.projectKey=worker \
+              -Dsonar.projectName=worker \
+              -Dsonar.sources=app/worker \
+              -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
+              -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+
+  sonar-frontend:
+    needs: determine-services
+    if: needs.determine-services.outputs.build_frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Verify SonarScanner CLI
+        run: sonar-scanner --version
+
+      - name: Run SonarQube Scan (Frontend)
+        run: sonar-scanner \
+              -Dsonar.projectKey=frontend \
+              -Dsonar.projectName=frontend \
+              -Dsonar.sources=app/frontend \
+              -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
+              -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+
+# ---------------- DOCKER BUILD JOBS ---------------- #
+# (No changes needed here, keep your build-backend, build-worker, build-frontend jobs as-is)
+# ---------------- DEPLOYMENT TRIGGER ---------------- #
+# (Keep the trigger-deployment job as-is)
+
+
   build-backend:
     needs: determine-services
     if: needs.determine-services.outputs.build_backend == 'true' && (github.ref == 'refs/heads/main')
@@ -274,6 +339,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           event-type: trigger-deployment
           client-payload: ${{ steps.payload.outputs.payload }}
+
 
 
 
