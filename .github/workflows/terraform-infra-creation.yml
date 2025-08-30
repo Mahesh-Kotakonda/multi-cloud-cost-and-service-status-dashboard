@@ -1,9 +1,6 @@
-# This workflow manages the Terraform infrastructure for the project.
 name: Infrastructure Creation
 
 on:
-  # This section triggers the workflow on both pull requests and pushes to the main branch.
-  # The `paths` filter ensures the workflow only runs if files within infra/terraform change.
   pull_request:
     branches:
       - main
@@ -14,17 +11,11 @@ on:
       - main
     paths:
       - 'infra/terraform/**'
-  # This new section allows the workflow to be triggered manually from the GitHub Actions UI.
   workflow_dispatch:
 
-# Define a single job named 'terraform' to handle all steps.
 jobs:
   terraform:
-    # Use a self-hosted runner as specified.
     runs-on: self-hosted
-
-    # Set environment variables for AWS credentials to be used in all steps.
-    # The secrets must be configured in your GitHub repository settings.
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -34,15 +25,27 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # This step configures the AWS credentials from the environment variables.
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-          
-      # All subsequent steps will use this working directory
+
+      # Install Trivy for Terraform scanning
+      - name: Install Trivy
+        run: |
+          if ! command -v trivy &> /dev/null; then
+            curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh
+            sudo mv ./bin/trivy /usr/local/bin/
+          fi
+          trivy --version
+
+      # Scan Terraform configuration
+      - name: Trivy Terraform Config Scan
+        run: |
+          trivy config --exit-code 1 --severity HIGH,CRITICAL infra/terraform
+
       - name: Terraform Init
         id: init
         working-directory: infra/terraform
@@ -56,24 +59,14 @@ jobs:
       - name: Terraform Plan
         id: plan
         working-directory: infra/terraform
-        # Save the plan to a file to be used in the apply step.
         run: terraform plan -no-color -out=tfplan
-        
-        # Delete old JSON file from S3 before apply
+
       - name: Delete old outputs JSON from S3
         run: |
           aws s3 rm s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
-          
-      # This step runs when a manual trigger (workflow_dispatch) is used or on a push to the main branch,
-      # but only if the user is the specified GitHub actor.
+
       - name: Terraform Apply
         id: apply
         if: (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && github.actor == 'Mahesh-Kotakonda'
         working-directory: infra/terraform
-        # Apply the previously created plan. The -auto-approve flag is used for automation.
         run: terraform apply -auto-approve tfplan
-
-
-
-
-
