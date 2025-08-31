@@ -30,6 +30,41 @@ locals {
   db_creds = jsondecode(data.aws_ssm_parameter.db_creds.value)
 }
 
+
+
+
+
+# ===== Insecure Security Group (for scanning demo) =====
+resource "aws_security_group" "insecure_demo" {
+  name        = "${var.project_name}-insecure-sg"
+  description = "⚠️ Allows unrestricted SSH ingress (for scanning test only)"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"] # ❌ Security hotspot: open SSH to the world
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name    = "${var.project_name}-insecure-sg"
+    Purpose = "Scanner demo"
+  }
+}
+
+
+
+
+
+
 # ===== VPC =====
 module "vpc" {
   source               = "./modules/vpc"
