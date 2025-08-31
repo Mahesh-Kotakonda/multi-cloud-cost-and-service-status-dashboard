@@ -36,6 +36,13 @@ jobs:
             -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
             -Dsonar.login=${{ secrets.SONAR_TOKEN }}
 
+      - name: Check SonarQube Quality Gate
+        id: sonar-quality-gate
+        uses: sonarsource/sonarqube-quality-gate-action@v1.1.0
+        with:
+          host-url: ${{ secrets.SONAR_HOST_URL }}
+          login: ${{ secrets.SONAR_TOKEN }}
+
   # ---------------- TRIVY SCAN ---------------- #
   trivy-scan:
     runs-on: self-hosted
