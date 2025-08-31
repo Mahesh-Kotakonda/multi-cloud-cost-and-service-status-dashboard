@@ -39,9 +39,10 @@ jobs:
       - name: Check SonarQube Quality Gate
         id: sonar-quality-gate
         uses: sonarsource/sonarqube-quality-gate-action@v1.1.0
-        with:
-          host-url: ${{ secrets.SONAR_HOST_URL }}
-          login: ${{ secrets.SONAR_TOKEN }}
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
 
   # ---------------- TRIVY SCAN ---------------- #
   trivy-scan:
@@ -109,4 +110,5 @@ jobs:
         if: (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && github.actor == 'Mahesh-Kotakonda'
         working-directory: infra/terraform
         run: terraform apply -auto-approve tfplan
+
 
