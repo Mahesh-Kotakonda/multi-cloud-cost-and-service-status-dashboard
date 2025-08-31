@@ -60,10 +60,10 @@ jobs:
           trivy --version
 
       - name: Trivy FS Scan (Terraform Source)
-        run: trivy fs --exit-code 1 --severity HIGH,CRITICAL infra/terraform || true
+        run: trivy fs --exit-code 1 --severity HIGH,CRITICAL infra/terraform
 
       - name: Trivy Config Scan (Terraform Config)
-        run: trivy config --exit-code 1 --severity HIGH,CRITICAL infra/terraform || true
+        run: trivy config --exit-code 1 --severity HIGH,CRITICAL infra/terraform
 
   # ---------------- TERRAFORM JOB ---------------- #
   terraform:
@@ -109,3 +109,4 @@ jobs:
         if: (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && github.actor == 'Mahesh-Kotakonda'
         working-directory: infra/terraform
         run: terraform apply -auto-approve tfplan
+
