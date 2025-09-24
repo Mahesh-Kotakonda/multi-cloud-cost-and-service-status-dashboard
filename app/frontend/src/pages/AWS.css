@@ -1,84 +1,125 @@
 .aws-dashboard {
   display: flex;
-  gap: 20px;
-  justify-content: flex-start;
-  align-items: flex-start;
-  flex-wrap: wrap;
-  padding: 20px;
-  font-family: Arial, sans-serif;
+  flex-direction: row;
+  height: calc(100vh - 120px); /* full height minus header */
+  overflow: hidden;
+  background: #f3f4f6; /* gray-100 */
+  font-family: "Segoe UI", Tahoma, sans-serif;
+  gap: 16px;
+  padding: 16px;
+  box-sizing: border-box;
 }
 
-/* Sections */
-.section {
-  background: #f9f9f9;
-  padding: 15px;
-  border-radius: 10px;
-  flex: 1 1 400px;
-  min-width: 350px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+/* Split panels */
+.split-panel {
+  flex: 1;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.08);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.ec2-panel {
+  background: linear-gradient(180deg, #f9fafb, #eef2ff);
+}
+
+.cost-panel {
+  background: linear-gradient(180deg, #f9fafb, #ecfdf5);
+}
+
+/* Headings */
+h2 {
+  font-size: 18px;
+  margin-bottom: 12px;
+  font-weight: 600;
 }
 
 /* Labels */
-.section label {
+label {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 8px;
   display: block;
-  margin: 10px 0;
-  font-weight: bold;
 }
 
-/* EC2 Cards */
+select {
+  margin-left: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+select:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37,99,235,0.2);
+}
+
+/* EC2 */
+.ec2-summary {
+  margin: 12px 0;
+  font-size: 14px;
+  color: #374151;
+  font-weight: 500;
+}
+
 .ec2-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 12px;
   margin-top: 10px;
 }
 
 .ec2-card {
   background: #fff;
-  padding: 10px;
+  padding: 12px;
   border-radius: 8px;
   text-align: center;
-  font-size: 14px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
-.status-running { color: green; }
-.status-stopped { color: orange; }
-.status-terminated { color: red; }
+.status-running { color: #16a34a; font-weight: 600; }
+.status-stopped { color: #f59e0b; font-weight: 600; }
+.status-terminated { color: #dc2626; font-weight: 600; }
 
-/* Cost Cards */
+/* Cost */
 .service-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 10px;
-  margin-top: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
 }
 
 .service-card {
   background: #fff;
-  padding: 10px;
+  padding: 14px;
   border-radius: 8px;
-  font-size: 14px;
   text-align: center;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
 }
 
-/* Headings */
-h2 {
-  margin-bottom: 10px;
-  font-size: 18px;
+.service-card h4 {
+  font-size: 15px;
+  margin-bottom: 6px;
+  font-weight: 600;
 }
 
-/* Summary */
-.ec2-summary {
-  margin: 10px 0;
-  font-size: 14px;
-  font-weight: 500;
+.cost-amount {
+  font-size: 16px;
+  font-weight: bold;
+  color: #2563eb;
+  margin-top: 4px;
 }
 
 /* Loading */
 .loading {
-  padding: 50px;
+  padding: 60px;
   font-size: 16px;
   text-align: center;
 }
