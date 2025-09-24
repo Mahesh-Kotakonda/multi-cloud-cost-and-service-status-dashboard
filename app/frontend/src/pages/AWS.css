@@ -200,10 +200,11 @@ select:focus {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: 58px;          /* 🔽 reduced ~4% */
+  min-height: 54px;          /* 🔽 reduced ~10% */
   border: 1px solid #e5e7eb;
   box-shadow: 0 2px 4px rgba(0,0,0,0.08);
 }
+
 
 
 .service-card h5 {
