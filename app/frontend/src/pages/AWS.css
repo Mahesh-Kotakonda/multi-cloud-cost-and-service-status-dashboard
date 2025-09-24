@@ -101,27 +101,31 @@ select:focus {
 .status-stopped { color: #f59e0b; font-weight: 600; }
 .status-terminated { color: #dc2626; font-weight: 600; }
 
-/* Cost */
+
+/* Total Cost Card */
 .total-cost-card {
-  background: #1d4ed8; /* blue-700 */
-  color: #fff;
+  background: linear-gradient(135deg, #f3f4f6, #e5e7eb); /* neutral gradient */
+  color: #111827; /* almost black */
   padding: 18px;
   border-radius: 10px;
   text-align: center;
   margin: 14px 0;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  border: 1px solid #d1d5db; /* light gray border */
 }
 
 .total-cost-amount {
-  font-size: 22px;
+  font-size: 26px;
   font-weight: bold;
   margin: 6px 0;
+  color: #1e3a8a; /* dark blue accent */
 }
 
 .total-cost-month {
   font-size: 13px;
-  opacity: 0.9;
+  opacity: 0.8;
 }
+
 
 .service-cards {
   display: grid;
