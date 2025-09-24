@@ -1,7 +1,7 @@
 .aws-dashboard {
   display: flex;
   flex-direction: row;
-  height: calc(70vh - 90px); /* reduced ~30% height */
+  height: calc(70vh - 90px);
   overflow: hidden;
   background: #f3f4f6;
   font-family: "Segoe UI", Tahoma, sans-serif;
@@ -15,12 +15,12 @@
   flex: 1;
   background: #ffffff;
   border-radius: 10px;
-  padding: 14px;
+  padding: 16px;
   box-shadow: 0 2px 6px rgba(0,0,0,0.08);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  min-height: 0; /* allows flex children to shrink */
+  min-height: 0;
 }
 
 .ec2-panel {
@@ -33,20 +33,20 @@
 
 /* Headings */
 h2 {
-  font-size: 16px;
-  margin-bottom: 8px;
+  font-size: 18px;
+  margin-bottom: 10px;
   font-weight: 600;
 }
 
 h3 {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   margin-bottom: 6px;
 }
 
 h4.breakdown-title {
-  margin-top: 10px;
-  font-size: 13px;
+  margin-top: 12px;
+  font-size: 14px;
   font-weight: 600;
   color: #374151;
 }
@@ -54,18 +54,18 @@ h4.breakdown-title {
 /* Labels */
 label {
   font-weight: 600;
-  font-size: 12px;
+  font-size: 13px;
   margin-bottom: 6px;
   display: block;
 }
 
 select {
   margin-left: 6px;
-  padding: 4px 8px;
+  padding: 5px 9px;
   border-radius: 5px;
   border: 1px solid #d1d5db;
   background: #fff;
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
 }
 
@@ -77,38 +77,42 @@ select:focus {
 
 /* EC2 Summary */
 .ec2-summary {
-  margin: 6px 0;
-  font-size: 12px;
+  margin: 8px 0;
+  font-size: 13px;
   color: #374151;
   font-weight: 500;
 }
 
-/* EC2 Cards - auto-fit bigger inside smaller panel */
+/* EC2 Cards */
 .ec2-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); /* bigger boxes */
-  gap: 10px;
-  margin-top: 8px;
-  flex: 1; /* fill vertical space */
+  gap: 12px;
+  margin-top: 10px;
+  flex: 1;
 }
+.ec2-cards.ec2-count-3 { grid-template-columns: repeat(3, 1fr); }
+.ec2-cards.ec2-count-4 { grid-template-columns: repeat(4, 1fr); }
+.ec2-cards.ec2-count-5 { grid-template-columns: repeat(5, 1fr); }
+.ec2-cards.ec2-count-2 { grid-template-columns: repeat(2, 1fr); }
+.ec2-cards.ec2-count-1 { grid-template-columns: 1fr; }
 
 .ec2-card {
   background: #fff;
-  padding: 12px;
+  padding: 14px;
   border-radius: 8px;
   text-align: center;
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  font-size: 12px;
+  font-size: 13px;
   display: flex;
   flex-direction: column;
   justify-content: center;
 }
 
 .ec2-card h4 {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: #1f2937;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .status-group {
@@ -118,14 +122,13 @@ select:focus {
   align-items: center;
 }
 
-/* Status badges */
+/* Status badges - tighter padding */
 .badge {
   display: inline-block;
-  padding: 4px 8px;
+  padding: 2px 6px;
   border-radius: 6px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  min-width: 90px;
   text-align: center;
 }
 
@@ -148,39 +151,39 @@ select:focus {
 .total-cost-card {
   background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
   color: #111827;
-  padding: 12px;
+  padding: 14px;
   border-radius: 8px;
   text-align: center;
-  margin: 8px 0;
+  margin: 10px 0;
   box-shadow: 0 1px 5px rgba(0,0,0,0.12);
   border: 1px solid #d1d5db;
   flex-shrink: 0;
 }
 
 .total-cost-amount {
-  font-size: 20px;
+  font-size: 22px;
   font-weight: bold;
-  margin: 4px 0;
+  margin: 6px 0;
   color: #1e3a8a;
 }
 
 .total-cost-month {
-  font-size: 11px;
+  font-size: 12px;
   opacity: 0.8;
 }
 
-/* Service breakdown - auto-fit larger */
+/* Service breakdown */
 .service-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 10px;
-  margin-top: 6px;
-  flex: 1; /* fill available space */
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+  flex: 1;
 }
 
 .service-card {
   background: #fff;
-  padding: 10px;
+  padding: 12px;
   border-radius: 6px;
   text-align: center;
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
@@ -190,13 +193,13 @@ select:focus {
 }
 
 .service-card h5 {
-  font-size: 12px;
-  margin-bottom: 2px;
+  font-size: 13px;
+  margin-bottom: 4px;
   font-weight: 600;
 }
 
 .cost-amount {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: bold;
   color: #2563eb;
 }
@@ -204,6 +207,6 @@ select:focus {
 /* Loading */
 .loading {
   padding: 30px;
-  font-size: 14px;
+  font-size: 15px;
   text-align: center;
 }
