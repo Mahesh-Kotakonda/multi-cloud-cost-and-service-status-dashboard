@@ -36,7 +36,6 @@ function AWS() {
       ? cloudData.ec2.filter((i) => i.az === "TOTAL" || i.az === "ALL")
       : cloudData.ec2.filter((i) => i.region === selectedRegion);
 
-  // EC2 Summary Paragraph
   const getEC2Summary = (data) => {
     const total = data.find((d) => d.az === "TOTAL" || d.az === "ALL") || {};
     return selectedRegion === "ALL"
@@ -44,10 +43,8 @@ function AWS() {
       : `Region ${selectedRegion} has ${total.running || 0} running, ${total.stopped || 0} stopped, and ${total.terminated || 0} terminated instances.`;
   };
 
-  // Unique regions for dropdown
   const regions = cloudData.ec2.filter((i) => i.az === "TOTAL").map((i) => i.region);
 
-  // Month dropdown
   const monthNames = [
     "January","February","March","April","May","June",
     "July","August","September","October","November","December"
@@ -62,6 +59,9 @@ function AWS() {
     const [year, month] = monthYear.split("-");
     return `${monthNames[parseInt(month) - 1]} ${year}`;
   };
+
+  // Calculate total cost for month
+  const totalCost = costsFiltered.reduce((acc, c) => acc + c.total_amount, 0);
 
   return (
     <div className="aws-dashboard">
@@ -114,14 +114,24 @@ function AWS() {
           </select>
         </label>
 
+        {/* Highlight total cost */}
+        <div className="total-cost-card">
+          <h3>Total Cost</h3>
+          <p className="total-cost-amount">${totalCost.toLocaleString()}</p>
+          <span className="total-cost-month">{formatMonthName(selectedMonth)}</span>
+        </div>
+
+        {/* Breakdown by service */}
+        <h4 className="breakdown-title">Service Breakdown</h4>
         <div className="service-cards">
-          {costsFiltered.filter((c) => c.total_amount > 0).map((c, idx) => (
-            <div key={idx} className="service-card">
-              <h4>{c.service}</h4>
-              <p>Month: {formatMonthName(c.month_year)}</p>
-              <p className="cost-amount">${c.total_amount.toLocaleString()}</p>
-            </div>
-          ))}
+          {costsFiltered
+            .filter((c) => c.total_amount > 0)
+            .map((c, idx) => (
+              <div key={idx} className="service-card">
+                <h5>{c.service}</h5>
+                <p className="cost-amount">${c.total_amount.toLocaleString()}</p>
+              </div>
+            ))}
         </div>
       </section>
     </div>
