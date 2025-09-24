@@ -1,16 +1,20 @@
-.cloud-selector-container {
-  margin: 20px 0 30px 20px; /* below header, left aligned */
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  max-width: 300px;
+.cloud-selector-wrapper {
+  margin: 24px auto; /* centers below header */
+  text-align: center;
 }
 
 .cloud-description {
   font-size: 0.95rem;
   color: #374151; /* gray-700 */
-  margin: 0;
-  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.cloud-selector-container {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 260px;
+  text-align: left;
 }
 
 .cloud-label {
@@ -22,12 +26,12 @@
 .cloud-select {
   padding: 10px 14px;
   border-radius: 8px;
-  border: 1px solid #d1d5db; /* gray-300 */
+  border: 1px solid #d1d5db;
   font-size: 0.95rem;
   font-weight: 500;
   cursor: pointer;
   background: #ffffff;
-  color: #111827; /* slate-900 */
+  color: #111827;
   transition: border 0.2s, box-shadow 0.2s;
 }
 
