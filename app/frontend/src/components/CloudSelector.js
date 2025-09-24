@@ -10,8 +10,12 @@ function CloudSelector({ selectedCloud, setSelectedCloud }) {
 
   return (
     <div className="cloud-selector-container">
+      <p className="cloud-description">
+        Select a cloud provider from the list below to view its{" "}
+        <strong>server status</strong> and <strong>account cost details</strong>.
+      </p>
       <label htmlFor="cloud-select" className="cloud-label">
-        Select Cloud:
+        Choose Cloud:
       </label>
       <select
         id="cloud-select"
