@@ -153,41 +153,42 @@ select:focus {
 .total-cost-card {
   background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
   color: #111827;
-  padding: 14px;
+  padding: 10px;              /* reduced padding */
   border-radius: 8px;
   text-align: center;
-  margin: 10px 0;
+  margin: 8px 0;
   box-shadow: 0 1px 5px rgba(0,0,0,0.12);
   border: 1px solid #d1d5db;
   flex-shrink: 0;
-  width: 100%;   /* 🔑 make it full width */
-  max-width: none; /* allow stretch */
+  width: 100%;
+  max-width: none;
+  height: 70%;                /* 🔑 reduce height ~30% */
 }
 
 .total-cost-amount {
-  font-size: 22px;
+  font-size: 18px;            /* slightly smaller */
   font-weight: bold;
-  margin: 6px 0;
+  margin: 4px 0;
   color: #1e3a8a;
 }
 
 .total-cost-month {
-  font-size: 12px;
+  font-size: 11px;
   opacity: 0.8;
 }
 
 /* Service breakdown */
 .service-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); /* 🔑 smaller cards */
-  gap: 10px;
-  margin-top: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); /* tighter cards */
+  gap: 8px;
+  margin-top: 6px;
   flex: 1;
 }
 
 .service-card {
   background: #fff;
-  padding: 10px; /* smaller padding */
+  padding: 8px;               /* smaller padding so content fits */
   border-radius: 6px;
   text-align: center;
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
@@ -197,16 +198,19 @@ select:focus {
 }
 
 .service-card h5 {
-  font-size: 12px; /* reduced font */
-  margin-bottom: 3px;
+  font-size: 12px;
+  margin-bottom: 2px;
   font-weight: 600;
+  line-height: 1.2;
 }
 
 .cost-amount {
-  font-size: 13px; /* reduced font */
+  font-size: 12px;            /* smaller so it always fits */
   font-weight: bold;
   color: #2563eb;
+  line-height: 1.2;
 }
+
 
 /* Loading */
 .loading {
