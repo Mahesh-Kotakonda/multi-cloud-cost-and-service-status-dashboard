@@ -2,6 +2,12 @@ import React from "react";
 import "./CloudSelector.css";
 
 function CloudSelector({ selectedCloud, setSelectedCloud }) {
+  const clouds = [
+    { id: "AWS", label: "Amazon Web Services (AWS)" },
+    { id: "GCP", label: "Google Cloud Platform (GCP)" },
+    { id: "Azure", label: "Microsoft Azure" },
+  ];
+
   return (
     <div className="cloud-selector-container">
       <label htmlFor="cloud-select" className="cloud-label">
@@ -13,13 +19,11 @@ function CloudSelector({ selectedCloud, setSelectedCloud }) {
         value={selectedCloud}
         onChange={(e) => setSelectedCloud(e.target.value)}
       >
-        <option value="AWS">AWS</option>
-        <option value="GCP" disabled>
-          GCP (Coming Soon)
-        </option>
-        <option value="Azure" disabled>
-          Azure (Coming Soon)
-        </option>
+        {clouds.map((cloud) => (
+          <option key={cloud.id} value={cloud.id}>
+            {cloud.label}
+          </option>
+        ))}
       </select>
     </div>
   );
