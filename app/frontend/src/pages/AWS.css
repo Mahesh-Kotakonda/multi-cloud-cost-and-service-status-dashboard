@@ -158,16 +158,16 @@ select:focus {
   padding: 6px;
   border-radius: 8px;
   text-align: center;
-  margin: 4px 0;
+  margin: 4px auto;            /* center horizontally */
 
-  /* Unified style */
   border: 1px solid #d1d5db;
   box-shadow: 0 2px 4px rgba(0,0,0,0.08);
 
   flex-shrink: 0;
-  width: 100%;
+  width: 80%;                  /* 🔽 reduced width by 20% */
   height: auto;
 }
+
 
 .total-cost-amount {
   font-size: 17px;
