@@ -153,18 +153,16 @@ select:focus {
 .total-cost-card {
   background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
   color: #111827;
-  padding: 7px;              /* reduced a bit more (5%) */
+  padding: 6px;              /* reduced padding further */
   border-radius: 8px;
   text-align: center;
-  margin: 6px 0;
-  box-shadow: 0 1px 5px rgba(0,0,0,0.12);
+  margin: 4px 0;             /* less margin to save space */
+  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
   border: 1px solid #d1d5db;
   flex-shrink: 0;
   width: 100%;
-  max-width: none;
-  height: auto;              /* stays auto but visually 5% less due to padding */
+  height: auto;
 }
-
 
 .total-cost-amount {
   font-size: 17px;
@@ -178,26 +176,32 @@ select:focus {
   opacity: 0.8;
 }
 
+
+
 /* Service breakdown */
 .service-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); /* 🔼 10% wider */
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;                  /* slightly reduced gap */
   margin-top: 6px;
   flex: 1;
+  overflow-y: auto;          /* allow scroll if too many cards */
+  padding-bottom: 6px;       /* ensure bottom border shows */
 }
 
 .service-card {
   background: #fff;
-  padding: 10px;              /* more padding for taller feel */
+  padding: 8px;              /* reduced padding */
   border-radius: 6px;
   text-align: center;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: 70px;           /* 🔼 10% taller */
+  min-height: 60px;          /* reduced height */
+  border: 1px solid #e5e7eb; /* 🔹 ensures border visibility */
 }
+
 
 .service-card h5 {
   font-size: 13px;            /* slightly bigger */
