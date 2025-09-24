@@ -1,7 +1,7 @@
 :root {
   --bg-gradient: linear-gradient(90deg, #0b3d91, #1c6dd0);
   --text-light: #ffffff;
-  --shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
   --max-width: 1200px;
 }
 
@@ -9,7 +9,7 @@
   background: var(--bg-gradient);
   color: var(--text-light);
   box-shadow: var(--shadow);
-  padding: 28px 20px;
+  padding: 18px 20px; /* reduced padding for smaller height */
 }
 
 .header-content {
@@ -20,35 +20,22 @@
 }
 
 .header-title {
-  font-size: 2.2rem;
-  margin: 0 0 14px 0;
+  font-size: 1.9rem; /* slightly smaller */
+  margin: 0 0 10px 0;
   font-weight: 700;
-  letter-spacing: 0.5px;
 }
 
 .header-subtitle {
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 400;
   margin: 0;
-  line-height: 1.6;
-  max-width: 900px;
+  line-height: 1.5;
+  max-width: 750px;
   margin-left: auto;
   margin-right: auto;
 }
 
 .header-subtitle strong {
   font-weight: 600;
-  color: #facc15; /* yellow-400 highlight */
-}
-
-/* Responsive adjustments */
-@media (max-width: 768px) {
-  .header-title {
-    font-size: 1.6rem;
-  }
-
-  .header-subtitle {
-    font-size: 0.9rem;
-    padding: 0 10px;
-  }
+  color: #facc15; /* highlight important words */
 }
