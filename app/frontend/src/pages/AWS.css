@@ -153,7 +153,7 @@ select:focus {
 .total-cost-card {
   background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
   color: #111827;
-  padding: 8px;              /* tighter padding */
+  padding: 7px;              /* reduced a bit more (5%) */
   border-radius: 8px;
   text-align: center;
   margin: 6px 0;
@@ -162,7 +162,7 @@ select:focus {
   flex-shrink: 0;
   width: 100%;
   max-width: none;
-  height: auto;              /* ✅ auto height, no stretching */
+  height: auto;              /* stays auto but visually 5% less due to padding */
 }
 
 .total-cost-amount {
@@ -180,7 +180,7 @@ select:focus {
 /* Service breakdown */
 .service-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); /* smaller cards */
+  grid-template-columns: repeat(auto-fill, minmax(105px, 1fr)); /* 5% wider */
   gap: 6px;
   margin-top: 6px;
   flex: 1;
@@ -188,14 +188,14 @@ select:focus {
 
 .service-card {
   background: #fff;
-  padding: 6px;               /* reduced padding */
+  padding: 6px;
   border-radius: 6px;
   text-align: center;
   box-shadow: 0 1px 2px rgba(0,0,0,0.1);
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: 60px;           /* ✅ compact height */
+  min-height: 63px;           /* 5% taller */
 }
 
 .service-card h5 {
