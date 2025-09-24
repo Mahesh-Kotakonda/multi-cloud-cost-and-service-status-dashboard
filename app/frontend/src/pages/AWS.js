@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import "./AWS.css";
 
 function AWS() {
@@ -18,7 +18,10 @@ function AWS() {
         const costData = await costRes.json();
 
         setCloudData({ ec2: ec2Data, costs: costData });
-        setSelectedMonth(costData.length ? costData[0].month_year : "");
+        if (costData.length) {
+          const sortedMonths = [...new Set(costData.map(c => c.month_year))].sort().reverse();
+          setSelectedMonth(sortedMonths[0]);
+        }
         setLoading(false);
       } catch (err) {
         console.error(err);
@@ -31,10 +34,11 @@ function AWS() {
   if (loading) return <div className="loading">Loading AWS dashboard...</div>;
 
   // Filter EC2 based on selected region
-  const ec2Filtered =
-    selectedRegion === "ALL"
+  const ec2Filtered = useMemo(() => {
+    return selectedRegion === "ALL"
       ? cloudData.ec2.filter((i) => i.az === "TOTAL" || i.az === "ALL")
       : cloudData.ec2.filter((i) => i.region === selectedRegion);
+  }, [selectedRegion, cloudData.ec2]);
 
   const getEC2Summary = (data) => {
     const total = data.find((d) => d.az === "TOTAL" || d.az === "ALL") || {};
@@ -43,22 +47,25 @@ function AWS() {
       : <>Region <strong>{selectedRegion}</strong>: <span className="badge running">{total.running || 0}</span> running, <span className="badge stopped">{total.stopped || 0}</span> stopped, and <span className="badge terminated">{total.terminated || 0}</span> terminated instances.</>;
   };
 
-  const regions = cloudData.ec2.filter((i) => i.az === "TOTAL").map((i) => i.region);
+  const regions = [...new Set(cloudData.ec2.filter((i) => i.az === "TOTAL").map((i) => i.region))];
 
   const monthNames = [
     "January","February","March","April","May","June",
     "July","August","September","October","November","December"
   ];
-  const months = [...new Set(cloudData.costs.map((c) => c.month_year))];
+  const months = [...new Set(cloudData.costs.map((c) => c.month_year))].sort().reverse();
 
   const costsFiltered = selectedMonth
     ? cloudData.costs.filter((c) => c.month_year === selectedMonth)
-    : cloudData.costs.filter((c) => c.month_year === months[0]);
+    : [];
 
   const formatMonthName = (monthYear) => {
     const [year, month] = monthYear.split("-");
     return `${monthNames[parseInt(month) - 1]} ${year}`;
   };
+
+  const formatCurrency = (val) =>
+    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(val);
 
   return (
     <div className="aws-dashboard">
@@ -81,7 +88,7 @@ function AWS() {
         <p className="ec2-summary">{getEC2Summary(ec2Filtered)}</p>
 
         {selectedRegion !== "ALL" && (
-          <div className="ec2-cards">
+          <div className={`ec2-cards ec2-count-${ec2Filtered.length}`}>
             {ec2Filtered
               .filter((d) => d.az !== "TOTAL" && d.az !== "ALL")
               .map((d, idx) => (
@@ -120,7 +127,7 @@ function AWS() {
             totalRecord && (
               <div className="total-cost-card">
                 <h3>Total Cost</h3>
-                <p className="total-cost-amount">${totalRecord.total_amount.toLocaleString()}</p>
+                <p className="total-cost-amount">{formatCurrency(totalRecord.total_amount)}</p>
                 <span className="total-cost-month">{formatMonthName(totalRecord.month_year)}</span>
               </div>
             )
@@ -135,7 +142,7 @@ function AWS() {
             .map((c, idx) => (
               <div key={idx} className="service-card">
                 <h5>{c.service}</h5>
-                <p className="cost-amount">${c.total_amount.toLocaleString()}</p>
+                <p className="cost-amount">{formatCurrency(c.total_amount)}</p>
               </div>
             ))}
         </div>
