@@ -19,7 +19,7 @@
   box-shadow: 0 2px 6px rgba(0,0,0,0.08);
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  overflow-y: hidden; /* 🔑 prevent scroll inside */
   min-height: 0;
 }
 
@@ -153,41 +153,41 @@ select:focus {
 .total-cost-card {
   background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
   color: #111827;
-  padding: 10px; /* decreased padding */
-  border-radius: 6px; /* slightly smaller */
+  padding: 14px;
+  border-radius: 8px;
   text-align: center;
-  margin: 8px 0;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+  margin: 10px 0;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.12);
   border: 1px solid #d1d5db;
   flex-shrink: 0;
-  max-width: 220px; /* smaller width */
-  align-self: flex-start; /* keep it compact */
+  width: 100%;   /* 🔑 make it full width */
+  max-width: none; /* allow stretch */
 }
 
 .total-cost-amount {
-  font-size: 18px; /* reduced size */
+  font-size: 22px;
   font-weight: bold;
-  margin: 4px 0;
+  margin: 6px 0;
   color: #1e3a8a;
 }
 
 .total-cost-month {
-  font-size: 11px;
-  opacity: 0.7;
+  font-size: 12px;
+  opacity: 0.8;
 }
 
 /* Service breakdown */
 .service-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); /* 🔑 smaller cards */
+  gap: 10px;
   margin-top: 8px;
   flex: 1;
 }
 
 .service-card {
   background: #fff;
-  padding: 12px;
+  padding: 10px; /* smaller padding */
   border-radius: 6px;
   text-align: center;
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
@@ -197,13 +197,13 @@ select:focus {
 }
 
 .service-card h5 {
-  font-size: 13px;
-  margin-bottom: 4px;
+  font-size: 12px; /* reduced font */
+  margin-bottom: 3px;
   font-weight: 600;
 }
 
 .cost-amount {
-  font-size: 14px;
+  font-size: 13px; /* reduced font */
   font-weight: bold;
   color: #2563eb;
 }
