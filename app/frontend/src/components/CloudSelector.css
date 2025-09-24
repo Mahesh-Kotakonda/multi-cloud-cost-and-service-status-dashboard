@@ -1,30 +1,42 @@
 .cloud-selector-container {
+  margin: 20px 0 30px 20px; /* below header, left aligned */
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  min-width: 240px;
+  gap: 10px;
+  max-width: 300px;
+}
+
+.cloud-description {
+  font-size: 0.95rem;
+  color: #374151; /* gray-700 */
+  margin: 0;
+  line-height: 1.5;
 }
 
 .cloud-label {
   font-weight: 600;
   font-size: 0.9rem;
-  color: #f3f4f6; /* light gray for dark header background */
-  text-align: left;
+  color: #111827; /* slate-900 */
 }
 
 .cloud-select {
   padding: 10px 14px;
   border-radius: 8px;
-  border: none;
+  border: 1px solid #d1d5db; /* gray-300 */
   font-size: 0.95rem;
   font-weight: 500;
   cursor: pointer;
   background: #ffffff;
   color: #111827; /* slate-900 */
-  transition: box-shadow 0.2s;
+  transition: border 0.2s, box-shadow 0.2s;
+}
+
+.cloud-select:hover {
+  border-color: #2563eb; /* blue-600 */
 }
 
 .cloud-select:focus {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(11, 116, 222, 0.35);
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.3);
 }
