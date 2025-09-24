@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState } from "react";
 import "./AWS.css";
 
 function AWS() {
@@ -36,12 +36,11 @@ function AWS() {
 
   if (loading) return <div className="loading">Loading AWS dashboard...</div>;
 
-  // --- Derived data ---
-  const ec2Filtered = useMemo(() => {
-    return selectedRegion === "ALL"
+  // --- Derived data (no hooks, no conditionals) ---
+  const ec2Filtered =
+    selectedRegion === "ALL"
       ? cloudData.ec2.filter((i) => i.az === "TOTAL" || i.az === "ALL")
       : cloudData.ec2.filter((i) => i.region === selectedRegion);
-  }, [selectedRegion, cloudData.ec2]);
 
   const regions = [
     ...new Set(cloudData.ec2.filter((i) => i.az === "TOTAL").map((i) => i.region)),
