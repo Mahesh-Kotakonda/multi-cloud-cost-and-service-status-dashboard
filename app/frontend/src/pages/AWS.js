@@ -113,19 +113,26 @@ function AWS() {
             ))}
           </select>
         </label>
-
-        {/* Highlight total cost */}
-        <div className="total-cost-card">
-          <h3>Total Cost</h3>
-          <p className="total-cost-amount">${totalCost.toLocaleString()}</p>
-          <span className="total-cost-month">{formatMonthName(selectedMonth)}</span>
-        </div>
-
+      
+        {/* Highlight total cost from backend (TOTAL record) */}
+        {(() => {
+          const totalRecord = costsFiltered.find((c) => c.service === "TOTAL");
+          return (
+            totalRecord && (
+              <div className="total-cost-card">
+                <h3>Total Cost</h3>
+                <p className="total-cost-amount">${totalRecord.total_amount.toLocaleString()}</p>
+                <span className="total-cost-month">{formatMonthName(totalRecord.month_year)}</span>
+              </div>
+            )
+          );
+        })()}
+      
         {/* Breakdown by service */}
         <h4 className="breakdown-title">Service Breakdown</h4>
         <div className="service-cards">
           {costsFiltered
-            .filter((c) => c.total_amount > 0)
+            .filter((c) => c.service !== "TOTAL" && c.total_amount > 0)
             .map((c, idx) => (
               <div key={idx} className="service-card">
                 <h5>{c.service}</h5>
@@ -134,8 +141,10 @@ function AWS() {
             ))}
         </div>
       </section>
+
     </div>
   );
 }
 
 export default AWS;
+
