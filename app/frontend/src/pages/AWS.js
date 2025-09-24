@@ -18,8 +18,11 @@ function AWS() {
         const costData = await costRes.json();
 
         setCloudData({ ec2: ec2Data, costs: costData });
+
         if (costData.length) {
-          const sortedMonths = [...new Set(costData.map(c => c.month_year))].sort().reverse();
+          const sortedMonths = [...new Set(costData.map((c) => c.month_year))]
+            .sort()
+            .reverse();
           setSelectedMonth(sortedMonths[0]);
         }
         setLoading(false);
@@ -33,31 +36,31 @@ function AWS() {
 
   if (loading) return <div className="loading">Loading AWS dashboard...</div>;
 
-  // Filter EC2 based on selected region
+  // --- Derived data ---
   const ec2Filtered = useMemo(() => {
     return selectedRegion === "ALL"
       ? cloudData.ec2.filter((i) => i.az === "TOTAL" || i.az === "ALL")
       : cloudData.ec2.filter((i) => i.region === selectedRegion);
   }, [selectedRegion, cloudData.ec2]);
 
-  const getEC2Summary = (data) => {
-    const total = data.find((d) => d.az === "TOTAL" || d.az === "ALL") || {};
-    return selectedRegion === "ALL"
-      ? <>Across all regions: <span className="badge running">{total.running || 0}</span> running, <span className="badge stopped">{total.stopped || 0}</span> stopped, and <span className="badge terminated">{total.terminated || 0}</span> terminated instances.</>
-      : <>Region <strong>{selectedRegion}</strong>: <span className="badge running">{total.running || 0}</span> running, <span className="badge stopped">{total.stopped || 0}</span> stopped, and <span className="badge terminated">{total.terminated || 0}</span> terminated instances.</>;
-  };
-
-  const regions = [...new Set(cloudData.ec2.filter((i) => i.az === "TOTAL").map((i) => i.region))];
+  const regions = [
+    ...new Set(cloudData.ec2.filter((i) => i.az === "TOTAL").map((i) => i.region)),
+  ];
 
   const monthNames = [
     "January","February","March","April","May","June",
-    "July","August","September","October","November","December"
+    "July","August","September","October","November","December",
   ];
-  const months = [...new Set(cloudData.costs.map((c) => c.month_year))].sort().reverse();
+
+  const months = [...new Set(cloudData.costs.map((c) => c.month_year))]
+    .sort()
+    .reverse();
 
   const costsFiltered = selectedMonth
     ? cloudData.costs.filter((c) => c.month_year === selectedMonth)
     : [];
+
+  const totalRecord = costsFiltered.find((c) => c.service === "TOTAL");
 
   const formatMonthName = (monthYear) => {
     const [year, month] = monthYear.split("-");
@@ -66,6 +69,27 @@ function AWS() {
 
   const formatCurrency = (val) =>
     new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(val);
+
+  const getEC2Summary = (data) => {
+    const total = data.find((d) => d.az === "TOTAL" || d.az === "ALL") || {};
+    return selectedRegion === "ALL" ? (
+      <>
+        Across all regions:{" "}
+        <span className="badge running">{total.running || 0}</span> running,{" "}
+        <span className="badge stopped">{total.stopped || 0}</span> stopped, and{" "}
+        <span className="badge terminated">{total.terminated || 0}</span> terminated
+        instances.
+      </>
+    ) : (
+      <>
+        Region <strong>{selectedRegion}</strong>:{" "}
+        <span className="badge running">{total.running || 0}</span> running,{" "}
+        <span className="badge stopped">{total.stopped || 0}</span> stopped, and{" "}
+        <span className="badge terminated">{total.terminated || 0}</span> terminated
+        instances.
+      </>
+    );
+  };
 
   return (
     <div className="aws-dashboard">
@@ -80,7 +104,9 @@ function AWS() {
           >
             <option value="ALL">All Regions</option>
             {regions.map((r, idx) => (
-              <option key={idx} value={r}>{r}</option>
+              <option key={idx} value={r}>
+                {r}
+              </option>
             ))}
           </select>
         </label>
@@ -115,26 +141,25 @@ function AWS() {
             onChange={(e) => setSelectedMonth(e.target.value)}
           >
             {months.map((m, idx) => (
-              <option key={idx} value={m}>{formatMonthName(m)}</option>
+              <option key={idx} value={m}>
+                {formatMonthName(m)}
+              </option>
             ))}
           </select>
         </label>
-      
-        {/* Highlight total cost from backend (TOTAL record) */}
-        {(() => {
-          const totalRecord = costsFiltered.find((c) => c.service === "TOTAL");
-          return (
-            totalRecord && (
-              <div className="total-cost-card">
-                <h3>Total Cost</h3>
-                <p className="total-cost-amount">{formatCurrency(totalRecord.total_amount)}</p>
-                <span className="total-cost-month">{formatMonthName(totalRecord.month_year)}</span>
-              </div>
-            )
-          );
-        })()}
-      
-        {/* Breakdown by service */}
+
+        {totalRecord && (
+          <div className="total-cost-card">
+            <h3>Total Cost</h3>
+            <p className="total-cost-amount">
+              {formatCurrency(totalRecord.total_amount)}
+            </p>
+            <span className="total-cost-month">
+              {formatMonthName(totalRecord.month_year)}
+            </span>
+          </div>
+        )}
+
         <h4 className="breakdown-title">Service Breakdown</h4>
         <div className="service-cards">
           {costsFiltered
