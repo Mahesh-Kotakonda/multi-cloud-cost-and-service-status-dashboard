@@ -39,8 +39,8 @@ function AWS() {
   const getEC2Summary = (data) => {
     const total = data.find((d) => d.az === "TOTAL" || d.az === "ALL") || {};
     return selectedRegion === "ALL"
-      ? `There are ${total.running || 0} running, ${total.stopped || 0} stopped, and ${total.terminated || 0} terminated instances across all regions.`
-      : `Region ${selectedRegion} has ${total.running || 0} running, ${total.stopped || 0} stopped, and ${total.terminated || 0} terminated instances.`;
+      ? <>Across all regions: <span className="badge running">{total.running || 0}</span> running, <span className="badge stopped">{total.stopped || 0}</span> stopped, and <span className="badge terminated">{total.terminated || 0}</span> terminated instances.</>
+      : <>Region <strong>{selectedRegion}</strong>: <span className="badge running">{total.running || 0}</span> running, <span className="badge stopped">{total.stopped || 0}</span> stopped, and <span className="badge terminated">{total.terminated || 0}</span> terminated instances.</>;
   };
 
   const regions = cloudData.ec2.filter((i) => i.az === "TOTAL").map((i) => i.region);
@@ -59,9 +59,6 @@ function AWS() {
     const [year, month] = monthYear.split("-");
     return `${monthNames[parseInt(month) - 1]} ${year}`;
   };
-
-  // Calculate total cost for month
-  const totalCost = costsFiltered.reduce((acc, c) => acc + c.total_amount, 0);
 
   return (
     <div className="aws-dashboard">
@@ -90,9 +87,11 @@ function AWS() {
               .map((d, idx) => (
                 <div key={idx} className="ec2-card">
                   <h4>{d.az}</h4>
-                  {d.running > 0 && <p className="status-running">Running: {d.running}</p>}
-                  {d.stopped > 0 && <p className="status-stopped">Stopped: {d.stopped}</p>}
-                  {d.terminated > 0 && <p className="status-terminated">Terminated: {d.terminated}</p>}
+                  <div className="status-group">
+                    <span className="badge running">Running: {d.running}</span>
+                    <span className="badge stopped">Stopped: {d.stopped}</span>
+                    <span className="badge terminated">Terminated: {d.terminated}</span>
+                  </div>
                 </div>
               ))}
           </div>
@@ -141,10 +140,8 @@ function AWS() {
             ))}
         </div>
       </section>
-
     </div>
   );
 }
 
 export default AWS;
-
