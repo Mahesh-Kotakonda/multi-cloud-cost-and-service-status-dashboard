@@ -39,8 +39,8 @@ function AWS() {
   const getEC2Summary = (data) => {
     const total = data.find((d) => d.az === "TOTAL" || d.az === "ALL") || {};
     return selectedRegion === "ALL"
-      ? <>Across all regions: <span className="badge running">{total.running || 0}</span> running, <span className="badge stopped">{total.stopped || 0}</span> stopped, and <span className="badge terminated">{total.terminated || 0}</span> terminated instances.</>
-      : <>Region <strong>{selectedRegion}</strong>: <span className="badge running">{total.running || 0}</span> running, <span className="badge stopped">{total.stopped || 0}</span> stopped, and <span className="badge terminated">{total.terminated || 0}</span> terminated instances.</>;
+      ? `Across all regions: ${total.running || 0} running, ${total.stopped || 0} stopped, ${total.terminated || 0} terminated.`
+      : `Region ${selectedRegion}: ${total.running || 0} running, ${total.stopped || 0} stopped, ${total.terminated || 0} terminated.`;
   };
 
   const regions = cloudData.ec2.filter((i) => i.az === "TOTAL").map((i) => i.region);
@@ -64,7 +64,7 @@ function AWS() {
     <div className="aws-dashboard">
       {/* Left: EC2 */}
       <section className="split-panel ec2-panel">
-        <h2>Cloud Compute Overview</h2>
+        <h2>Server Status</h2>
         <label>
           Region:
           <select
@@ -87,10 +87,10 @@ function AWS() {
               .map((d, idx) => (
                 <div key={idx} className="ec2-card">
                   <h4>{d.az}</h4>
-                  <div className="status-group">
-                    <span className="badge running">Running: {d.running}</span>
-                    <span className="badge stopped">Stopped: {d.stopped}</span>
-                    <span className="badge terminated">Terminated: {d.terminated}</span>
+                  <div className="status-tags">
+                    {d.running > 0 && <span className="status-pill running">Running: {d.running}</span>}
+                    {d.stopped > 0 && <span className="status-pill stopped">Stopped: {d.stopped}</span>}
+                    {d.terminated > 0 && <span className="status-pill terminated">Terminated: {d.terminated}</span>}
                   </div>
                 </div>
               ))}
@@ -100,7 +100,7 @@ function AWS() {
 
       {/* Right: Cost */}
       <section className="split-panel cost-panel">
-        <h2>Cloud Cost Overview</h2>
+        <h2>Account Cost</h2>
         <label>
           Month:
           <select
@@ -112,8 +112,8 @@ function AWS() {
             ))}
           </select>
         </label>
-      
-        {/* Highlight total cost from backend (TOTAL record) */}
+
+        {/* Highlight total cost */}
         {(() => {
           const totalRecord = costsFiltered.find((c) => c.service === "TOTAL");
           return (
@@ -126,7 +126,7 @@ function AWS() {
             )
           );
         })()}
-      
+
         {/* Breakdown by service */}
         <h4 className="breakdown-title">Service Breakdown</h4>
         <div className="service-cards">
