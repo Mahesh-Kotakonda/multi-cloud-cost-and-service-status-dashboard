@@ -345,6 +345,7 @@ jobs:
     needs: [push-backend, push-worker, push-frontend]
     runs-on: self-hosted
     # if: ${{ always() }}
+    if: always()
     steps:
       - name: Debug results
         run: |
@@ -374,4 +375,5 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           event-type: trigger-deployment
           client-payload: ${{ steps.payload.outputs.payload }}
+
 
