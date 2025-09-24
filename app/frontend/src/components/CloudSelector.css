@@ -1,28 +1,37 @@
 .cloud-selector-wrapper {
-  margin: 24px auto; /* centers below header */
+  margin: 28px auto; /* spacing from header */
   text-align: center;
+  background: #f9fafb; /* light gray background */
+  padding: 20px;
+  border-radius: 12px;
+  max-width: 600px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
 
+/* Paragraph */
 .cloud-description {
-  font-size: 0.95rem;
-  color: #374151; /* gray-700 */
-  margin-bottom: 12px;
+  font-size: 1.05rem; /* increased size */
+  color: #1f2937; /* slate-800 */
+  margin-bottom: 16px;
+  line-height: 1.5;
 }
 
+/* Flex inline for label + dropdown */
 .cloud-selector-container {
-  display: inline-flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 260px;
-  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
 }
 
+/* Label */
 .cloud-label {
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 1rem;
   color: #111827; /* slate-900 */
 }
 
+/* Dropdown */
 .cloud-select {
   padding: 10px 14px;
   border-radius: 8px;
@@ -33,6 +42,7 @@
   background: #ffffff;
   color: #111827;
   transition: border 0.2s, box-shadow 0.2s;
+  min-width: 260px;
 }
 
 .cloud-select:hover {
