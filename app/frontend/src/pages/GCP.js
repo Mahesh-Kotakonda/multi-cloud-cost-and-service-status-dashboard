@@ -10,8 +10,8 @@ function AWS() {
   useEffect(() => {
     async function fetchCloudData() {
       try {
-        const ec2Res = await fetch("/api/aws/status");
-        const costRes = await fetch("/api/aws/costs");
+        const ec2Res = await fetch("/api/gcp/status");
+        const costRes = await fetch("/api/gcp/costs");
         if (!ec2Res.ok || !costRes.ok) throw new Error("Failed fetching AWS data");
 
         const ec2Data = await ec2Res.json();
@@ -201,4 +201,5 @@ function AWS() {
 }
 
 export default AWS;
+
 
