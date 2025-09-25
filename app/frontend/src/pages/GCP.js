@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import "./AWS.css";
+import "./GCP.css";
 
 function AWS() {
   const [cloudData, setCloudData] = useState({ ec2: [], costs: [] });
@@ -201,3 +201,4 @@ function AWS() {
 }
 
 export default AWS;
+
