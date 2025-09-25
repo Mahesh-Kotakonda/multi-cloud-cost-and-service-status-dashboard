@@ -56,14 +56,16 @@ def ssh_exec(host: str, cmd: str):
 # Docker helpers
 # -------------------------------------------------------------------
 def stop_rm_container(host: str, name: str):
-    log(f"[function stop_rm_container] stopping/removing container={name} on host={host}")
+    log(f"[function stop_rm_container] attempting to stop/remove container={name} on host={host}")
     try:
         ssh_exec(host, f"docker rm -f {name} || true")
+        log(f"[function stop_rm_container] successfully removed {name} on {host}")
     except Exception as e:
-        log(f"ignore error removing {name} on {host}: {e}")
+        log(f"[function stop_rm_container] ignore error removing {name} on {host}: {e}")
+
 
 def run_container(host: str, name: str, image: str):
-    log(f"[function run_container] running container={name} image={image} on host={host}")
+    log(f"[function run_container] preparing to run container={name} image={image} on host={host}")
     try:
         dockerhub_user = os.getenv("DOCKERHUB_USERNAME")
         dockerhub_token = os.getenv("DOCKERHUB_TOKEN")
@@ -75,15 +77,32 @@ def run_container(host: str, name: str, image: str):
 
         # Perform DockerHub login
         if dockerhub_user and dockerhub_token:
+            log(f"[function run_container] logging into DockerHub on {host}")
             ssh_exec(host, f"echo {dockerhub_token} | docker login -u {dockerhub_user} --password-stdin")
 
-        # Pull + run container
+        # Pull latest image
+        log(f"[function run_container] pulling image {image} on {host}")
         ssh_exec(host, f"docker pull {image} || true")
+
+        # Run container
+        log(f"[function run_container] starting container={name} with image={image} on {host}")
         ssh_exec(host, f"docker run -d --restart unless-stopped --name {name} {image}")
 
+        # Verify container status
+        log(f"[function run_container] verifying container={name} on {host}")
+        status = ssh_exec(host, f"docker ps --filter 'name={name}' --format '{{{{.Status}}}}'")
+        if not status:
+            log(f"[ERROR] container={name} failed to start on {host}")
+            logs = ssh_exec(host, f"docker logs {name} || true")
+            log(f"[ERROR] logs for {name} on {host}:\n{logs}")
+            sys.exit(1)
+        else:
+            log(f"[function run_container] container={name} is running on {host} with status={status}")
+
     except Exception as e:
-        log(f"failed to run {name} on {host}: {e}")
-        raise
+        log(f"[ERROR] failed to run {name} on {host}: {e}")
+        sys.exit(1)
+
 
 
 # -------------------------------------------------------------------
