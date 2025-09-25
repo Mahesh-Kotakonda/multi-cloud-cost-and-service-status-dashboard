@@ -131,7 +131,9 @@ function AWS() {
 
         {/* Region-level cards when ALL selected */}
         {selectedRegion === "ALL" && (
-          <div className={`ec2-cards region-cards ec2-count-${regionCards.length}`}>
+          <div
+            className={`ec2-cards region-cards ec2-count-${regionCards.length}`}
+          >
             {regionCards}
           </div>
         )}
