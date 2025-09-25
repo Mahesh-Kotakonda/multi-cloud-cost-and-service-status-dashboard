@@ -15,8 +15,8 @@ COPY app/worker/requirements.txt .
 # Install Python deps
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy worker code
-COPY app/worker/worker.py .
+# Copy all worker code (worker.py + aws_module.py + azure_module.py + gcp_module.py + README.md, etc.)
+COPY app/worker/*.py .
 COPY app/worker/README.md .
 
 # Create non-root user
@@ -36,4 +36,5 @@ ENTRYPOINT ["/usr/bin/tini", "--"]
 # Healthcheck (simple ping to the process every 30s)
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD pgrep -f worker.py || exit 1
 
+# Run the worker
 CMD ["python", "worker.py"]
