@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import "./GCP.css";
 
-function AWS() {
-  const [cloudData, setCloudData] = useState({ ec2: [], costs: [] });
+function GCP() {
+  const [cloudData, setCloudData] = useState({ gce: [], costs: [] });
   const [loading, setLoading] = useState(true);
   const [selectedRegion, setSelectedRegion] = useState("ALL");
   const [selectedMonth, setSelectedMonth] = useState("");
@@ -10,14 +10,14 @@ function AWS() {
   useEffect(() => {
     async function fetchCloudData() {
       try {
-        const ec2Res = await fetch("/api/gcp/status");
+        const gceRes = await fetch("/api/gcp/status");
         const costRes = await fetch("/api/gcp/costs");
-        if (!ec2Res.ok || !costRes.ok) throw new Error("Failed fetching AWS data");
+        if (!gceRes.ok || !costRes.ok) throw new Error("Failed fetching GCP data");
 
-        const ec2Data = await ec2Res.json();
+        const gceData = await gceRes.json();
         const costData = await costRes.json();
 
-        setCloudData({ ec2: ec2Data, costs: costData });
+        setCloudData({ gce: gceData, costs: costData });
 
         if (costData.length) {
           const sortedMonths = [...new Set(costData.map((c) => c.month_year))]
@@ -34,16 +34,16 @@ function AWS() {
     fetchCloudData();
   }, []);
 
-  if (loading) return <div className="loading">Loading AWS dashboard...</div>;
+  if (loading) return <div className="loading">Loading GCP dashboard...</div>;
 
   // --- Derived data ---
-  const ec2Filtered =
+  const gceFiltered =
     selectedRegion === "ALL"
-      ? cloudData.ec2.filter((i) => i.az === "TOTAL" || i.az === "ALL")
-      : cloudData.ec2.filter((i) => i.region === selectedRegion);
+      ? cloudData.gce.filter((i) => i.az === "TOTAL" || i.az === "ALL")
+      : cloudData.gce.filter((i) => i.region === selectedRegion);
 
   const regions = [
-    ...new Set(cloudData.ec2.filter((i) => i.az === "TOTAL").map((i) => i.region)),
+    ...new Set(cloudData.gce.filter((i) => i.az === "TOTAL").map((i) => i.region)),
   ];
 
   const monthNames = [
@@ -69,7 +69,7 @@ function AWS() {
   const formatCurrency = (val) =>
     new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(val);
 
-  const getEC2Summary = (data) => {
+  const getGCESummary = (data) => {
     const total = data.find((d) => d.az === "TOTAL" || d.az === "ALL") || {};
     return selectedRegion === "ALL" ? (
       <>
@@ -93,10 +93,10 @@ function AWS() {
   // --- Region cards for ALL view ---
   const regionCards =
     selectedRegion === "ALL"
-      ? cloudData.ec2
+      ? cloudData.gce
           .filter((d) => d.az === "TOTAL")
           .map((d, idx) => (
-            <div key={idx} className="ec2-card region-card">
+            <div key={idx} className="gce-card region-card">
               <h4>{d.region}</h4>
               <div className="status-group">
                 <span className="badge running">Running: {d.running}</span>
@@ -108,9 +108,9 @@ function AWS() {
       : null;
 
   return (
-    <div className="aws-dashboard">
-      {/* Left: EC2 */}
-      <section className="split-panel ec2-panel">
+    <div className="gcp-dashboard">
+      {/* Left: Compute Engine */}
+      <section className="split-panel gce-panel">
         <h2>Cloud Compute Overview</h2>
         <label>
           Region:
@@ -127,22 +127,22 @@ function AWS() {
           </select>
         </label>
 
-        <p className="ec2-summary">{getEC2Summary(ec2Filtered)}</p>
+        <p className="gce-summary">{getGCESummary(gceFiltered)}</p>
 
         {/* Region-level cards when ALL selected */}
         {selectedRegion === "ALL" && (
-          <div className="ec2-cards region-cards">
+          <div className="gce-cards region-cards">
             {regionCards}
           </div>
         )}
 
         {/* AZ-level cards when a region is selected */}
         {selectedRegion !== "ALL" && (
-          <div className="ec2-cards">
-            {ec2Filtered
+          <div className="gce-cards">
+            {gceFiltered
               .filter((d) => d.az !== "TOTAL" && d.az !== "ALL")
               .map((d, idx) => (
-                <div key={idx} className="ec2-card">
+                <div key={idx} className="gce-card">
                   <h4>{d.az}</h4>
                   <div className="status-group">
                     <span className="badge running">Running: {d.running}</span>
@@ -200,6 +200,4 @@ function AWS() {
   );
 }
 
-export default AWS;
-
-
+export default GCP;
