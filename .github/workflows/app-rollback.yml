@@ -43,7 +43,7 @@ jobs:
       S3_BUCKET: multi-cloud-cost-and-service-status-dashboard
       DEPLOYMENT_JSON_PREFIX: deployments/
       INFRA_JSON_PATH: infra/multi-cloud-dashboard-outputs.json
-      ALLOWED_ACTOR: your-github-username   # <-- replace with your username
+      ALLOWED_ACTOR: Mahesh-Kotakonda
 
     steps:
       - name: Checkout Repository
