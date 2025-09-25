@@ -36,7 +36,7 @@ function AWS() {
 
   if (loading) return <div className="loading">Loading AWS dashboard...</div>;
 
-  // --- Derived data (no hooks, no conditionals) ---
+  // --- Derived data ---
   const ec2Filtered =
     selectedRegion === "ALL"
       ? cloudData.ec2.filter((i) => i.az === "TOTAL" || i.az === "ALL")
@@ -90,6 +90,23 @@ function AWS() {
     );
   };
 
+  // --- Region cards for ALL view ---
+  const regionCards =
+    selectedRegion === "ALL"
+      ? cloudData.ec2
+          .filter((d) => d.az === "TOTAL")
+          .map((d, idx) => (
+            <div key={idx} className="ec2-card region-card">
+              <h4>{d.region}</h4>
+              <div className="status-group">
+                <span className="badge running">Running: {d.running}</span>
+                <span className="badge stopped">Stopped: {d.stopped}</span>
+                <span className="badge terminated">Terminated: {d.terminated}</span>
+              </div>
+            </div>
+          ))
+      : null;
+
   return (
     <div className="aws-dashboard">
       {/* Left: EC2 */}
@@ -112,6 +129,14 @@ function AWS() {
 
         <p className="ec2-summary">{getEC2Summary(ec2Filtered)}</p>
 
+        {/* Region-level cards when ALL selected */}
+        {selectedRegion === "ALL" && (
+          <div className={`ec2-cards region-cards ec2-count-${regionCards.length}`}>
+            {regionCards}
+          </div>
+        )}
+
+        {/* AZ-level cards when a region is selected */}
         {selectedRegion !== "ALL" && (
           <div className={`ec2-cards ec2-count-${ec2Filtered.length}`}>
             {ec2Filtered
