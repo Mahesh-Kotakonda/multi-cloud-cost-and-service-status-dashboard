@@ -160,7 +160,8 @@ jobs:
         run: |
           python3 ./deploy/rollback_frontend.py \
             --deployment-json ./json-files/latest-deployment.json \
-            --infra-json ./json-files/infra-outputs.json
+            --infra-json ./json-files/infra-outputs.json \
+            --components ${{ needs.pre-rollback.outputs.components }}
 
 
   #############################
