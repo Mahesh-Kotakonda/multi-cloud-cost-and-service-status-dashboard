@@ -54,16 +54,31 @@ def get_instance_public_ips(instance_ids: list[str]) -> list[str]:
     ips = output.split()
     return ips
 
+import time
+
 def ssh_exec(host: str, cmd: str):
     pem = os.getenv("PEM_PATH")
     user = os.getenv("SSH_USER", "ec2-user")
-    ssh_cmd = [
-        "ssh", "-o", "StrictHostKeyChecking=no", "-i", pem,
-        f"{user}@{host}", cmd
-    ]
-    return run(ssh_cmd)
 
-import time
+    ssh_cmd = [
+        "ssh",
+        "-o", "StrictHostKeyChecking=no",
+        "-i", pem,
+        f"{user}@{host}",
+        cmd,
+    ]
+
+    log(f"[ssh_exec] START → host={host}, cmd={cmd}")
+    start = time.time()
+
+    out = run(ssh_cmd)
+
+    elapsed = round(time.time() - start, 2)
+    log(f"[ssh_exec] END → host={host}, took={elapsed}s")
+
+    return out
+
+
 
 def stop_rm_container(host: str, name: str):
     log(f"[stop_rm_container] START → stopping/removing container={name} on host={host}")
