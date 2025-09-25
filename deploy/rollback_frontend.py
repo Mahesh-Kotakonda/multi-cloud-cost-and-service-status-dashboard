@@ -4,23 +4,34 @@ import json
 import os
 import subprocess
 import sys
-
+import time
 # -------------------------------------------------------------------
 # Logging
 # -------------------------------------------------------------------
 def log(msg: str):
     print(f"[frontend-rollback] {msg}", flush=True)
 
-# -------------------------------------------------------------------
-# Command helpers
-# -------------------------------------------------------------------
+
+
 def run(cmd: list[str]) -> str:
-    log(f"Executing: {' '.join(cmd)}")
+    log(f"[run] START → Executing: {' '.join(cmd)}")
+    start = time.time()
+
     res = subprocess.run(cmd, capture_output=True, text=True)
+
+    elapsed = round(time.time() - start, 2)
+
     if res.returncode != 0:
-        log(f"ERROR: {res.stderr.strip()}")
+        log(f"[run] ERROR → Command failed after {elapsed}s: {' '.join(cmd)}")
+        log(f"[run] STDERR: {res.stderr.strip()}")
         raise RuntimeError(f"Command failed: {cmd}")
+
+    log(f"[run] SUCCESS → Completed in {elapsed}s")
+    if res.stdout.strip():
+        log(f"[run] STDOUT: {res.stdout.strip()}")
+
     return res.stdout.strip()
+
     
 # -------------------------------------------------------------------
 # AWS EC2 helper
