@@ -14,15 +14,15 @@ import mysql.connector
 # ----------------------------
 # Import Cloud Modules
 # ----------------------------
-from .aws_module import (
+from aws_module import (
     store_dummy_monthly_cost as aws_cost,
     collect_ec2_status,
 )
-from .azure_module import (
+from azure_module import (
     store_dummy_monthly_cost as azure_cost,
     store_dummy_server_status as azure_status,
 )
-from .gcp_module import (
+from gcp_module import (
     store_dummy_monthly_cost as gcp_cost,
     store_dummy_server_status as gcp_status,
 )
