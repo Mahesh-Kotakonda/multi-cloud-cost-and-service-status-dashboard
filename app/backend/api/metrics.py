@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query, Path
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from core.database import get_db_connection
 from decimal import Decimal
@@ -28,7 +28,7 @@ ALLOWED_TABLES = {
     "server_status_agg": {"date_column": "retrieved_at"},
 }
 
-ALLOWED_CLOUDS = {"AWS", "GCP", "AZURE", "ALL"}
+ALLOWED_CLOUDS = {"AWS", "GCP", "AZURE"}
 
 # -----------------------------
 # Helpers
@@ -71,8 +71,7 @@ def fetch_table_rows_by_date(
         cloud_upper = cloud.strip().upper()
         if cloud_upper not in ALLOWED_CLOUDS:
             raise HTTPException(status_code=400, detail=f"Cloud must be one of {sorted(ALLOWED_CLOUDS)}")
-        if cloud_upper != "ALL":
-            cloud_filter = cloud_upper
+        cloud_filter = cloud_upper
 
     try:
         start_date, end_date = get_date_range(months_back)
@@ -87,7 +86,6 @@ def fetch_table_rows_by_date(
         params = [start_date, end_date]
 
         if cloud_filter:
-            # normalize both DB value and filter
             query += " AND UPPER(cloud) = %s"
             params.append(cloud_filter)
 
@@ -110,7 +108,7 @@ def fetch_table_rows_by_date(
         raise HTTPException(status_code=500, detail=f"Query failed for table {table_name}: {e}")
 
 # -----------------------------
-# Explicit Cloud Endpoints
+# Explicit Cloud Endpoints Only
 # -----------------------------
 
 # AWS
@@ -141,18 +139,7 @@ def get_gcp_status(months_back: int = Query(2, ge=0, le=12)):
     return fetch_table_rows_by_date("server_status_agg", months_back=months_back, cloud="GCP")
 
 # -----------------------------
-# Generic Fallback
-# -----------------------------
-@app.get("/api/{cloud}/costs")
-def get_cloud_costs(cloud: str, months_back: int = Query(2, ge=0, le=12)):
-    return fetch_table_rows_by_date("cloud_cost_monthly", months_back=months_back, cloud=cloud)
-
-@app.get("/api/{cloud}/status")
-def get_cloud_status(cloud: str, months_back: int = Query(2, ge=0, le=12)):
-    return fetch_table_rows_by_date("server_status_agg", months_back=months_back, cloud=cloud)
-
-# -----------------------------
-# Admin
+# Admin Endpoint (optional)
 # -----------------------------
 @app.get("/api/table/{table_name}")
 def get_custom_table(
