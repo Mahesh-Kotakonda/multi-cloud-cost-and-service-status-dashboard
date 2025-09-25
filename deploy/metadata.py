@@ -173,11 +173,17 @@ if __name__ == "__main__":
 
     # Step 2: Deploy Backend ALB rules and swap environments
     if backend_status != "skipped":
-        deploy_service(listener_arn, backend_inactive_tg, ["/api/aws/*"], "Backend", starting_priority=10)
+        backend_paths = [
+            "/api/aws/*",
+            "/api/azure/*",
+            "/api/gcp/*"
+        ]
+        deploy_service(listener_arn, backend_inactive_tg, backend_paths, "Backend", starting_priority=10)
         backend_active_env, backend_inactive_env = swap_env(backend_active_env, backend_inactive_env)
         backend_active_tg, backend_inactive_tg = swap_env(backend_active_tg, backend_inactive_tg)
     else:
         print("[INFO] Skipping Backend deployment because BACKEND_STATUS is 'skipped'.")
+
 
     # Step 3: Deploy Frontend ALB rules and swap environments
     if frontend_status != "skipped":
