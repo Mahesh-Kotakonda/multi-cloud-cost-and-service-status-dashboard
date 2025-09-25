@@ -52,36 +52,59 @@ def ssh_exec(host: str, cmd: str):
     ]
     return run(ssh_cmd)
 
+import time
+
 def stop_rm_container(host: str, name: str):
-    log(f"[function stop_rm_container] stopping/removing container={name} on host={host}")
+    log(f"[stop_rm_container] START → stopping/removing container={name} on host={host}")
+    start = time.time()
     try:
+        log(f"[stop_rm_container] executing docker rm -f {name}")
         ssh_exec(host, f"docker rm -f {name} || true")
-        log(f"[function stop_rm_container] successfully removed {name} on {host}")
+        log(f"[stop_rm_container] SUCCESS → container {name} removed on {host}")
     except Exception as e:
-        log(f"ignore error removing {name} on {host}: {e}")
+        log(f"[stop_rm_container] WARNING → ignore error removing {name} on {host}: {e}")
+    finally:
+        elapsed = round(time.time() - start, 2)
+        log(f"[stop_rm_container] END → took {elapsed}s")
+
 
 def run_container(host: str, name: str, image: str):
-    log(f"[function run_container] running container={name} image={image} on host={host}")
+    log(f"[run_container] START → running container={name}, image={image}, host={host}")
+    start = time.time()
     try:
         dockerhub_user = os.getenv("DOCKERHUB_USERNAME")
         dockerhub_token = os.getenv("DOCKERHUB_TOKEN")
 
-        # Add DockerHub prefix if missing
+        # Step 1: resolve image name
         if "/" not in image and dockerhub_user:
             image = f"{dockerhub_user}/{image}"
-            log(f"[function run_container] resolved full DockerHub image={image}")
+            log(f"[run_container] resolved image name: {image}")
 
-        # Perform DockerHub login
+        # Step 2: login (if creds available)
         if dockerhub_user and dockerhub_token:
+            log("[run_container] logging into DockerHub")
             ssh_exec(host, f"echo {dockerhub_token} | docker login -u {dockerhub_user} --password-stdin")
+            log("[run_container] DockerHub login successful")
 
-        # Pull + run container
+        # Step 3: pull image
+        log(f"[run_container] pulling image {image}")
+        pull_start = time.time()
         ssh_exec(host, f"docker pull {image} || true")
+        log(f"[run_container] image pull completed in {round(time.time() - pull_start, 2)}s")
+
+        # Step 4: run container
+        log(f"[run_container] starting container {name} with image {image}")
+        run_start = time.time()
         ssh_exec(host, f"docker run -d --restart unless-stopped --name {name} {image}")
+        log(f"[run_container] container {name} started in {round(time.time() - run_start, 2)}s")
 
     except Exception as e:
-        log(f"failed to run {name} on {host}: {e}")
+        log(f"[run_container] ERROR → failed to run {name} on {host}: {e}")
         raise
+    finally:
+        elapsed = round(time.time() - start, 2)
+        log(f"[run_container] END → total time {elapsed}s")
+
 
 
 
