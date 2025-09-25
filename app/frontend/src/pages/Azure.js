@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import "./Azure.css";
 
-function AWS() {
-  const [cloudData, setCloudData] = useState({ ec2: [], costs: [] });
+function Azure() {
+  const [cloudData, setCloudData] = useState({ vm: [], costs: [] });
   const [loading, setLoading] = useState(true);
   const [selectedRegion, setSelectedRegion] = useState("ALL");
   const [selectedMonth, setSelectedMonth] = useState("");
@@ -10,14 +10,14 @@ function AWS() {
   useEffect(() => {
     async function fetchCloudData() {
       try {
-        const ec2Res = await fetch("/api/azure/status");
+        const vmRes = await fetch("/api/azure/status");
         const costRes = await fetch("/api/azure/costs");
-        if (!ec2Res.ok || !costRes.ok) throw new Error("Failed fetching AWS data");
+        if (!vmRes.ok || !costRes.ok) throw new Error("Failed fetching Azure data");
 
-        const ec2Data = await ec2Res.json();
+        const vmData = await vmRes.json();
         const costData = await costRes.json();
 
-        setCloudData({ ec2: ec2Data, costs: costData });
+        setCloudData({ vm: vmData, costs: costData });
 
         if (costData.length) {
           const sortedMonths = [...new Set(costData.map((c) => c.month_year))]
@@ -34,16 +34,16 @@ function AWS() {
     fetchCloudData();
   }, []);
 
-  if (loading) return <div className="loading">Loading AWS dashboard...</div>;
+  if (loading) return <div className="loading">Loading Azure dashboard...</div>;
 
   // --- Derived data ---
-  const ec2Filtered =
+  const vmFiltered =
     selectedRegion === "ALL"
-      ? cloudData.ec2.filter((i) => i.az === "TOTAL" || i.az === "ALL")
-      : cloudData.ec2.filter((i) => i.region === selectedRegion);
+      ? cloudData.vm.filter((i) => i.az === "TOTAL" || i.az === "ALL")
+      : cloudData.vm.filter((i) => i.region === selectedRegion);
 
   const regions = [
-    ...new Set(cloudData.ec2.filter((i) => i.az === "TOTAL").map((i) => i.region)),
+    ...new Set(cloudData.vm.filter((i) => i.az === "TOTAL").map((i) => i.region)),
   ];
 
   const monthNames = [
@@ -69,7 +69,7 @@ function AWS() {
   const formatCurrency = (val) =>
     new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(val);
 
-  const getEC2Summary = (data) => {
+  const getVMSummary = (data) => {
     const total = data.find((d) => d.az === "TOTAL" || d.az === "ALL") || {};
     return selectedRegion === "ALL" ? (
       <>
@@ -77,7 +77,7 @@ function AWS() {
         <span className="badge running">{total.running || 0}</span> running,{" "}
         <span className="badge stopped">{total.stopped || 0}</span> stopped, and{" "}
         <span className="badge terminated">{total.terminated || 0}</span> terminated
-        instances.
+        VMs.
       </>
     ) : (
       <>
@@ -85,7 +85,7 @@ function AWS() {
         <span className="badge running">{total.running || 0}</span> running,{" "}
         <span className="badge stopped">{total.stopped || 0}</span> stopped, and{" "}
         <span className="badge terminated">{total.terminated || 0}</span> terminated
-        instances.
+        VMs.
       </>
     );
   };
@@ -93,10 +93,10 @@ function AWS() {
   // --- Region cards for ALL view ---
   const regionCards =
     selectedRegion === "ALL"
-      ? cloudData.ec2
+      ? cloudData.vm
           .filter((d) => d.az === "TOTAL")
           .map((d, idx) => (
-            <div key={idx} className="ec2-card region-card">
+            <div key={idx} className="vm-card region-card">
               <h4>{d.region}</h4>
               <div className="status-group">
                 <span className="badge running">Running: {d.running}</span>
@@ -108,9 +108,9 @@ function AWS() {
       : null;
 
   return (
-    <div className="aws-dashboard">
-      {/* Left: EC2 */}
-      <section className="split-panel ec2-panel">
+    <div className="azure-dashboard">
+      {/* Left: VM (Compute) */}
+      <section className="split-panel vm-panel">
         <h2>Cloud Compute Overview</h2>
         <label>
           Region:
@@ -127,22 +127,22 @@ function AWS() {
           </select>
         </label>
 
-        <p className="ec2-summary">{getEC2Summary(ec2Filtered)}</p>
+        <p className="vm-summary">{getVMSummary(vmFiltered)}</p>
 
         {/* Region-level cards when ALL selected */}
         {selectedRegion === "ALL" && (
-          <div className="ec2-cards region-cards">
+          <div className="vm-cards region-cards">
             {regionCards}
           </div>
         )}
 
         {/* AZ-level cards when a region is selected */}
         {selectedRegion !== "ALL" && (
-          <div className="ec2-cards">
-            {ec2Filtered
+          <div className="vm-cards">
+            {vmFiltered
               .filter((d) => d.az !== "TOTAL" && d.az !== "ALL")
               .map((d, idx) => (
-                <div key={idx} className="ec2-card">
+                <div key={idx} className="vm-card">
                   <h4>{d.az}</h4>
                   <div className="status-group">
                     <span className="badge running">Running: {d.running}</span>
@@ -200,6 +200,4 @@ function AWS() {
   );
 }
 
-export default AWS;
-
-
+export default Azure;
