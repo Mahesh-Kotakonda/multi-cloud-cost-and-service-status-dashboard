@@ -10,8 +10,8 @@ function Azure() {
   useEffect(() => {
     async function fetchCloudData() {
       try {
-        const vmRes = await fetch("/api/AZURE/status");
-        const costRes = await fetch("/api/AZURE/costs");
+        const vmRes = await fetch("/api/azure/status");
+        const costRes = await fetch("/api/azure/costs");
         if (!vmRes.ok || !costRes.ok) throw new Error("Failed fetching Azure data");
 
         const vmData = await vmRes.json();
@@ -201,4 +201,5 @@ function Azure() {
 }
 
 export default Azure;
+
 
