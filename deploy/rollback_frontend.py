@@ -21,6 +21,27 @@ def run(cmd: list[str]) -> str:
         log(f"ERROR: {res.stderr.strip()}")
         raise RuntimeError(f"Command failed: {cmd}")
     return res.stdout.strip()
+    
+# -------------------------------------------------------------------
+# AWS EC2 helper
+# -------------------------------------------------------------------
+def get_instance_public_ips(instance_ids: list[str]) -> list[str]:
+    """
+    Fetch public IP addresses for given EC2 instance IDs.
+    """
+    if not instance_ids:
+        return []
+
+    cmd = [
+        "aws", "ec2", "describe-instances",
+        "--instance-ids", *instance_ids,
+        "--query", "Reservations[*].Instances[*].PublicIpAddress",
+        "--output", "text"
+    ]
+
+    output = run(cmd)  # reuse your existing run() function
+    ips = output.split()
+    return ips
 
 def ssh_exec(host: str, cmd: str):
     pem = os.getenv("PEM_PATH")
@@ -136,16 +157,24 @@ def main():
             stop_rm_container(ip, "frontend-green")
         set_output("frontend_status", "cleaned")
 
-    elif not first_deploy and frontend_status == "success":
+    elif not frontend_first_deploy and frontend_status == "success":
         curr_env = frontend.get("active_env", "")
         inactive_env = "green" if curr_env.lower() == "blue" else "blue"
         prev_image = frontend.get("previous_image", "")
         log(f"[frontend-block] rollback non-first deployment → inactive_env={inactive_env}, prev_image={prev_image}")
-        for ip in infra.get("ec2_instance_ids", []):
+    
+        instance_ids = infra.get("ec2_instance_ids", [])
+        ips = get_instance_public_ips(instance_ids)
+    
+        log(f"[frontend-block] resolved instance_ids={instance_ids} → public_ips={ips}")
+    
+        for ip in ips:
             stop_rm_container(ip, f"frontend-{inactive_env}")
             if prev_image:
                 run_container(ip, f"frontend-{inactive_env}", prev_image)
+    
         set_output("frontend_status", "prepared")
+
 
     elif not first_deploy and frontend_status == "skipped":
         log("[frontend-block] frontend skipped → no rollback")
