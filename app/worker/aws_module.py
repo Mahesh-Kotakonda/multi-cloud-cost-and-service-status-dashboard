@@ -55,7 +55,7 @@ def store_dummy_monthly_cost(conn, cloud="AWS"):
                 retrieved_at=VALUES(retrieved_at)
         """, rows)
         conn.commit()
-        log.info(f"[AWS] Stored dummy costs for {month_str}")
+        log.info(f"[{cloud}] Stored dummy costs for {month_str}")
     
     cur.close()
 
@@ -104,12 +104,12 @@ def store_monthly_cost(conn, cloud, month_year, service_costs):
     
     conn.commit()
     cur.close()
-    log.info(f"[AWS] Stored {len(rows)} services for {cloud} - {month_year}")
+    log.info(f"[{cloud}] Stored {len(rows)} services for {month_year}")
 
 # ----------------------------
 # AWS EC2 Status
 # ----------------------------
-def fetch_and_aggregate_server_status_all_regions():
+def fetch_and_aggregate_server_status_all_regions(cloud="AWS"):
     regions = [r['RegionName'] for r in ec2.describe_regions()['Regions']]
     agg = {}
 
@@ -135,27 +135,27 @@ def fetch_and_aggregate_server_status_all_regions():
     for (region, az), counts in agg.items():
         total_instances = counts['running'] + counts['stopped'] + counts['terminated']
         if total_instances > 0:
-            rows.append(("AWS", region, az, counts['running'], counts['stopped'], counts['terminated'], retrieved_at))
+            rows.append((cloud, region, az, counts['running'], counts['stopped'], counts['terminated'], retrieved_at))
             if region not in region_totals:
                 region_totals[region] = {'running': 0, 'stopped': 0, 'terminated': 0}
             for k in counts:
                 region_totals[region][k] += counts[k]
 
     for region, counts in region_totals.items():
-        rows.append(("AWS", region, "TOTAL", counts['running'], counts['stopped'], counts['terminated'], retrieved_at))
+        rows.append((cloud, region, "TOTAL", counts['running'], counts['stopped'], counts['terminated'], retrieved_at))
 
     total_running = sum(counts['running'] for counts in region_totals.values())
     total_stopped = sum(counts['stopped'] for counts in region_totals.values())
     total_terminated = sum(counts['terminated'] for counts in region_totals.values())
-    rows.append(("AWS", "ALL", "ALL", total_running, total_stopped, total_terminated, retrieved_at))
+    rows.append((cloud, "ALL", "ALL", total_running, total_stopped, total_terminated, retrieved_at))
 
     return rows
 
-def collect_ec2_status(conn):
-    rows = fetch_and_aggregate_server_status_all_regions()
-    store_server_status_agg(conn, rows)
+def collect_ec2_status(conn, cloud="AWS"):
+    rows = fetch_and_aggregate_server_status_all_regions(cloud=cloud)
+    store_server_status_agg(conn, rows, cloud=cloud)
 
-def store_server_status_agg(conn, rows):
+def store_server_status_agg(conn, rows, cloud="AWS"):
     cur = conn.cursor()
     cur.executemany("""
         INSERT INTO server_status_agg (cloud, region, az, running, stopped, `terminated`, retrieved_at)
@@ -169,4 +169,4 @@ def store_server_status_agg(conn, rows):
 
     conn.commit()
     cur.close()
-    log.info(f"[AWS] Stored {len(rows)} aggregated server status rows")
+    log.info(f"[{cloud}] Stored {len(rows)} aggregated server status rows")
