@@ -83,7 +83,7 @@ select:focus {
   font-weight: 600;
 }
 
-/* EC2 Cards */
+/* EC2 Cards (AZ-level) */
 .ec2-cards {
   display: grid;
   gap: 14px;
@@ -151,6 +151,26 @@ select:focus {
   color: #991b1b;
 }
 
+/* --- NEW: Region-level cards (when ALL regions selected) --- */
+.region-cards {
+  display: grid;
+  gap: 16px;
+  margin-top: 12px;
+  flex: 1;
+}
+
+.region-cards .region-card {
+  flex: 1;
+  min-width: 260px;   /* wider than AZ cards */
+  max-width: 320px;   /* keep them neat */
+}
+
+/* Adjust grid for region cards */
+.region-cards.ec2-count-2 { grid-template-columns: repeat(2, minmax(260px, 1fr)); }
+.region-cards.ec2-count-3 { grid-template-columns: repeat(3, minmax(260px, 1fr)); }
+.region-cards.ec2-count-4 { grid-template-columns: repeat(4, minmax(240px, 1fr)); }
+.region-cards.ec2-count-5 { grid-template-columns: repeat(5, minmax(220px, 1fr)); }
+
 /* Cost section */
 .total-cost-card {
   background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
@@ -158,16 +178,15 @@ select:focus {
   padding: 6px;
   border-radius: 8px;
   text-align: center;
-  margin: 4px auto;            /* center horizontally */
+  margin: 4px auto;
 
   border: 1px solid #d1d5db;
   box-shadow: 0 2px 4px rgba(0,0,0,0.08);
 
   flex-shrink: 0;
-  width: 80%;                  /* 🔽 reduced width by 20% */
+  width: 80%;
   height: auto;
 }
-
 
 .total-cost-amount {
   font-size: 17px;
@@ -200,12 +219,10 @@ select:focus {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: 54px;          /* 🔽 reduced ~10% */
+  min-height: 54px;
   border: 1px solid #e5e7eb;
   box-shadow: 0 2px 4px rgba(0,0,0,0.08);
 }
-
-
 
 .service-card h5 {
   font-size: 13px;
