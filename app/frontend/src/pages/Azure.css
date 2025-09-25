@@ -1,4 +1,4 @@
-.aws-dashboard {
+.azure-dashboard {
   display: flex;
   flex-direction: row;
   height: calc(70vh - 90px);
@@ -23,7 +23,7 @@
   min-height: 0;
 }
 
-.ec2-panel {
+.vm-panel {
   background: linear-gradient(180deg, #f9fafb, #eef2ff);
 }
 
@@ -75,16 +75,16 @@ select:focus {
   box-shadow: 0 0 0 1px rgba(37,99,235,0.2);
 }
 
-/* EC2 Summary */
-.ec2-summary {
+/* VM Summary */
+.vm-summary {
   margin: 8px 0;
   font-size: 15px;
   color: #374151;
   font-weight: 600;
 }
 
-/* Shared EC2 Cards layout (AZ + Regions) */
-.ec2-cards {
+/* Shared VM Cards layout (AZ + Regions) */
+.vm-cards {
   display: grid;
   grid-template-columns: repeat(2, 1fr); /* ✅ Always 2 per row */
   gap: 16px;
@@ -95,7 +95,7 @@ select:focus {
   min-height: 0;
 }
 
-.ec2-card {
+.vm-card {
   background: #fff;
   padding: 16px;
   border-radius: 8px;
@@ -108,7 +108,7 @@ select:focus {
   box-shadow: 0 2px 4px rgba(0,0,0,0.08);
 }
 
-.ec2-card h4 {
+.vm-card h4 {
   font-size: 15px;
   font-weight: 700;
   color: #1f2937;
