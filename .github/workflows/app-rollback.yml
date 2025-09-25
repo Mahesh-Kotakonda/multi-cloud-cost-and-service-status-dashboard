@@ -195,9 +195,10 @@ jobs:
       - name: Rollback Backend
         id: rollback
         run: |
-          ./deploy/rollback-backend.sh \
+          ./deploy/rollback_backend.py \
             --deployment-json ./json-files/latest-deployment.json \
-            --infra-json ./json-files/infra-outputs.json
+            --infra-json ./json-files/infra-outputs.json \
+            --components ${{ needs.pre-rollback.outputs.components }}
 
   #############################
   # Worker Rollback
@@ -229,8 +230,10 @@ jobs:
       - name: Rollback Worker
         id: rollback
         run: |
-          ./deploy/rollback-worker.sh \
-            --deployment-json ./json-files/latest-deployment.json
+          ./deploy/rollback-worker.py \
+            --deployment-json ./json-files/latest-deployment.json \
+            --infra-json ./json-files/infra-outputs.json \
+            --components ${{ needs.pre-rollback.outputs.components }}
 
   #############################
   # Metadata Rollback
@@ -273,4 +276,5 @@ jobs:
         run: |
           python3 ./deploy/rollback_metadata.py \
             --deployment-json ./json-files/latest-deployment.json \
-            --infra-json ./json-files/infra-outputs.json
+            --infra-json ./json-files/infra-outputs.json \
+            --components ${{ needs.pre-rollback.outputs.components }}
