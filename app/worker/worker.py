@@ -163,7 +163,7 @@ def run_once():
     # AWS (real/dummy mix, unchanged)
     # ----------------------------
     aws_cost(conn, cloud="AWS")
-    collect_ec2_status(conn)
+    collect_ec2_status(conn, cloud="AWS")
 
     # ----------------------------
     # Azure (dummy only)
