@@ -157,7 +157,7 @@ def main():
             stop_rm_container(ip, "frontend-green")
         set_output("frontend_status", "cleaned")
 
-    elif not frontend_first_deploy and frontend_status == "success":
+    elif not first_deploy and frontend_status == "success":
         curr_env = frontend.get("active_env", "")
         inactive_env = "green" if curr_env.lower() == "blue" else "blue"
         prev_image = frontend.get("previous_image", "")
