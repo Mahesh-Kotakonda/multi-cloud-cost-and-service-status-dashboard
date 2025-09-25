@@ -131,16 +131,14 @@ function AWS() {
 
         {/* Region-level cards when ALL selected */}
         {selectedRegion === "ALL" && (
-          <div
-            className={`ec2-cards region-cards ec2-count-${regionCards.length}`}
-          >
+          <div className="ec2-cards region-cards">
             {regionCards}
           </div>
         )}
 
         {/* AZ-level cards when a region is selected */}
         {selectedRegion !== "ALL" && (
-          <div className={`ec2-cards ec2-count-${ec2Filtered.length}`}>
+          <div className="ec2-cards">
             {ec2Filtered
               .filter((d) => d.az !== "TOTAL" && d.az !== "ALL")
               .map((d, idx) => (
