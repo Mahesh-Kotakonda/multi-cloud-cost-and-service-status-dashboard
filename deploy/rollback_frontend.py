@@ -65,11 +65,26 @@ def stop_rm_container(host: str, name: str):
 def run_container(host: str, name: str, image: str):
     log(f"[function run_container] running container={name} image={image} on host={host}")
     try:
+        dockerhub_user = os.getenv("DOCKERHUB_USERNAME")
+        dockerhub_token = os.getenv("DOCKERHUB_TOKEN")
+
+        # Add DockerHub prefix if missing
+        if "/" not in image and dockerhub_user:
+            image = f"{dockerhub_user}/{image}"
+            log(f"[function run_container] resolved full DockerHub image={image}")
+
+        # Perform DockerHub login
+        if dockerhub_user and dockerhub_token:
+            ssh_exec(host, f"echo {dockerhub_token} | docker login -u {dockerhub_user} --password-stdin")
+
+        # Pull + run container
         ssh_exec(host, f"docker pull {image} || true")
         ssh_exec(host, f"docker run -d --restart unless-stopped --name {name} {image}")
+
     except Exception as e:
         log(f"failed to run {name} on {host}: {e}")
         raise
+
 
 # -------------------------------------------------------------------
 # ALB helpers
