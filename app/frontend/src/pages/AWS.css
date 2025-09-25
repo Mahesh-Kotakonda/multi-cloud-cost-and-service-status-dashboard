@@ -20,7 +20,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  min-height: 0; /* allows child scroll areas */
+  min-height: 0;
 }
 
 .ec2-panel {
@@ -83,22 +83,17 @@ select:focus {
   font-weight: 600;
 }
 
-/* EC2 Cards (AZ-level + Regions) */
+/* Shared EC2 Cards layout (AZ + Regions) */
 .ec2-cards {
   display: grid;
-  gap: 14px;
+  grid-template-columns: repeat(2, 1fr); /* ✅ Always 2 per row */
+  gap: 16px;
   margin-top: 12px;
   flex: 1;
-  overflow-y: auto; /* ✅ scroll when too many */
-  padding-right: 4px; /* avoid scrollbar overlap */
+  overflow-y: auto;
+  padding-right: 4px;
   min-height: 0;
 }
-
-.ec2-cards.ec2-count-3 { grid-template-columns: repeat(3, minmax(200px, 1fr)); }
-.ec2-cards.ec2-count-4 { grid-template-columns: repeat(4, minmax(180px, 1fr)); }
-.ec2-cards.ec2-count-5 { grid-template-columns: repeat(5, minmax(160px, 1fr)); }
-.ec2-cards.ec2-count-2 { grid-template-columns: repeat(2, minmax(220px, 1fr)); }
-.ec2-cards.ec2-count-1 { grid-template-columns: minmax(250px, 1fr); }
 
 .ec2-card {
   background: #fff;
@@ -151,28 +146,6 @@ select:focus {
   background: #fee2e2;
   color: #991b1b;
 }
-
-/* Region-level cards */
-.region-cards {
-  display: grid;
-  gap: 16px;
-  margin-top: 12px;
-  flex: 1;
-  overflow-y: auto; /* ✅ scroll for region cards */
-  padding-right: 4px;
-  min-height: 0;
-}
-
-.region-cards .region-card {
-  flex: 1;
-  min-width: 260px;
-  max-width: 320px;
-}
-
-.region-cards.ec2-count-2 { grid-template-columns: repeat(2, minmax(260px, 1fr)); }
-.region-cards.ec2-count-3 { grid-template-columns: repeat(3, minmax(260px, 1fr)); }
-.region-cards.ec2-count-4 { grid-template-columns: repeat(4, minmax(240px, 1fr)); }
-.region-cards.ec2-count-5 { grid-template-columns: repeat(5, minmax(220px, 1fr)); }
 
 /* Cost section */
 .total-cost-card {
