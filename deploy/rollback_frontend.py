@@ -115,10 +115,14 @@ def main():
     log(f"[main] frontend_status={frontend_status}, first_deployment={first_deploy}")
 
     # ------------------ COMPONENT CHECK ------------------
-    if not all(c.lower() == "frontend" for c in args.components):
-        log("[main] not all components are frontend → exiting with empty outputs")
+    components = [c.strip().lower() for c in args.components]
+    if "all" in components or "frontend" in components:
+        log("[main] frontend included in components → proceeding with rollback")
+    else:
+        log("[main] frontend not in components → exiting with empty outputs")
         set_output("frontend_status", "")
         return
+
 
     # ------------------ FRONTEND LOGIC ------------------
     if first_deploy:
