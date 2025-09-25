@@ -10,8 +10,8 @@ function GCP() {
   useEffect(() => {
     async function fetchCloudData() {
       try {
-        const gceRes = await fetch("/api/GCP/status");
-        const costRes = await fetch("/api/GCP/costs");
+        const gceRes = await fetch("/api/gcp/status");
+        const costRes = await fetch("/api/gcp/costs");
         if (!gceRes.ok || !costRes.ok) throw new Error("Failed fetching GCP data");
 
         const gceData = await gceRes.json();
@@ -201,4 +201,5 @@ function GCP() {
 }
 
 export default GCP;
+
 
