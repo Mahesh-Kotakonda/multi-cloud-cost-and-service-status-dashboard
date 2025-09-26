@@ -144,24 +144,34 @@ jobs:
       S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
       PEM_PATH: ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
       SSM_PARAM_NAME: myapp_database_credentials
+  
     outputs:
-      frontend_status: ${{ steps.rollback.outputs.frontend_status }}
-      frontend_previous_image: ${{ steps.rollback.outputs.frontend_previous_image }}
-      frontend_current_image: ${{ steps.rollback.outputs.frontend_current_image }}
-      frontend_instance_ids: ${{ steps.rollback.outputs.frontend_instance_ids }}
+      frontend_status: ${{ steps.rollback_frontend_step.outputs.frontend_status }}
+      frontend_active_env: ${{ steps.rollback_frontend_step.outputs.frontend_active_env }}
+      frontend_inactive_env: ${{ steps.rollback_frontend_step.outputs.frontend_inactive_env }}
+      frontend_active_tg: ${{ steps.rollback_frontend_step.outputs.frontend_active_tg }}
+      frontend_inactive_tg: ${{ steps.rollback_frontend_step.outputs.frontend_inactive_tg }}
+      frontend_current_image: ${{ steps.rollback_frontend_step.outputs.frontend_current_image }}
+      frontend_previous_image: ${{ steps.rollback_frontend_step.outputs.frontend_previous_image }}
+      frontend_first_deployment: ${{ steps.rollback_frontend_step.outputs.frontend_first_deployment }}
+      frontend_instance_ids: ${{ steps.rollback_frontend_step.outputs.frontend_instance_ids }}
+  
     steps:
       - uses: actions/checkout@v4
+  
       - uses: actions/download-artifact@v4
         with:
           name: rollback-jsons
           path: ./json-files
+  
       - name: Rollback Frontend
-        id: rollback
+        id: rollback_frontend_step
         run: |
           python3 ./deploy/rollback_frontend.py \
             --deployment-json ./json-files/latest-deployment.json \
             --infra-json ./json-files/infra-outputs.json \
             --components ${{ needs.pre-rollback.outputs.components }}
+
 
 
   #############################
@@ -181,21 +191,32 @@ jobs:
       S3_JSON_PATH: s3://multi-cloud-cost-and-service-status-dashboard/infra/multi-cloud-dashboard-outputs.json
       PEM_PATH: ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
       SSM_PARAM_NAME: myapp_database_credentials
+  
     outputs:
-      backend_status: ${{ steps.rollback.outputs.backend_status }}
-      backend_previous_image: ${{ steps.rollback.outputs.backend_previous_image }}
-      backend_current_image: ${{ steps.rollback.outputs.backend_current_image }}
-      backend_instance_ids: ${{ steps.rollback.outputs.backend_instance_ids }}
+      backend_status: ${{ steps.rollback_backend_step.outputs.backend_status }}
+      backend_active_env: ${{ steps.rollback_backend_step.outputs.backend_active_env }}
+      backend_inactive_env: ${{ steps.rollback_backend_step.outputs.backend_inactive_env }}
+      backend_active_tg: ${{ steps.rollback_backend_step.outputs.backend_active_tg }}
+      backend_inactive_tg: ${{ steps.rollback_backend_step.outputs.backend_inactive_tg }}
+      backend_current_image: ${{ steps.rollback_backend_step.outputs.backend_current_image }}
+      backend_previous_image: ${{ steps.rollback_backend_step.outputs.backend_previous_image }}
+      backend_first_deployment: ${{ steps.rollback_backend_step.outputs.backend_first_deployment }}
+      backend_deployed_at: ${{ steps.rollback_backend_step.outputs.backend_deployed_at }}
+      backend_deployed_by: ${{ steps.rollback_backend_step.outputs.backend_deployed_by }}
+      backend_instance_ids: ${{ steps.rollback_backend_step.outputs.backend_instance_ids }}
+  
     steps:
       - uses: actions/checkout@v4
+  
       - uses: actions/download-artifact@v4
         with:
           name: rollback-jsons
           path: ./json-files
+  
       - name: Rollback Backend
-        id: rollback
+        id: rollback_backend_step
         run: |
-          ./deploy/rollback_backend.py \
+          python3 ./deploy/rollback_backend.py \
             --deployment-json ./json-files/latest-deployment.json \
             --infra-json ./json-files/infra-outputs.json \
             --components ${{ needs.pre-rollback.outputs.components }}
@@ -216,21 +237,28 @@ jobs:
       IMAGE_REPO: multi-cloud-cost-and-service-status-dashboard-repo
       PEM_PATH: ~/ssh-keys/multi-cloud-cost-and-service-status-key.pem
       SSM_PARAM_NAME: myapp_database_credentials
+  
     outputs:
-      worker_status: ${{ steps.rollback.outputs.worker_status }}
-      worker_previous_image: ${{ steps.rollback.outputs.worker_previous_image }}
-      worker_current_image: ${{ steps.rollback.outputs.worker_current_image }}
-      worker_instance_ids: ${{ steps.rollback.outputs.worker_instance_ids }}
+      worker_status: ${{ steps.rollback_worker_step.outputs.worker_status }}
+      worker_current_image: ${{ steps.rollback_worker_step.outputs.worker_current_image }}
+      worker_previous_image: ${{ steps.rollback_worker_step.outputs.worker_previous_image }}
+      worker_first_deployment: ${{ steps.rollback_worker_step.outputs.worker_first_deployment }}
+      worker_deployed_at: ${{ steps.rollback_worker_step.outputs.worker_deployed_at }}
+      worker_deployed_by: ${{ steps.rollback_worker_step.outputs.worker_deployed_by }}
+      worker_instance_ids: ${{ steps.rollback_worker_step.outputs.worker_instance_ids }}
+  
     steps:
       - uses: actions/checkout@v4
+  
       - uses: actions/download-artifact@v4
         with:
           name: rollback-jsons
           path: ./json-files
+  
       - name: Rollback Worker
-        id: rollback
+        id: rollback_worker_step
         run: |
-          ./deploy/rollback-worker.py \
+          python3 ./deploy/rollback_worker.py \
             --deployment-json ./json-files/latest-deployment.json \
             --infra-json ./json-files/infra-outputs.json \
             --components ${{ needs.pre-rollback.outputs.components }}
