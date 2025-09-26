@@ -6,6 +6,7 @@ import subprocess
 import time
 import paramiko
 import boto3
+import sys
 
 
 # -------------------------------------------------------------------
@@ -13,6 +14,11 @@ import boto3
 # -------------------------------------------------------------------
 def log(msg: str):
     print(f"[rollback-metadata] {msg}", flush=True)
+
+
+def fail(msg: str):
+    log(f"[FAIL] {msg}")
+    sys.exit(1)
 
 
 def run(cmd: list[str]) -> str:
@@ -133,22 +139,70 @@ def create_rule(listener_arn: str, tg_arn: str, path: str, priority: int):
 
 
 # -------------------------------------------------------------------
+# Component rollback controller
+# -------------------------------------------------------------------
+def handle_component(name, status, first_deployment, instance_ids,
+                     active_tg, inactive_tg, listener_arn,
+                     pem_path=None, aws_access_key=None,
+                     aws_secret_key=None, aws_region=None):
+    """
+    Unified rollback decision logic for worker/backend/frontend.
+    """
+    log(f"--- Handling {name.upper()} ---")
+    if first_deployment:
+        if status == "cleaned":
+            log(f"[{name}] First deployment detected, nothing to rollback (already cleaned).")
+        else:
+            fail(f"[{name}] First deployment failed, status={status}. Rollback cannot proceed.")
+        return
+
+    # Not first deployment
+    if status == "prepared":
+        log(f"=== Rolling back {name.capitalize()} ===")
+        if name == "worker":
+            rollback_worker(instance_ids, pem_path, aws_access_key, aws_secret_key, aws_region)
+        elif name == "backend":
+            delete_rules(listener_arn, active_tg)
+            deregister_targets(active_tg, instance_ids)
+            register_targets(inactive_tg, instance_ids)
+            backend_paths = ["/api/aws/*", "/api/azure/*", "/api/gcp/*"]
+            priority = 10
+            for path in backend_paths:
+                create_rule(listener_arn, inactive_tg, path, priority)
+                priority += 1
+            log("Backend rollback finalized: inactive TG promoted.")
+        elif name == "frontend":
+            delete_rules(listener_arn, active_tg)
+            deregister_targets(active_tg, instance_ids)
+            register_targets(inactive_tg, instance_ids)
+            frontend_paths = ["/", "/favicon.ico", "/robots.txt", "/static/*"]
+            priority = 500
+            for path in frontend_paths:
+                create_rule(listener_arn, inactive_tg, path, priority)
+                priority += 1
+            log("Frontend rollback finalized: inactive TG promoted.")
+    elif status == "cleaned":
+        log(f"[{name}] Already cleaned, rollback not required.")
+    else:
+        log(f"[{name}] Skipping rollback, status={status}")
+
+
+# -------------------------------------------------------------------
 # Main rollback orchestration
 # -------------------------------------------------------------------
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--infra-json", required=True)
-    p.add_argument("--deployment-json", required=False)
+    p.add_argument("--deployment-json", required=True)
     p.add_argument("--components", required=True, nargs="+")
     args = p.parse_args()
 
     with open(args.infra_json) as f:
         infra = json.load(f)
+    with open(args.deployment_json) as f:
+        deployment = json.load(f)
 
-    if args.deployment_json:
-        with open(args.deployment_json) as f:
-            deployment = json.load(f)
-        log("[info] Deployment.json loaded (not heavily used yet).")
+    log("[info] Deployment.json loaded.")
 
     components = [c.strip().lower() for c in args.components]
     if "all" in components:
@@ -158,86 +212,49 @@ def main():
 
     listener_arn = infra.get("alb_listener_arn")
 
-    # safer env fetching
     pem_path = os.path.expanduser(os.getenv("PEM_PATH", "")) or None
     aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
     aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
     aws_region = os.getenv("AWS_REGION")
 
-    # sanity check
     if not (aws_access_key and aws_secret_key and aws_region):
         log("[error] Missing AWS credentials or region in environment.")
         return
 
-    # Worker envs
-    worker_status = os.getenv("worker_status", "")
-    worker_instance_ids = [i for i in os.getenv("worker_instance_ids", "").split(",") if i]
-
-    # Backend envs
-    backend_status = os.getenv("backend_status", "")
-    backend_active_tg = os.getenv("backend_active_tg", "")
-    backend_inactive_tg = os.getenv("backend_inactive_tg", "")
-    backend_instance_ids = [i for i in os.getenv("backend_instance_ids", "").split(",") if i]
-
-    # Frontend envs
-    frontend_status = os.getenv("frontend_status", "")
-    frontend_active_tg = os.getenv("frontend_active_tg", "")
-    frontend_inactive_tg = os.getenv("frontend_inactive_tg", "")
-    frontend_instance_ids = [i for i in os.getenv("frontend_instance_ids", "").split(",") if i]
-
-    # --------------------------------------------------
-    # Step 1: Worker rollback (rename)
-    # --------------------------------------------------
+    # Worker
     if "worker" in components:
-        if worker_status == "prepared":
-            log("=== Rolling back Worker containers ===")
-            rollback_worker(worker_instance_ids, pem_path, aws_access_key, aws_secret_key, aws_region)
-        else:
-            log("[worker] Skipped (status != prepared)")
-    else:
-        log("[worker] Not selected in components, skipping.")
+        handle_component(
+            "worker",
+            os.getenv("worker_status", ""),
+            os.getenv("worker_first_deployment", "false").lower() == "true",
+            [i for i in os.getenv("worker_instance_ids", "").split(",") if i],
+            None, None, listener_arn,
+            pem_path, aws_access_key, aws_secret_key, aws_region
+        )
 
-    # --------------------------------------------------
-    # Step 2: Backend rollback (ALB + TG switch)
-    # --------------------------------------------------
+    # Backend
     if "backend" in components:
-        if backend_status == "prepared":
-            log("=== Rolling back Backend ===")
-            delete_rules(listener_arn, backend_active_tg)
-            deregister_targets(backend_active_tg, backend_instance_ids)
-            register_targets(backend_inactive_tg, backend_instance_ids)
+        handle_component(
+            "backend",
+            os.getenv("backend_status", ""),
+            os.getenv("backend_first_deployment", "false").lower() == "true",
+            [i for i in os.getenv("backend_instance_ids", "").split(",") if i],
+            os.getenv("backend_active_tg", ""),
+            os.getenv("backend_inactive_tg", ""),
+            listener_arn
+        )
 
-            backend_paths = ["/api/aws/*", "/api/azure/*", "/api/gcp/*"]
-            priority = 10
-            for path in backend_paths:
-                create_rule(listener_arn, backend_inactive_tg, path, priority)
-                priority += 1
-            log("Backend rollback finalized: inactive TG promoted.")
-        else:
-            log("[backend] Skipped (status != prepared)")
-    else:
-        log("[backend] Not selected in components, skipping.")
-
-    # --------------------------------------------------
-    # Step 3: Frontend rollback (ALB + TG switch)
-    # --------------------------------------------------
+    # Frontend
     if "frontend" in components:
-        if frontend_status == "prepared":
-            log("=== Rolling back Frontend ===")
-            delete_rules(listener_arn, frontend_active_tg)
-            deregister_targets(frontend_active_tg, frontend_instance_ids)
-            register_targets(frontend_inactive_tg, frontend_instance_ids)
-
-            frontend_paths = ["/", "/favicon.ico", "/robots.txt", "/static/*"]
-            priority = 500
-            for path in frontend_paths:
-                create_rule(listener_arn, frontend_inactive_tg, path, priority)
-                priority += 1
-            log("Frontend rollback finalized: inactive TG promoted.")
-        else:
-            log("[frontend] Skipped (status != prepared)")
-    else:
-        log("[frontend] Not selected in components, skipping.")
+        handle_component(
+            "frontend",
+            os.getenv("frontend_status", ""),
+            os.getenv("frontend_first_deployment", "false").lower() == "true",
+            [i for i in os.getenv("frontend_instance_ids", "").split(",") if i],
+            os.getenv("frontend_active_tg", ""),
+            os.getenv("frontend_inactive_tg", ""),
+            listener_arn
+        )
 
 
 if __name__ == "__main__":
