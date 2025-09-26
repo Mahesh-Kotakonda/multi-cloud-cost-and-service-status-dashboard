@@ -183,7 +183,7 @@ jobs:
       frontend_previous_image: ${{ steps.deploy_frontend.outputs.frontend_previous_image }}
       frontend_deployed_at: ${{ steps.deploy_frontend.outputs.frontend_deployed_at }}
       frontend_deployed_by: ${{ steps.deploy_frontend.outputs.frontend_deployed_by }}
-      frontend_first_deployment: ${{ needs.deploy_frontend.outputs.frontend_first_deployment }}
+      frontend_first_deployment: ${{ steps.deploy_frontend.outputs.frontend_first_deployment }}
       frontend_instance_ids: ${{ steps.deploy_frontend.outputs.frontend_instance_ids }}
   
     steps:
