@@ -154,8 +154,8 @@ def main():
         deregister_targets(infra.get("frontend_blue_tg_arn"), infra.get("ec2_instance_ids", []))
         deregister_targets(infra.get("frontend_green_tg_arn"), infra.get("ec2_instance_ids", []))
         for ip in infra.get("ec2_instance_ids", []):
-            stop_rm_container(ip, "frontend-blue")
-            stop_rm_container(ip, "frontend-green")
+            stop_rm_container(ip, "frontend_blue")
+            stop_rm_container(ip, "frontend_green")
 
         set_output("frontend_status", "cleaned")
         set_output("frontend_active_env", "")
@@ -178,9 +178,9 @@ def main():
         ips = get_instance_public_ips(instance_ids)
 
         for ip in ips:
-            stop_rm_container(ip, f"frontend-{inactive_env}")
+            stop_rm_container(ip, f"frontend_{inactive_env}")
             if prev_image:
-                run_container(ip, f"frontend-{inactive_env}", prev_image)
+                run_container(ip, f"frontend_{inactive_env}", prev_image)
 
         set_output("frontend_status", "prepared")
         set_output("frontend_active_env", curr_env)
