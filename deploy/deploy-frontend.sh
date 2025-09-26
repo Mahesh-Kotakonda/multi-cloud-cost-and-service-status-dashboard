@@ -176,7 +176,7 @@ CURRENT_TG=$(aws elbv2 describe-rules \
   --output text || echo "")
 
 DEPLOYED_INSTANCES=()
-
+echo "DEBUG: Raw CURRENT_TG value = '$CURRENT_TG'"
 if [[ -z "$CURRENT_TG" || "$CURRENT_TG" == "None" ]]; then
   FRONTEND_FIRST_DEPLOYMENT=true
   PREVIOUS_IMAGE="$FULL_IMAGE"
