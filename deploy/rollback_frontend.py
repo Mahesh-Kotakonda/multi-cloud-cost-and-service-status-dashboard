@@ -153,7 +153,9 @@ def main():
         delete_rules(infra.get("alb_listener_arn"), infra.get("frontend_green_tg_arn"))
         deregister_targets(infra.get("frontend_blue_tg_arn"), infra.get("ec2_instance_ids", []))
         deregister_targets(infra.get("frontend_green_tg_arn"), infra.get("ec2_instance_ids", []))
-        for ip in infra.get("ec2_instance_ids", []):
+        instance_ids = infra.get("ec2_instance_ids", [])
+        ips = get_instance_public_ips(instance_ids)
+        for ip in ips:
             stop_rm_container(ip, "frontend_blue")
             stop_rm_container(ip, "frontend_green")
 
