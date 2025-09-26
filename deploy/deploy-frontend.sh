@@ -172,7 +172,7 @@ rollback_backend_all() {
 # === Main deployment ===
 CURRENT_TG=$(aws elbv2 describe-rules \
   --listener-arn "$LISTENER_ARN" \
-  --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'/static/*')]].Actions[0].ForwardConfig.TargetGroups[0].TargetGroupArn" \
+  --query "Rules[?Conditions[?Field=='path-pattern' && contains(Values,'/')]].Actions[0].ForwardConfig.TargetGroups[0].TargetGroupArn" \
   --output text || echo "")
 
 DEPLOYED_INSTANCES=()
