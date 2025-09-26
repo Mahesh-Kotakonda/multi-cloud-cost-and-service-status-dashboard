@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import time
+
 # -------------------------------------------------------------------
 # Logging
 # -------------------------------------------------------------------
@@ -12,13 +13,11 @@ def log(msg: str):
     print(f"[frontend-rollback] {msg}", flush=True)
 
 
-
 def run(cmd: list[str]) -> str:
     log(f"[run] START → Executing: {' '.join(cmd)}")
     start = time.time()
 
     res = subprocess.run(cmd, capture_output=True, text=True)
-
     elapsed = round(time.time() - start, 2)
 
     if res.returncode != 0:
@@ -32,34 +31,26 @@ def run(cmd: list[str]) -> str:
 
     return res.stdout.strip()
 
-    
+
 # -------------------------------------------------------------------
 # AWS EC2 helper
 # -------------------------------------------------------------------
 def get_instance_public_ips(instance_ids: list[str]) -> list[str]:
-    """
-    Fetch public IP addresses for given EC2 instance IDs.
-    """
     if not instance_ids:
         return []
-
     cmd = [
         "aws", "ec2", "describe-instances",
         "--instance-ids", *instance_ids,
         "--query", "Reservations[*].Instances[*].PublicIpAddress",
         "--output", "text"
     ]
+    output = run(cmd)
+    return output.split()
 
-    output = run(cmd)  # reuse your existing run() function
-    ips = output.split()
-    return ips
-
-import time
 
 def ssh_exec(host: str, cmd: str):
     pem = os.getenv("PEM_PATH")
     user = os.getenv("SSH_USER", "ec2-user")
-
     ssh_cmd = [
         "ssh",
         "-o", "StrictHostKeyChecking=no",
@@ -67,71 +58,33 @@ def ssh_exec(host: str, cmd: str):
         f"{user}@{host}",
         cmd,
     ]
-
     log(f"[ssh_exec] START → host={host}, cmd={cmd}")
-    start = time.time()
-
     out = run(ssh_cmd)
-
-    elapsed = round(time.time() - start, 2)
-    log(f"[ssh_exec] END → host={host}, took={elapsed}s")
-
+    log(f"[ssh_exec] END → host={host}")
     return out
 
 
-
 def stop_rm_container(host: str, name: str):
-    log(f"[stop_rm_container] START → stopping/removing container={name} on host={host}")
-    start = time.time()
+    log(f"[stop_rm_container] removing container={name} on {host}")
     try:
-        log(f"[stop_rm_container] executing docker rm -f {name}")
         ssh_exec(host, f"docker rm -f {name} || true")
-        log(f"[stop_rm_container] SUCCESS → container {name} removed on {host}")
     except Exception as e:
-        log(f"[stop_rm_container] WARNING → ignore error removing {name} on {host}: {e}")
-    finally:
-        elapsed = round(time.time() - start, 2)
-        log(f"[stop_rm_container] END → took {elapsed}s")
+        log(f"[stop_rm_container] WARNING → ignore error: {e}")
 
 
 def run_container(host: str, name: str, image: str):
-    log(f"[run_container] START → running container={name}, image={image}, host={host}")
-    start = time.time()
-    try:
-        dockerhub_user = os.getenv("DOCKERHUB_USERNAME")
-        dockerhub_token = os.getenv("DOCKERHUB_TOKEN")
+    log(f"[run_container] running container={name}, image={image}, host={host}")
+    dockerhub_user = os.getenv("DOCKERHUB_USERNAME")
+    dockerhub_token = os.getenv("DOCKERHUB_TOKEN")
 
-        # Step 1: resolve image name
-        if "/" not in image and dockerhub_user:
-            image = f"{dockerhub_user}/{image}"
-            log(f"[run_container] resolved image name: {image}")
+    if "/" not in image and dockerhub_user:
+        image = f"{dockerhub_user}/{image}"
 
-        # Step 2: login (if creds available)
-        if dockerhub_user and dockerhub_token:
-            log("[run_container] logging into DockerHub")
-            ssh_exec(host, f"echo {dockerhub_token} | docker login -u {dockerhub_user} --password-stdin")
-            log("[run_container] DockerHub login successful")
+    if dockerhub_user and dockerhub_token:
+        ssh_exec(host, f"echo {dockerhub_token} | docker login -u {dockerhub_user} --password-stdin")
 
-        # Step 3: pull image
-        log(f"[run_container] pulling image {image}")
-        pull_start = time.time()
-        ssh_exec(host, f"docker pull {image} || true")
-        log(f"[run_container] image pull completed in {round(time.time() - pull_start, 2)}s")
-
-        # Step 4: run container
-        log(f"[run_container] starting container {name} with image {image}")
-        run_start = time.time()
-        ssh_exec(host, f"docker run -d --restart unless-stopped --name {name} {image}")
-        log(f"[run_container] container {name} started in {round(time.time() - run_start, 2)}s")
-
-    except Exception as e:
-        log(f"[run_container] ERROR → failed to run {name} on {host}: {e}")
-        raise
-    finally:
-        elapsed = round(time.time() - start, 2)
-        log(f"[run_container] END → total time {elapsed}s")
-
-
+    ssh_exec(host, f"docker pull {image} || true")
+    ssh_exec(host, f"docker run -d --restart unless-stopped --name {name} {image}")
 
 
 # -------------------------------------------------------------------
@@ -139,53 +92,46 @@ def run_container(host: str, name: str, image: str):
 # -------------------------------------------------------------------
 def deregister_targets(tg_arn: str, ids: list[str]):
     if not tg_arn or not ids:
-        log("[function deregister_targets] no tg or ids provided → skipping")
         return
-    log(f"[function deregister_targets] deregistering targets={ids} from tg={tg_arn}")
-    targets = []
-    for i in ids:
-        targets.extend([f"Id={i}"])
+    targets = [f"Id={i}" for i in ids]
     run(["aws", "elbv2", "deregister-targets", "--target-group-arn", tg_arn, "--targets"] + targets)
     run(["aws", "elbv2", "wait", "target-deregistered", "--target-group-arn", tg_arn, "--targets"] + targets)
 
+
 def delete_rules(listener_arn: str, tg_arn: str):
     if not listener_arn or not tg_arn:
-        log("[function delete_rules] no listener or tg → skipping")
         return
-    log(f"[function delete_rules] scanning listener={listener_arn} for tg={tg_arn}")
     rules_json = run(["aws", "elbv2", "describe-rules", "--listener-arn", listener_arn])
     rules = json.loads(rules_json).get("Rules", [])
     for r in rules:
-        actions = r.get("Actions", [])
-        for a in actions:
-            fwd = a.get("ForwardConfig", {})
-            for tg in fwd.get("TargetGroups", []):
+        for a in r.get("Actions", []):
+            for tg in a.get("ForwardConfig", {}).get("TargetGroups", []):
                 if tg.get("TargetGroupArn") == tg_arn:
                     arn = r["RuleArn"]
-                    log(f"Deleting listener rule {arn} → TG {tg_arn}")
                     run(["aws", "elbv2", "delete-rule", "--rule-arn", arn])
+
 
 # -------------------------------------------------------------------
 # GitHub output helper
 # -------------------------------------------------------------------
 def set_output(key: str, val: str):
-    log(f"[function set_output] {key}={val}")
+    log(f"[set_output] {key}={val}")
     ghout = os.getenv("GITHUB_OUTPUT", "/dev/null")
     with open(ghout, "a") as f:
         f.write(f"{key}={val}\n")
     os.environ[key] = val
 
+
 # -------------------------------------------------------------------
-# Main rollback logic (frontend only)
+# Main rollback logic
 # -------------------------------------------------------------------
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--deployment-json", required=True)
     p.add_argument("--infra-json", required=True)
-    p.add_argument("--components", required=True, nargs="+", help="list of components in current deployment")
+    p.add_argument("--components", required=True, nargs="+")
     args = p.parse_args()
 
-    log("[main] loading deployment.json and infra.json")
     with open(args.deployment_json) as f:
         deployment = json.load(f)
     with open(args.infra_json) as f:
@@ -195,22 +141,14 @@ def main():
     frontend_status = frontend.get("status", "")
     first_deploy = frontend.get("first_deployment", False)
 
-    log(f"[main] components={args.components}")
-    log(f"[main] frontend_status={frontend_status}, first_deployment={first_deploy}")
-
-    # ------------------ COMPONENT CHECK ------------------
     components = [c.strip().lower() for c in args.components]
-    if "all" in components or "frontend" in components:
-        log("[main] frontend included in components → proceeding with rollback")
-    else:
-        log("[main] frontend not in components → exiting with empty outputs")
+    if not ("all" in components or "frontend" in components):
+        log("frontend not in components → skipping rollback")
         set_output("frontend_status", "")
         return
 
-
-    # ------------------ FRONTEND LOGIC ------------------
+    # ------------------ FIRST DEPLOYMENT ROLLBACK ------------------
     if first_deploy:
-        log("[frontend-block] first deployment rollback flow")
         delete_rules(infra.get("alb_listener_arn"), infra.get("frontend_blue_tg_arn"))
         delete_rules(infra.get("alb_listener_arn"), infra.get("frontend_green_tg_arn"))
         deregister_targets(infra.get("frontend_blue_tg_arn"), infra.get("ec2_instance_ids", []))
@@ -218,37 +156,56 @@ def main():
         for ip in infra.get("ec2_instance_ids", []):
             stop_rm_container(ip, "frontend-blue")
             stop_rm_container(ip, "frontend-green")
-        set_output("frontend_status", "cleaned")
 
-    elif not first_deploy and frontend_status == "success":
+        set_output("frontend_status", "cleaned")
+        set_output("frontend_active_env", "")
+        set_output("frontend_inactive_env", "")
+        set_output("frontend_active_tg", "")
+        set_output("frontend_inactive_tg", "")
+        set_output("frontend_current_image", "")
+        set_output("frontend_previous_image", "")
+        set_output("frontend_first_deployment", "true")
+        set_output("frontend_instance_ids", ",".join(infra.get("ec2_instance_ids", [])))
+
+    # ------------------ NON-FIRST DEPLOYMENT ROLLBACK ------------------
+    elif frontend_status == "success":
         curr_env = frontend.get("active_env", "")
         inactive_env = "green" if curr_env.lower() == "blue" else "blue"
         prev_image = frontend.get("previous_image", "")
-        log(f"[frontend-block] rollback non-first deployment → inactive_env={inactive_env}, prev_image={prev_image}")
-    
+        curr_image = frontend.get("current_image", "")
+
         instance_ids = infra.get("ec2_instance_ids", [])
         ips = get_instance_public_ips(instance_ids)
-    
-        log(f"[frontend-block] resolved instance_ids={instance_ids} → public_ips={ips}")
-    
+
         for ip in ips:
             stop_rm_container(ip, f"frontend-{inactive_env}")
             if prev_image:
                 run_container(ip, f"frontend-{inactive_env}", prev_image)
-    
+
         set_output("frontend_status", "prepared")
+        set_output("frontend_active_env", curr_env)
+        set_output("frontend_inactive_env", inactive_env)
+        set_output("frontend_active_tg",
+                   infra.get("frontend_blue_tg_arn") if curr_env.lower() == "blue" else infra.get("frontend_green_tg_arn"))
+        set_output("frontend_inactive_tg",
+                   infra.get("frontend_green_tg_arn") if curr_env.lower() == "blue" else infra.get("frontend_blue_tg_arn"))
+        set_output("frontend_current_image", curr_image)
+        set_output("frontend_previous_image", prev_image)
+        set_output("frontend_first_deployment", "false")
+        set_output("frontend_instance_ids", ",".join(instance_ids))
 
-
-    elif not first_deploy and frontend_status == "skipped":
-        log("[frontend-block] frontend skipped → no rollback")
-        set_output("frontend_status", "")
-
+    # ------------------ SKIPPED / NO MATCH ------------------
     else:
-        log("[frontend-block] no matching rollback condition")
         set_output("frontend_status", "")
+        set_output("frontend_active_env", "")
+        set_output("frontend_inactive_env", "")
+        set_output("frontend_active_tg", "")
+        set_output("frontend_inactive_tg", "")
+        set_output("frontend_current_image", "")
+        set_output("frontend_previous_image", "")
+        set_output("frontend_first_deployment", "false")
+        set_output("frontend_instance_ids", ",".join(infra.get("ec2_instance_ids", [])))
 
-    log("[main] frontend rollback evaluation completed")
 
-# -------------------------------------------------------------------
 if __name__ == "__main__":
     main()
