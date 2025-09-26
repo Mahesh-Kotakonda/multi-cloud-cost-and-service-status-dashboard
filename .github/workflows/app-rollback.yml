@@ -178,7 +178,7 @@ jobs:
   # Backend Rollback
   #############################
   rollback_backend:
-    needs: rollback_frontend
+    needs: [pre-rollback, rollback_frontend]
     if: needs.pre-rollback.outputs.can_rollback == 'true'
     runs-on: self-hosted
     env:
@@ -225,7 +225,7 @@ jobs:
   # Worker Rollback
   #############################
   rollback_worker:
-    needs: rollback_backend
+    needs: [pre-rollback, rollback_frontend, rollback_backend]
     if: needs.pre-rollback.outputs.can_rollback == 'true'
     runs-on: self-hosted
     env:
@@ -267,7 +267,7 @@ jobs:
   # Metadata Rollback
   #############################
   rollback_metadata:
-    needs: [rollback_worker, rollback_backend, rollback_frontend]
+    needs: [pre-rollback, rollback_worker, rollback_backend, rollback_frontend]
     if: needs.pre-rollback.outputs.can_rollback == 'true'
     runs-on: self-hosted
     env:
