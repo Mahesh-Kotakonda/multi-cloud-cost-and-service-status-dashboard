@@ -275,34 +275,86 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_REGION: us-east-1
       DEPLOY_METADATA_S3_BUCKET: multi-cloud-cost-and-service-status-dashboard
-
+  
       # Worker outputs
       WORKER_STATUS: ${{ needs.rollback_worker.outputs.worker_status }}
       WORKER_CURRENT_IMAGE: ${{ needs.rollback_worker.outputs.worker_current_image }}
       WORKER_PREVIOUS_IMAGE: ${{ needs.rollback_worker.outputs.worker_previous_image }}
+      WORKER_FIRST_DEPLOYMENT: ${{ needs.rollback_worker.outputs.worker_first_deployment }}
+      WORKER_DEPLOYED_AT: ${{ needs.rollback_worker.outputs.worker_deployed_at }}
+      WORKER_DEPLOYED_BY: ${{ needs.rollback_worker.outputs.worker_deployed_by }}
       WORKER_INSTANCE_IDS: ${{ needs.rollback_worker.outputs.worker_instance_ids }}
-
+  
       # Backend outputs
       BACKEND_STATUS: ${{ needs.rollback_backend.outputs.backend_status }}
+      BACKEND_ACTIVE_ENV: ${{ needs.rollback_backend.outputs.backend_active_env }}
+      BACKEND_INACTIVE_ENV: ${{ needs.rollback_backend.outputs.backend_inactive_env }}
+      BACKEND_ACTIVE_TG: ${{ needs.rollback_backend.outputs.backend_active_tg }}
+      BACKEND_INACTIVE_TG: ${{ needs.rollback_backend.outputs.backend_inactive_tg }}
       BACKEND_CURRENT_IMAGE: ${{ needs.rollback_backend.outputs.backend_current_image }}
       BACKEND_PREVIOUS_IMAGE: ${{ needs.rollback_backend.outputs.backend_previous_image }}
+      BACKEND_FIRST_DEPLOYMENT: ${{ needs.rollback_backend.outputs.backend_first_deployment }}
+      BACKEND_DEPLOYED_AT: ${{ needs.rollback_backend.outputs.backend_deployed_at }}
+      BACKEND_DEPLOYED_BY: ${{ needs.rollback_backend.outputs.backend_deployed_by }}
       BACKEND_INSTANCE_IDS: ${{ needs.rollback_backend.outputs.backend_instance_ids }}
-
+  
       # Frontend outputs
       FRONTEND_STATUS: ${{ needs.rollback_frontend.outputs.frontend_status }}
+      FRONTEND_ACTIVE_ENV: ${{ needs.rollback_frontend.outputs.frontend_active_env }}
+      FRONTEND_INACTIVE_ENV: ${{ needs.rollback_frontend.outputs.frontend_inactive_env }}
+      FRONTEND_ACTIVE_TG: ${{ needs.rollback_frontend.outputs.frontend_active_tg }}
+      FRONTEND_INACTIVE_TG: ${{ needs.rollback_frontend.outputs.frontend_inactive_tg }}
       FRONTEND_CURRENT_IMAGE: ${{ needs.rollback_frontend.outputs.frontend_current_image }}
       FRONTEND_PREVIOUS_IMAGE: ${{ needs.rollback_frontend.outputs.frontend_previous_image }}
+      FRONTEND_FIRST_DEPLOYMENT: ${{ needs.rollback_frontend.outputs.frontend_first_deployment }}
       FRONTEND_INSTANCE_IDS: ${{ needs.rollback_frontend.outputs.frontend_instance_ids }}
-
+  
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: rollback-jsons
           path: ./json-files
+  
+      - name: Print Rollback Outputs
+        run: |
+          echo "=== Worker Outputs ==="
+          echo "Status: $WORKER_STATUS"
+          echo "Current Image: $WORKER_CURRENT_IMAGE"
+          echo "Previous Image: $WORKER_PREVIOUS_IMAGE"
+          echo "First Deployment: $WORKER_FIRST_DEPLOYMENT"
+          echo "Deployed At: $WORKER_DEPLOYED_AT"
+          echo "Deployed By: $WORKER_DEPLOYED_BY"
+          echo "Instance IDs: $WORKER_INSTANCE_IDS"
+          
+          echo "=== Backend Outputs ==="
+          echo "Status: $BACKEND_STATUS"
+          echo "Active Env: $BACKEND_ACTIVE_ENV"
+          echo "Inactive Env: $BACKEND_INACTIVE_ENV"
+          echo "Active TG: $BACKEND_ACTIVE_TG"
+          echo "Inactive TG: $BACKEND_INACTIVE_TG"
+          echo "Current Image: $BACKEND_CURRENT_IMAGE"
+          echo "Previous Image: $BACKEND_PREVIOUS_IMAGE"
+          echo "First Deployment: $BACKEND_FIRST_DEPLOYMENT"
+          echo "Deployed At: $BACKEND_DEPLOYED_AT"
+          echo "Deployed By: $BACKEND_DEPLOYED_BY"
+          echo "Instance IDs: $BACKEND_INSTANCE_IDS"
+          
+          echo "=== Frontend Outputs ==="
+          echo "Status: $FRONTEND_STATUS"
+          echo "Active Env: $FRONTEND_ACTIVE_ENV"
+          echo "Inactive Env: $FRONTEND_INACTIVE_ENV"
+          echo "Active TG: $FRONTEND_ACTIVE_TG"
+          echo "Inactive TG: $FRONTEND_INACTIVE_TG"
+          echo "Current Image: $FRONTEND_CURRENT_IMAGE"
+          echo "Previous Image: $FRONTEND_PREVIOUS_IMAGE"
+          echo "First Deployment: $FRONTEND_FIRST_DEPLOYMENT"
+          echo "Instance IDs: $FRONTEND_INSTANCE_IDS"
+  
       - name: Finalize Rollback Metadata
         run: |
           python3 ./deploy/rollback_metadata.py \
             --deployment-json ./json-files/latest-deployment.json \
             --infra-json ./json-files/infra-outputs.json \
             --components ${{ needs.pre-rollback.outputs.components }}
+
