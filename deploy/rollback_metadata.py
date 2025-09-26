@@ -52,6 +52,9 @@ def rollback_worker(instance_ids, pem_path, aws_access_key, aws_secret_key, aws_
     if not instance_ids:
         log("[worker] No instance IDs provided, skipping rollback.")
         return
+    if not pem_path:
+        log("[worker] PEM_PATH not set, skipping worker rollback.")
+        return
     ec2 = boto3.client(
         "ec2",
         aws_access_key_id=aws_access_key,
@@ -155,26 +158,32 @@ def main():
 
     listener_arn = infra.get("alb_listener_arn")
 
-    pem_path = os.path.expanduser(os.environ["PEM_PATH"])
-    aws_access_key = os.environ["AWS_ACCESS_KEY_ID"]
-    aws_secret_key = os.environ["AWS_SECRET_ACCESS_KEY"]
-    aws_region = os.environ["AWS_REGION"]
+    # safer env fetching
+    pem_path = os.path.expanduser(os.getenv("PEM_PATH", "")) or None
+    aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
+    aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+    aws_region = os.getenv("AWS_REGION")
+
+    # sanity check
+    if not (aws_access_key and aws_secret_key and aws_region):
+        log("[error] Missing AWS credentials or region in environment.")
+        return
 
     # Worker envs
     worker_status = os.getenv("worker_status", "")
-    worker_instance_ids = os.getenv("worker_instance_ids", "").split(",")
+    worker_instance_ids = [i for i in os.getenv("worker_instance_ids", "").split(",") if i]
 
     # Backend envs
     backend_status = os.getenv("backend_status", "")
     backend_active_tg = os.getenv("backend_active_tg", "")
     backend_inactive_tg = os.getenv("backend_inactive_tg", "")
-    backend_instance_ids = os.getenv("backend_instance_ids", "").split(",")
+    backend_instance_ids = [i for i in os.getenv("backend_instance_ids", "").split(",") if i]
 
     # Frontend envs
     frontend_status = os.getenv("frontend_status", "")
     frontend_active_tg = os.getenv("frontend_active_tg", "")
     frontend_inactive_tg = os.getenv("frontend_inactive_tg", "")
-    frontend_instance_ids = os.getenv("frontend_instance_ids", "").split(",")
+    frontend_instance_ids = [i for i in os.getenv("frontend_instance_ids", "").split(",") if i]
 
     # --------------------------------------------------
     # Step 1: Worker rollback (rename)
