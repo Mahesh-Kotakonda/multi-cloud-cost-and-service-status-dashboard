@@ -40,9 +40,7 @@ def rename_worker_on_instance(instance_ip, pem_path):
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.connect(instance_ip, username="ec2-user", key_filename=pem_path)
 
-    # Remove old worker container
     ssh.exec_command("docker rm -f worker || true")
-    # Rename new → worker
     ssh.exec_command("docker rename worker_new worker || true")
 
     ssh.close()
@@ -137,10 +135,24 @@ def create_rule(listener_arn: str, tg_arn: str, path: str, priority: int):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--infra-json", required=True)
+    p.add_argument("--deployment-json", required=False)
+    p.add_argument("--components", required=True, nargs="+")
     args = p.parse_args()
 
     with open(args.infra_json) as f:
         infra = json.load(f)
+
+    if args.deployment_json:
+        with open(args.deployment_json) as f:
+            deployment = json.load(f)
+        log("[info] Deployment.json loaded (not heavily used yet).")
+
+    components = [c.strip().lower() for c in args.components]
+    if "all" in components:
+        components = ["worker", "backend", "frontend"]
+
+    log(f"[info] Components selected for rollback: {components}")
+
     listener_arn = infra.get("alb_listener_arn")
 
     pem_path = os.path.expanduser(os.environ["PEM_PATH"])
@@ -167,47 +179,56 @@ def main():
     # --------------------------------------------------
     # Step 1: Worker rollback (rename)
     # --------------------------------------------------
-    if worker_status == "prepared":
-        log("=== Rolling back Worker containers ===")
-        rollback_worker(worker_instance_ids, pem_path, aws_access_key, aws_secret_key, aws_region)
+    if "worker" in components:
+        if worker_status == "prepared":
+            log("=== Rolling back Worker containers ===")
+            rollback_worker(worker_instance_ids, pem_path, aws_access_key, aws_secret_key, aws_region)
+        else:
+            log("[worker] Skipped (status != prepared)")
     else:
-        log("[worker] Skipped (status != prepared)")
+        log("[worker] Not selected in components, skipping.")
 
     # --------------------------------------------------
     # Step 2: Backend rollback (ALB + TG switch)
     # --------------------------------------------------
-    if backend_status == "prepared":
-        log("=== Rolling back Backend ===")
-        delete_rules(listener_arn, backend_active_tg)
-        deregister_targets(backend_active_tg, backend_instance_ids)
-        register_targets(backend_inactive_tg, backend_instance_ids)
+    if "backend" in components:
+        if backend_status == "prepared":
+            log("=== Rolling back Backend ===")
+            delete_rules(listener_arn, backend_active_tg)
+            deregister_targets(backend_active_tg, backend_instance_ids)
+            register_targets(backend_inactive_tg, backend_instance_ids)
 
-        backend_paths = ["/api/aws/*", "/api/azure/*", "/api/gcp/*"]
-        priority = 10
-        for path in backend_paths:
-            create_rule(listener_arn, backend_inactive_tg, path, priority)
-            priority += 1
-        log("Backend rollback finalized: inactive TG promoted.")
+            backend_paths = ["/api/aws/*", "/api/azure/*", "/api/gcp/*"]
+            priority = 10
+            for path in backend_paths:
+                create_rule(listener_arn, backend_inactive_tg, path, priority)
+                priority += 1
+            log("Backend rollback finalized: inactive TG promoted.")
+        else:
+            log("[backend] Skipped (status != prepared)")
     else:
-        log("[backend] Skipped (status != prepared)")
+        log("[backend] Not selected in components, skipping.")
 
     # --------------------------------------------------
     # Step 3: Frontend rollback (ALB + TG switch)
     # --------------------------------------------------
-    if frontend_status == "prepared":
-        log("=== Rolling back Frontend ===")
-        delete_rules(listener_arn, frontend_active_tg)
-        deregister_targets(frontend_active_tg, frontend_instance_ids)
-        register_targets(frontend_inactive_tg, frontend_instance_ids)
+    if "frontend" in components:
+        if frontend_status == "prepared":
+            log("=== Rolling back Frontend ===")
+            delete_rules(listener_arn, frontend_active_tg)
+            deregister_targets(frontend_active_tg, frontend_instance_ids)
+            register_targets(frontend_inactive_tg, frontend_instance_ids)
 
-        frontend_paths = ["/", "/favicon.ico", "/robots.txt", "/static/*"]
-        priority = 500
-        for path in frontend_paths:
-            create_rule(listener_arn, frontend_inactive_tg, path, priority)
-            priority += 1
-        log("Frontend rollback finalized: inactive TG promoted.")
+            frontend_paths = ["/", "/favicon.ico", "/robots.txt", "/static/*"]
+            priority = 500
+            for path in frontend_paths:
+                create_rule(listener_arn, frontend_inactive_tg, path, priority)
+                priority += 1
+            log("Frontend rollback finalized: inactive TG promoted.")
+        else:
+            log("[frontend] Skipped (status != prepared)")
     else:
-        log("[frontend] Skipped (status != prepared)")
+        log("[frontend] Not selected in components, skipping.")
 
 
 if __name__ == "__main__":
