@@ -10,7 +10,6 @@
   box-sizing: border-box;
 }
 
-/* Panels */
 .split-panel {
   flex: 1;
   border-radius: 10px;
@@ -20,13 +19,15 @@
   flex-direction: column;
   overflow: hidden;
   min-height: 0;
+
 }
 
 .ec2-panel {
-  background: linear-gradient(135deg, #eef2ff, #e0e7ff);
+  background: linear-gradient(135deg, #eef2ff, #e0e7ff); /* gradient */
   border: 1px solid #c7d2fe;
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
 }
+
 
 .cost-panel {
   background: linear-gradient(180deg, #f9fafb, #ecfdf5);
