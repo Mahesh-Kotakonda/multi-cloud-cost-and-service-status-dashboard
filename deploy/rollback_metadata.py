@@ -74,18 +74,18 @@ def deregister_targets(tg_arn: str, ids: list[str]):
         log("[deregister_targets] Nothing to do.")
         return
     log(f"Deregistering {ids} from {tg_arn}")
-    targets = [f"Id={i}" for i in ids]
-    run(["aws", "elbv2", "deregister-targets", "--target-group-arn", tg_arn, "--targets"] + targets)
-    run(["aws", "elbv2", "wait", "target-deregistered", "--target-group-arn", tg_arn, "--targets"] + targets)
+    targets = [f"Id={i}" for i in ids if i]
+    if targets:
+        run(["aws", "elbv2", "deregister-targets", "--target-group-arn", tg_arn, "--targets"] + targets)
 
 def register_targets(tg_arn: str, ids: list[str]):
     if not tg_arn or not ids:
         log("[register_targets] Nothing to do.")
         return
     log(f"Registering {ids} into {tg_arn}")
-    targets = [f"Id={i}" for i in ids]
-    run(["aws", "elbv2", "register-targets", "--target-group-arn", tg_arn, "--targets"] + targets)
-    run(["aws", "elbv2", "wait", "target-in-service", "--target-group-arn", tg_arn, "--targets"] + targets)
+    targets = [f"Id={i}" for i in ids if i]
+    if targets:
+        run(["aws", "elbv2", "register-targets", "--target-group-arn", tg_arn, "--targets"] + targets)
 
 def delete_rules(listener_arn: str, tg_arn: str):
     if not listener_arn or not tg_arn:
