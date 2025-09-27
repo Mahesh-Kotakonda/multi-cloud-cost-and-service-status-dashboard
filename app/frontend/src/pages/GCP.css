@@ -13,7 +13,6 @@
 /* Panels */
 .split-panel {
   flex: 1;
-  background: #ffffff;
   border-radius: 10px;
   padding: 16px;
   box-shadow: 0 2px 6px rgba(0,0,0,0.08);
@@ -21,14 +20,16 @@
   flex-direction: column;
   overflow: hidden;
   min-height: 0;
+  /* ❌ no solid background here */
 }
 
+/* ✅ Panel-specific backgrounds (soft gradients, same style as Azure) */
 .gce-panel {
-  background: linear-gradient(180deg, #f9fafb, #e0f2fe); /* blue tint */
+  background: linear-gradient(180deg, #f9fafb 0%, #e0f2fe 100%); /* soft blue tint */
 }
 
 .cost-panel {
-  background: linear-gradient(180deg, #f9fafb, #ecfdf5); /* green tint */
+  background: linear-gradient(180deg, #f9fafb 0%, #ecfdf5 100%); /* soft green tint */
 }
 
 /* Headings */
@@ -83,10 +84,10 @@ select:focus {
   font-weight: 600;
 }
 
-/* Shared GCE Cards layout (AZ + Regions) */
+/* Shared GCE Cards layout */
 .gce-cards {
   display: grid;
-  grid-template-columns: repeat(2, 1fr); /* ✅ Always 2 per row */
+  grid-template-columns: repeat(2, 1fr);
   gap: 16px;
   margin-top: 12px;
   flex: 1;
@@ -96,7 +97,7 @@ select:focus {
 }
 
 .gce-card {
-  background: #fff;
+  background: linear-gradient(135deg, #ffffff, #f9fafb);
   padding: 16px;
   border-radius: 8px;
   text-align: center;
@@ -149,7 +150,7 @@ select:focus {
 
 /* Cost section */
 .total-cost-card {
-  background: linear-gradient(135deg, #f3f4f6, #e0f2fe);
+  background: linear-gradient(135deg, #f9fafb, #e0f2fe);
   color: #111827;
   padding: 6px;
   border-radius: 8px;
@@ -187,7 +188,7 @@ select:focus {
 }
 
 .service-card {
-  background: #fff;
+  background: linear-gradient(135deg, #ffffff, #f9fafb);
   padding: 8px;
   border-radius: 6px;
   text-align: center;
