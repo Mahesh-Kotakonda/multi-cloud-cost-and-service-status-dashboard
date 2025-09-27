@@ -13,7 +13,6 @@
 /* Panels */
 .split-panel {
   flex: 1;
-  background: #ffffff;
   border-radius: 10px;
   padding: 16px;
   box-shadow: 0 2px 6px rgba(0,0,0,0.08);
@@ -23,12 +22,13 @@
   min-height: 0;
 }
 
+/* ✅ Stronger gradients so they don’t look white */
 .ec2-panel {
-  background: linear-gradient(180deg, #f9fafb, #ecfdf5);
+  background: linear-gradient(180deg, #e6f4ea, #d1fae5); /* green tint */
 }
 
 .cost-panel {
-  background: linear-gradient(180deg, #f9fafb, #ecfdf5);
+  background: linear-gradient(180deg, #e0f2fe, #bfdbfe); /* blue tint */
 }
 
 /* Headings */
@@ -86,7 +86,7 @@ select:focus {
 /* Shared EC2 Cards layout (AZ + Regions) */
 .ec2-cards {
   display: grid;
-  grid-template-columns: repeat(2, 1fr); /* ✅ Always 2 per row */
+  grid-template-columns: repeat(2, 1fr);
   gap: 16px;
   margin-top: 12px;
   flex: 1;
@@ -95,7 +95,7 @@ select:focus {
   min-height: 0;
 }
 
-/* --- Updated EC2 card design --- */
+/* EC2 card design */
 .ec2-card {
   background: linear-gradient(135deg, #f9fafb, #f3f4f6);
   padding: 16px;
@@ -116,11 +116,9 @@ select:focus {
   background: linear-gradient(135deg, #eef2ff, #f9fafb);
 }
 
-/* Gradient-styled region/AZ names */
 .ec2-card h4 {
   font-size: 15px;
   font-weight: 700;
-  color: #1e3a8a;
   margin-bottom: 10px;
   background: linear-gradient(90deg, #3b82f6, #2563eb);
   -webkit-background-clip: text;
@@ -134,7 +132,7 @@ select:focus {
   align-items: center;
 }
 
-/* Status badges (upgraded with gradients + pill style) */
+/* Status badges */
 .badge {
   display: inline-block;
   padding: 4px 10px;
