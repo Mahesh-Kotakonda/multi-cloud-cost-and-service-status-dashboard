@@ -24,7 +24,7 @@
 
 /* ✅ Panel-specific backgrounds */
 .ec2-panel {
-  background: linear-gradient(180deg, #e0f2fe, #dbeafe); /* bluish */
+  background: linear-gradient(180deg, #e0f2fe, #FFFF00); /* bluish */
 }
 
 .cost-panel {
