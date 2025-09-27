@@ -12,10 +12,10 @@ function CloudSelector({ selectedCloud, setSelectedCloud }) {
     <div className="cloud-selector-wrapper">
     <p className="cloud-description">
       Select a cloud provider below to view its 
-      <strong>server status</strong> and 
-      <strong>account cost details</strong> 
+      <strong> server status</strong> and 
+      <strong> account cost details </strong> 
       for the <strong>current</strong> and 
-      <strong>last two months</strong>.
+      <strong> last two months</strong>.
     </p>
 
 
@@ -43,6 +43,7 @@ function CloudSelector({ selectedCloud, setSelectedCloud }) {
 }
 
 export default CloudSelector;
+
 
 
 
