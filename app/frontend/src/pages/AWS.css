@@ -13,6 +13,7 @@
 /* Panels */
 .split-panel {
   flex: 1;
+  background: #ffffff;
   border-radius: 10px;
   padding: 16px;
   box-shadow: 0 2px 6px rgba(0,0,0,0.08);
@@ -23,9 +24,7 @@
 }
 
 .ec2-panel {
-  background: linear-gradient(135deg, #eef2ff, #e0e7ff);
-  border: 1px solid #c7d2fe;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+  background: linear-gradient(180deg, #f9fafb, #eef2ff);
 }
 
 .cost-panel {
@@ -96,10 +95,9 @@ select:focus {
   min-height: 0;
 }
 
-/* --- Updated EC2 card design (frosted glass effect) --- */
+/* --- Updated EC2 card design --- */
 .ec2-card {
-  background: rgba(255, 255, 255, 0.8); /* transparent to show panel bg */
-  backdrop-filter: blur(6px);           /* frosted glass */
+  background: linear-gradient(135deg, #f9fafb, #f3f4f6);
   padding: 16px;
   border-radius: 10px;
   text-align: center;
@@ -115,7 +113,7 @@ select:focus {
 .ec2-card:hover {
   transform: translateY(-3px);
   box-shadow: 0 6px 12px rgba(0,0,0,0.12);
-  background: rgba(255, 255, 255, 0.9);
+  background: linear-gradient(135deg, #eef2ff, #f9fafb);
 }
 
 /* Gradient-styled region/AZ names */
