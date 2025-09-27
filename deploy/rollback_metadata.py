@@ -8,13 +8,12 @@ import paramiko
 import boto3
 
 # -------------------------------------------------------------------
-# Logging
+# Logging + runner
 # -------------------------------------------------------------------
 def log(msg: str):
     print(f"[rollback-metadata] {msg}", flush=True)
 
 def run(cmd: list[str]) -> str:
-    """Run a shell command and capture stdout"""
     log(f"[run] START → {' '.join(cmd)}")
     start = time.time()
     res = subprocess.run(cmd, capture_output=True, text=True)
@@ -28,10 +27,9 @@ def run(cmd: list[str]) -> str:
     return res.stdout.strip()
 
 # -------------------------------------------------------------------
-# Worker rollback (rename worker_new → worker)
+# Worker rollback
 # -------------------------------------------------------------------
 def rename_worker_on_instance(instance_ip, pem_path):
-    """SSH into instance and rename worker_new → worker"""
     log(f"Renaming worker_new → worker on {instance_ip}")
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -42,7 +40,6 @@ def rename_worker_on_instance(instance_ip, pem_path):
     log(f"[{instance_ip}] Worker container rollback finalized.")
 
 def rollback_worker(instance_ids, pem_path, aws_access_key, aws_secret_key, aws_region):
-    """Rename worker_new to worker on all instances"""
     if not instance_ids:
         log("[worker] No instance IDs provided, skipping rollback.")
         return
@@ -67,29 +64,24 @@ def rollback_worker(instance_ids, pem_path, aws_access_key, aws_secret_key, aws_
                 log(f"[worker] Instance {inst['InstanceId']} has no public IP, skipping.")
 
 # -------------------------------------------------------------------
-# ALB Helpers for backend/frontend
+# ALB helpers
 # -------------------------------------------------------------------
 def deregister_targets(tg_arn: str, ids: list[str]):
     if not tg_arn or not ids:
-        log("[deregister_targets] Nothing to do.")
         return
     log(f"Deregistering {ids} from {tg_arn}")
     targets = [f"Id={i}" for i in ids if i]
-    if targets:
-        run(["aws", "elbv2", "deregister-targets", "--target-group-arn", tg_arn, "--targets"] + targets)
+    run(["aws", "elbv2", "deregister-targets", "--target-group-arn", tg_arn, "--targets"] + targets)
 
-def register_targets(tg_arn: str, ids: list[str]):
+def register_targets(tg_arn: str, ids: list[str], port: str):
     if not tg_arn or not ids:
-        log("[register_targets] Nothing to do.")
         return
-    log(f"Registering {ids} into {tg_arn}")
-    targets = [f"Id={i}" for i in ids if i]
-    if targets:
-        run(["aws", "elbv2", "register-targets", "--target-group-arn", tg_arn, "--targets"] + targets)
+    log(f"Registering {ids} into {tg_arn} on port {port}")
+    targets = [f"Id={i},Port={port}" for i in ids if i]
+    run(["aws", "elbv2", "register-targets", "--target-group-arn", tg_arn, "--targets"] + targets)
 
 def delete_rules(listener_arn: str, tg_arn: str):
     if not listener_arn or not tg_arn:
-        log("[delete_rules] Nothing to do.")
         return
     rules_json = run(["aws", "elbv2", "describe-rules", "--listener-arn", listener_arn])
     rules = json.loads(rules_json).get("Rules", [])
@@ -103,9 +95,8 @@ def delete_rules(listener_arn: str, tg_arn: str):
 
 def create_rule(listener_arn: str, tg_arn: str, path: str, priority: int):
     if not listener_arn or not tg_arn:
-        log(f"[create_rule] Skipping path={path}, TG missing")
         return
-    log(f"Creating ALB rule: path={path}, TG={tg_arn}, priority={priority}")
+    log(f"Creating rule path={path}, TG={tg_arn}, priority={priority}")
     run([
         "aws", "elbv2", "create-rule",
         "--listener-arn", listener_arn,
@@ -115,33 +106,31 @@ def create_rule(listener_arn: str, tg_arn: str, path: str, priority: int):
     ])
 
 # -------------------------------------------------------------------
-# Component handling logic
+# Component handling
 # -------------------------------------------------------------------
 def handle_component(name, status, first_deployment, rollback_fn=None):
     log(f"--- Handling {name.upper()} ---")
-
     if first_deployment.lower() == "true":
         if status == "cleaned":
-            log(f"[{name}] First deployment detected. No rollback needed; already in baseline state.")
+            log(f"[{name}] First deployment detected. No rollback needed.")
         else:
-            log(f"[{name}] First deployment detected but deployment failed (status={status}). No rollback performed.")
+            log(f"[{name}] First deployment failed (status={status}). No rollback performed.")
         return
 
-    if first_deployment.lower() == "false":
-        if status == "prepared":
-            log(f"[{name}] Rollback required (status=prepared).")
-            if rollback_fn:
-                rollback_fn()
-            log(f"[{name}] Rollback finalized.")
-        elif status == "cleaned":
-            log(f"[{name}] Rollback not needed. Already cleaned.")
-        elif not status:
-            log(f"[{name}] Skipping rollback. No status provided.")
-        else:
-            log(f"[{name}] Skipping rollback. Status={status}.")
+    if status == "prepared":
+        log(f"[{name}] Rollback required (status=prepared).")
+        if rollback_fn:
+            rollback_fn()
+        log(f"[{name}] Rollback finalized.")
+    elif status == "cleaned":
+        log(f"[{name}] Already cleaned. No rollback.")
+    elif not status:
+        log(f"[{name}] No status provided. Skipping rollback.")
+    else:
+        log(f"[{name}] Status={status}. Skipping rollback.")
 
 # -------------------------------------------------------------------
-# Main rollback orchestration
+# Main
 # -------------------------------------------------------------------
 def main():
     p = argparse.ArgumentParser()
@@ -156,7 +145,7 @@ def main():
     if args.deployment_json:
         with open(args.deployment_json) as f:
             _ = json.load(f)
-        log("[info] Deployment.json loaded (not heavily used).")
+        log("[info] Deployment.json loaded.")
 
     components = [c.strip().lower() for c in args.components]
     if "all" in components:
@@ -169,10 +158,6 @@ def main():
     aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
     aws_region = os.getenv("AWS_REGION")
 
-    if not (aws_access_key and aws_secret_key and aws_region):
-        log("[error] Missing AWS credentials or region in environment.")
-        return
-
     # Worker
     if "worker" in components:
         handle_component(
@@ -184,40 +169,48 @@ def main():
                 pem_path, aws_access_key, aws_secret_key, aws_region
             )
         )
-    else:
-        log("[worker] Not selected in components, skipping.")
 
     # Backend
     if "backend" in components:
         def backend_rollback():
-            delete_rules(listener_arn, os.getenv("BACKEND_ACTIVE_TG", ""))
-            deregister_targets(os.getenv("BACKEND_ACTIVE_TG", ""), os.getenv("BACKEND_INSTANCE_IDS", "").split(","))
-            register_targets(os.getenv("BACKEND_INACTIVE_TG", ""), os.getenv("BACKEND_INSTANCE_IDS", "").split(","))
+            active = os.getenv("BACKEND_ACTIVE_TG", "")
+            inactive = os.getenv("BACKEND_INACTIVE_TG", "")
+            ids = [i for i in os.getenv("BACKEND_INSTANCE_IDS", "").split(",") if i]
+
+            port = os.getenv("BACKEND_GREEN_PORT") if "blue" in active.lower() else os.getenv("BACKEND_BLUE_PORT")
+
+            delete_rules(listener_arn, active)
+            deregister_targets(active, ids)
+            register_targets(inactive, ids, port)
+
             backend_paths = ["/api/aws/*", "/api/azure/*", "/api/gcp/*"]
-            priority = 10
+            prio = 10
             for path in backend_paths:
-                create_rule(listener_arn, os.getenv("BACKEND_INACTIVE_TG", ""), path, priority)
-                priority += 1
+                create_rule(listener_arn, inactive, path, prio)
+                prio += 1
 
         handle_component("backend", os.getenv("BACKEND_STATUS", ""), os.getenv("BACKEND_FIRST_DEPLOYMENT", "false"), backend_rollback)
-    else:
-        log("[backend] Not selected in components, skipping.")
 
     # Frontend
     if "frontend" in components:
         def frontend_rollback():
-            delete_rules(listener_arn, os.getenv("FRONTEND_ACTIVE_TG", ""))
-            deregister_targets(os.getenv("FRONTEND_ACTIVE_TG", ""), os.getenv("FRONTEND_INSTANCE_IDS", "").split(","))
-            register_targets(os.getenv("FRONTEND_INACTIVE_TG", ""), os.getenv("FRONTEND_INSTANCE_IDS", "").split(","))
+            active = os.getenv("FRONTEND_ACTIVE_TG", "")
+            inactive = os.getenv("FRONTEND_INACTIVE_TG", "")
+            ids = [i for i in os.getenv("FRONTEND_INSTANCE_IDS", "").split(",") if i]
+
+            port = os.getenv("FRONTEND_GREEN_PORT") if "blue" in active.lower() else os.getenv("FRONTEND_BLUE_PORT")
+
+            delete_rules(listener_arn, active)
+            deregister_targets(active, ids)
+            register_targets(inactive, ids, port)
+
             frontend_paths = ["/", "/favicon.ico", "/robots.txt", "/static/*"]
-            priority = 500
+            prio = 500
             for path in frontend_paths:
-                create_rule(listener_arn, os.getenv("FRONTEND_INACTIVE_TG", ""), path, priority)
-                priority += 1
+                create_rule(listener_arn, inactive, path, prio)
+                prio += 1
 
         handle_component("frontend", os.getenv("FRONTEND_STATUS", ""), os.getenv("FRONTEND_FIRST_DEPLOYMENT", "false"), frontend_rollback)
-    else:
-        log("[frontend] Not selected in components, skipping.")
 
 if __name__ == "__main__":
     main()
