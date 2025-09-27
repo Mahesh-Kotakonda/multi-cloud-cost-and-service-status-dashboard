@@ -9,7 +9,7 @@ function Header() {
         <p className="header-subtitle">
           Monitor <strong>server status</strong> and view{" "}
           <strong>account cost details</strong> for the current month across AWS,
-          GCP, and AZURE — all in one place.
+          GCP, and AZURE — ALL in one place.
         </p>
       </div>
     </header>
@@ -17,4 +17,5 @@ function Header() {
 }
 
 export default Header;
+
 
