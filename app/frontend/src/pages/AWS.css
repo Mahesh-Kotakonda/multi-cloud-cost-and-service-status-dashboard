@@ -23,13 +23,13 @@
   min-height: 0;
 }
 
-/* ✅ Same logic as Azure: EC2 panel bluish, Cost panel greenish */
+/* ✅ Panel backgrounds */
 .ec2-panel {
-  background: linear-gradient(180deg, #f9fafb, #eef2ff);
+  background: linear-gradient(180deg, #f9fafb, #eef2ff); /* bluish */
 }
 
 .cost-panel {
-  background: linear-gradient(180deg, #f9fafb, #ecfdf5);
+  background: linear-gradient(180deg, #f9fafb, #ecfdf5); /* greenish */
 }
 
 /* Headings */
@@ -96,8 +96,9 @@ select:focus {
   min-height: 0;
 }
 
+/* ✅ Region/EC2 cards now tinted (not pure white) */
 .ec2-card {
-  background: #fff;
+  background: linear-gradient(135deg, #f9fafb, #f3f4f6);
   padding: 16px;
   border-radius: 8px;
   text-align: center;
@@ -187,8 +188,9 @@ select:focus {
   min-height: 0;
 }
 
+/* ✅ Service cards tinted too */
 .service-card {
-  background: #fff;
+  background: linear-gradient(135deg, #fafafa, #f3f4f6);
   padding: 8px;
   border-radius: 6px;
   text-align: center;
