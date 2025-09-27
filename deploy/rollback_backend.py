@@ -83,7 +83,15 @@ def run_container(host: str, name: str, image: str):
         ssh_exec(host, f"echo {dockerhub_token} | docker login -u {dockerhub_user} --password-stdin")
 
     ssh_exec(host, f"docker pull {image} || true")
-    ssh_exec(host, f"docker run -d --restart unless-stopped --name {name} {image}")
+
+    # Map ports depending on env
+    if "green" in name.lower():
+        port_map = "-p 8081:8000" 
+    else:
+        port_map = "-p 8080:8000"   
+
+    ssh_exec(host, f"docker run -d --restart unless-stopped {port_map} --name {name} {image}")
+
 
 
 # -------------------------------------------------------------------
