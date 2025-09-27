@@ -8,6 +8,14 @@ import paramiko
 import boto3
 
 # -------------------------------------------------------------------
+# Constants: Hardcoded ports
+# -------------------------------------------------------------------
+FRONTEND_BLUE_PORT = "3000"
+FRONTEND_GREEN_PORT = "3001"
+BACKEND_BLUE_PORT = "8080"
+BACKEND_GREEN_PORT = "8081"
+
+# -------------------------------------------------------------------
 # Logging + runner
 # -------------------------------------------------------------------
 def log(msg: str):
@@ -77,6 +85,8 @@ def register_targets(tg_arn: str, ids: list[str], port: str):
     if not tg_arn or not ids:
         return
     log(f"Registering {ids} into {tg_arn} on port {port}")
+    if not port:
+        raise RuntimeError(f"[register_targets] Port is missing for TG {tg_arn}")
     targets = [f"Id={i},Port={port}" for i in ids if i]
     run(["aws", "elbv2", "register-targets", "--target-group-arn", tg_arn, "--targets"] + targets)
 
@@ -177,7 +187,7 @@ def main():
             inactive = os.getenv("BACKEND_INACTIVE_TG", "")
             ids = [i for i in os.getenv("BACKEND_INSTANCE_IDS", "").split(",") if i]
 
-            port = os.getenv("BACKEND_GREEN_PORT") if "blue" in active.lower() else os.getenv("BACKEND_BLUE_PORT")
+            port = BACKEND_GREEN_PORT if "blue" in active.lower() else BACKEND_BLUE_PORT
 
             delete_rules(listener_arn, active)
             deregister_targets(active, ids)
@@ -198,7 +208,7 @@ def main():
             inactive = os.getenv("FRONTEND_INACTIVE_TG", "")
             ids = [i for i in os.getenv("FRONTEND_INSTANCE_IDS", "").split(",") if i]
 
-            port = os.getenv("FRONTEND_GREEN_PORT") if "blue" in active.lower() else os.getenv("FRONTEND_BLUE_PORT")
+            port = FRONTEND_GREEN_PORT if "blue" in active.lower() else FRONTEND_BLUE_PORT
 
             delete_rules(listener_arn, active)
             deregister_targets(active, ids)
