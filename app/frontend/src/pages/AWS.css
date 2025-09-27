@@ -24,7 +24,9 @@
 }
 
 .ec2-panel {
-  background: linear-gradient(180deg, #f9fafb, #eef2ff);
+  background: linear-gradient(135deg, #eef2ff, #e0e7ff);
+  border: 1px solid #c7d2fe;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
 }
 
 .cost-panel {
