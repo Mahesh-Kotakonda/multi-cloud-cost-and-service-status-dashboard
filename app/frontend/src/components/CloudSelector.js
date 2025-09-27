@@ -11,9 +11,11 @@ function CloudSelector({ selectedCloud, setSelectedCloud }) {
   return (
     <div className="cloud-selector-wrapper">
       <p className="cloud-description">
-        Select a cloud provider to view its{" "}
-        <strong>server status</strong> and <strong>account costs</strong>.
+        Choose a provider to track its <strong>server status</strong> 
+        (EC2, VMs, etc.) and review <strong>account costs</strong> 
+        for the <strong>current</strong> and <strong>last two months</strong>.
       </p>
+
       <div className="cloud-selector-container">
         <label htmlFor="cloud-select" className="cloud-label">
           Choose Cloud:
@@ -36,3 +38,4 @@ function CloudSelector({ selectedCloud, setSelectedCloud }) {
 }
 
 export default CloudSelector;
+
