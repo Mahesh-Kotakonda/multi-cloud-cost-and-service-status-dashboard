@@ -31,22 +31,21 @@
    Use !important only for background to defeat accidental overrides.
    ------------------------------ */
 
-/* Left: Cloud Compute Overview (EC2) - distinct color from Cast panel */
-.aws-dashboard .split-panel.ec2-panel {
-  /* Visible, clear light-blue gradient */
-  background: linear-gradient(180deg, #e0f2fe 0%, #93c5fd 100%) !important;
-  /* fallback solid color */
-  background-color: #93c5fd !important;
-  color: #0f172a; /* ensure text is readable */
-}
 
-/* Right: Cast / Cloud Cost Overview */
-.aws-dashboard .split-panel.cost-panel {
-  /* soft green gradient (different from EC2) */
-  background: linear-gradient(180deg, #dcfce7 0%, #86efac 100%) !important;
-  background-color: #86efac !important;
+/* Cloud Compute Overview (EC2) - soft bluish like Azure */
+.aws-dashboard .split-panel.ec2-panel {
+  background: linear-gradient(180deg, #f9fafb 0%, #eef2ff 100%) !important;
+  background-color: #eef2ff !important;
   color: #0f172a;
 }
+
+/* Cloud Cost Overview - soft greenish like Azure */
+.aws-dashboard .split-panel.cost-panel {
+  background: linear-gradient(180deg, #f9fafb 0%, #ecfdf5 100%) !important;
+  background-color: #ecfdf5 !important;
+  color: #0f172a;
+}
+
 
 /* Make sure pseudo-elements (if any) don't cover the panel */
 .aws-dashboard .split-panel::before,
