@@ -20,15 +20,16 @@
   flex-direction: column;
   overflow: hidden;
   min-height: 0;
+  /* ❌ no background here */
 }
 
 /* ✅ Panel-specific backgrounds */
 .ec2-panel {
-  background: linear-gradient(180deg, #e0f2fe, #bfdbfe); /* light blue */
+  background: linear-gradient(180deg, #e0f2fe, #93c5fd); /* light blue */
 }
 
 .cost-panel {
-  background: linear-gradient(180deg, #dcfce7, #bbf7d0); /* soft green */
+  background: linear-gradient(180deg, #dcfce7, #86efac); /* soft green */
 }
 
 /* Headings */
