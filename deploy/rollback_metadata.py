@@ -97,7 +97,8 @@ def delete_rules(listener_arn: str, tg_arn: str):
     rules = json.loads(rules_json).get("Rules", [])
     for r in rules:
         for a in r.get("Actions", []):
-            for tg in a.get("ForwardConfig", {}).get("TargetGroups", []):
+            fwd_cfg = a.get("ForwardConfig", {})
+            for tg in fwd_cfg.get("TargetGroups", []):
                 if tg.get("TargetGroupArn") == tg_arn:
                     arn = r["RuleArn"]
                     log(f"Deleting rule {arn} (TG={tg_arn})")
@@ -187,6 +188,7 @@ def main():
             inactive = os.getenv("BACKEND_INACTIVE_TG", "")
             ids = [i for i in os.getenv("BACKEND_INSTANCE_IDS", "").split(",") if i]
 
+            # choose port for inactive TG
             port = BACKEND_GREEN_PORT if "blue" in active.lower() else BACKEND_BLUE_PORT
 
             delete_rules(listener_arn, active)
@@ -208,6 +210,7 @@ def main():
             inactive = os.getenv("FRONTEND_INACTIVE_TG", "")
             ids = [i for i in os.getenv("FRONTEND_INSTANCE_IDS", "").split(",") if i]
 
+            # choose port for inactive TG
             port = FRONTEND_GREEN_PORT if "blue" in active.lower() else FRONTEND_BLUE_PORT
 
             delete_rules(listener_arn, active)
