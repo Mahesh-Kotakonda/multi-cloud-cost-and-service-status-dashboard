@@ -24,14 +24,14 @@
 
 /* ✅ Panel-specific backgrounds */
 .gce-panel {
-  background: linear-gradient(180deg, #f9fafb, #e0f2fe); /* soft blue */
-  border: 4px solid red !important;
+  background: linear-gradient(180deg, #f9fafb, #e0f2fe) !important;
+
 }
 
 
 
 .cost-panel {
-  background: linear-gradient(180deg, #f9fafb, #ecfdf5); /* soft green */
+  background: linear-gradient(180deg, #f9fafb, #ecfdf5) !important;
 }
 
 /* Headings */
