@@ -7,9 +7,10 @@ function Header() {
       <div className="header-content">
         <h1 className="header-title">Multi-Cloud Monitoring Dashboard</h1>
         <p className="header-subtitle">
-          Monitor <strong>server status</strong> and view{" "}
-          <strong>account cost details</strong> for the current month across AWS,
-          GCP, and Azure --all in one place.
+          A single dashboard to track <strong>cloud servers</strong> 
+          (like AWS EC2 or Azure VMs) and analyze <strong>account costs</strong> 
+          for the <strong>current</strong> and <strong>last two months</strong> 
+          across AWS, GCP, and Azure.
         </p>
       </div>
     </header>
@@ -17,6 +18,3 @@ function Header() {
 }
 
 export default Header;
-
-
-
