@@ -24,11 +24,11 @@
 
 /* ✅ Panel-specific backgrounds */
 .ec2-panel {
-  background: linear-gradient(180deg, #e0f2fe, #FFFF00); /* bluish */
+  background: linear-gradient(180deg, #e0f2fe, #bfdbfe); /* light blue */
 }
 
 .cost-panel {
-  background: linear-gradient(180deg, #dcfce7, #bbf7d0); /* greenish */
+  background: linear-gradient(180deg, #dcfce7, #bbf7d0); /* soft green */
 }
 
 /* Headings */
@@ -95,7 +95,7 @@ select:focus {
   min-height: 0;
 }
 
-/* Region/EC2 cards */
+/* EC2 Cards */
 .ec2-card {
   background: linear-gradient(135deg, #f9fafb, #f3f4f6);
   padding: 16px;
