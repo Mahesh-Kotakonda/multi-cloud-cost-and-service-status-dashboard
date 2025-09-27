@@ -20,16 +20,15 @@
   flex-direction: column;
   overflow: hidden;
   min-height: 0;
-  /* ❌ no solid background here */
 }
 
-/* ✅ Panel-specific backgrounds (soft gradients, same style as Azure) */
+/* ✅ Panel-specific backgrounds */
 .gce-panel {
-  background: linear-gradient(180deg, #f9fafb 0%, #e0f2fe 100%); /* soft blue tint */
+  background: linear-gradient(180deg, #f9fafb, #e0f2fe); /* soft blue */
 }
 
 .cost-panel {
-  background: linear-gradient(180deg, #f9fafb 0%, #ecfdf5 100%); /* soft green tint */
+  background: linear-gradient(180deg, #f9fafb, #ecfdf5); /* soft green */
 }
 
 /* Headings */
@@ -84,7 +83,7 @@ select:focus {
   font-weight: 600;
 }
 
-/* Shared GCE Cards layout */
+/* Shared GCE Cards layout (AZ + Regions) */
 .gce-cards {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -97,7 +96,7 @@ select:focus {
 }
 
 .gce-card {
-  background: linear-gradient(135deg, #ffffff, #f9fafb);
+  background: #fff;
   padding: 16px;
   border-radius: 8px;
   text-align: center;
@@ -150,7 +149,7 @@ select:focus {
 
 /* Cost section */
 .total-cost-card {
-  background: linear-gradient(135deg, #f9fafb, #e0f2fe);
+  background: linear-gradient(135deg, #f3f4f6, #e0f2fe);
   color: #111827;
   padding: 6px;
   border-radius: 8px;
@@ -167,7 +166,7 @@ select:focus {
   font-size: 17px;
   font-weight: bold;
   margin: 4px 0;
-  color: #1d4ed8; /* GCP blue */
+  color: #1d4ed8;
 }
 
 .total-cost-month {
@@ -188,7 +187,7 @@ select:focus {
 }
 
 .service-card {
-  background: linear-gradient(135deg, #ffffff, #f9fafb);
+  background: #fff;
   padding: 8px;
   border-radius: 6px;
   text-align: center;
@@ -210,7 +209,7 @@ select:focus {
 .cost-amount {
   font-size: 13px;
   font-weight: bold;
-  color: #059669; /* green for cost highlights */
+  color: #059669;
   line-height: 1.3;
 }
 
