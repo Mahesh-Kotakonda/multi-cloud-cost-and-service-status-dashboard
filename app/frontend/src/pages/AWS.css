@@ -13,7 +13,6 @@
 /* Panels */
 .split-panel {
   flex: 1;
-  background: #ffffff;
   border-radius: 10px;
   padding: 16px;
   box-shadow: 0 2px 6px rgba(0,0,0,0.08);
@@ -23,13 +22,13 @@
   min-height: 0;
 }
 
-/* ✅ Panel backgrounds */
+/* ✅ Panel-specific backgrounds */
 .ec2-panel {
-  background: linear-gradient(180deg, #f9fafb, #eef2ff); /* bluish */
+  background: linear-gradient(180deg, #e0f2fe, #dbeafe); /* bluish */
 }
 
 .cost-panel {
-  background: linear-gradient(180deg, #f9fafb, #ecfdf5); /* greenish */
+  background: linear-gradient(180deg, #dcfce7, #bbf7d0); /* greenish */
 }
 
 /* Headings */
@@ -96,7 +95,7 @@ select:focus {
   min-height: 0;
 }
 
-/* ✅ Region/EC2 cards now tinted (not pure white) */
+/* Region/EC2 cards */
 .ec2-card {
   background: linear-gradient(135deg, #f9fafb, #f3f4f6);
   padding: 16px;
@@ -188,7 +187,6 @@ select:focus {
   min-height: 0;
 }
 
-/* ✅ Service cards tinted too */
 .service-card {
   background: linear-gradient(135deg, #fafafa, #f3f4f6);
   padding: 8px;
