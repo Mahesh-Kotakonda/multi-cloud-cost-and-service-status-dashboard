@@ -34,7 +34,7 @@
 
 /* Cloud Compute Overview (EC2) - soft bluish like Azure */
 .aws-dashboard .split-panel.ec2-panel {
-  background: linear-gradient(180deg, #f9fafb 0%, #eef2ff 100%) !important;
+  background: linear-gradient(180deg, #f9fafb, #e0f2fe) !important;
   background-color: #eef2ff !important;
   color: #0f172a;
 }
