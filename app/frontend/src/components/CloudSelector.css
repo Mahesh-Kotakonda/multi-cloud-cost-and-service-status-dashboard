@@ -2,12 +2,14 @@
 .cloud-selector-wrapper {
   margin: 16px auto;
   text-align: center;
-  background: #eff6ff; /* light blue-100 */
+  background: #fff7ed; /* soft amber / orange-50 */
   padding: 12px 16px;
   border-radius: 10px;
   max-width: 580px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  border: 1px solid #fed7aa; /* light orange border */
 }
+
 
 
 /* Paragraph */
