@@ -7,20 +7,17 @@ on:
     inputs:
       components:
         description: "Which components to deploy (all, worker, backend, frontend, or comma-separated list)"
-        required: false
-        default: "all"
+        required: true
       worker_version:
-        description: "Version tag for worker (default: latest)"
-        required: false
-        default: "latest"
+        description: "Version tag for worker (do not use 'latest')"
+        required: true
       backend_version:
-        description: "Version tag for backend (default: latest)"
-        required: false
-        default: "latest"
+        description: "Version tag for backend (do not use 'latest')"
+        required: true
       frontend_version:
-        description: "Version tag for frontend (default: latest)"
-        required: false
-        default: "latest"
+        description: "Version tag for frontend (do not use 'latest')"
+        required: true
+
 
 concurrency:
   group: app-deploy-${{ github.ref }}
