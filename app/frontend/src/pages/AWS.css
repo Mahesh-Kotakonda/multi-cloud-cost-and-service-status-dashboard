@@ -22,13 +22,13 @@
   min-height: 0;
 }
 
-/* ✅ Stronger gradients so they don’t look white */
+/* ✅ Strong colors so they are NOT white */
 .ec2-panel {
-  background: linear-gradient(180deg, #e6f4ea, #d1fae5); /* green tint */
+  background: linear-gradient(180deg, #d1fae5, #a7f3d0); /* green-teal */
 }
 
 .cost-panel {
-  background: linear-gradient(180deg, #e0f2fe, #bfdbfe); /* blue tint */
+  background: linear-gradient(180deg, #dbeafe, #bfdbfe); /* blue */
 }
 
 /* Headings */
