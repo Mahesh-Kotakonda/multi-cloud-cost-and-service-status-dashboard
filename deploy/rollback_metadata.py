@@ -1,266 +1,343 @@
 #!/usr/bin/env python3
-"""
-Simple rollback metadata job:
-- Worker: rename worker_new -> worker on instances (SSH using PEM_PATH)
-- Backend/Frontend: create-or-update ALB rules (same logic as deploy) pointing to INACTIVE TG,
-  then register instance IDs into that TG on the expected port.
-- No delete/deregister operations (per request).
-- Basic wait + describe-target-health logging after registration.
-"""
-
+import argparse
 import os
 import json
-import boto3
 import subprocess
-import datetime
-import paramiko
 import time
-import sys
+import paramiko
+import boto3
 
-# Ports mapping (consistent with your deploy scripts)
+# -------------------------------------------------------------------
+# Constants: Hardcoded ports (same as your deploy)
+# -------------------------------------------------------------------
 FRONTEND_BLUE_PORT = "3000"
 FRONTEND_GREEN_PORT = "3001"
 BACKEND_BLUE_PORT = "8080"
 BACKEND_GREEN_PORT = "8081"
 
-# -------------------------
-# Helper: run shell command
-# -------------------------
-def run_command(cmd):
-    print(f"[run_command] {cmd}")
-    res = subprocess.run(cmd, shell=True, text=True, capture_output=True)
+# -------------------------------------------------------------------
+# Logging + runner
+# -------------------------------------------------------------------
+def log(msg):
+    print(f"[rollback-metadata] {msg}", flush=True)
+
+def run(cmd):
+    """Run a shell command (cmd as list) and return stdout, raising on non-zero exit."""
+    log(f"[run] START → {' '.join(cmd)}")
+    start = time.time()
+    res = subprocess.run(cmd, capture_output=True, text=True)
+    elapsed = round(time.time() - start, 2)
     if res.returncode != 0:
-        print(f"[run_command] ERROR: {res.stderr.strip()}")
-        raise RuntimeError(f"Command failed: {cmd}")
-    out = res.stdout.strip()
-    if out:
-        print(f"[run_command] STDOUT: {out}")
-    return out
+        log(f"[run] ERROR ({elapsed}s): {res.stderr.strip()}")
+        raise RuntimeError(f"Command failed: {' '.join(cmd)}")
+    log(f"[run] SUCCESS ({elapsed}s)")
+    if res.stdout and res.stdout.strip():
+        log(f"[run] STDOUT: {res.stdout.strip()}")
+    return res.stdout.strip()
 
-# -------------------------
-# ALB create/update rule (same as deploy)
-# -------------------------
-def create_or_update_rule(listener_arn, path, target_group_arn, priority, service_name):
-    if not target_group_arn:
-        print(f"[INFO] Skipping ALB rule creation for {service_name} path '{path}': Target group ARN not found.")
-        return
-    print(f"[INFO] Processing ALB rule for {service_name}: path='{path}' -> TG='{target_group_arn}'")
-    rule_arn = run_command(
-        f"aws elbv2 describe-rules --listener-arn {listener_arn} "
-        f"--query \"Rules[?Conditions[?Field=='path-pattern' && contains(Values,'{path}')]].RuleArn\" "
-        "--output text"
-    ) or ""
-    if not rule_arn or rule_arn == "None":
-        print(f"[INFO] Creating new ALB rule for {service_name} path '{path}'")
-        run_command(
-            f"aws elbv2 create-rule --listener-arn {listener_arn} --priority {priority} "
-            f"--conditions Field=path-pattern,Values={path} "
-            f"--actions Type=forward,TargetGroupArn={target_group_arn}"
-        )
-    else:
-        print(f"[INFO] Updating existing ALB rule for {service_name} path '{path}' (rule={rule_arn})")
-        run_command(
-            f"aws elbv2 modify-rule --rule-arn {rule_arn} "
-            f"--conditions Field=path-pattern,Values={path} "
-            f"--actions Type=forward,TargetGroupArn={target_group_arn}"
-        )
+# -------------------------------------------------------------------
+# Worker rollback (rename worker_new → worker)
+# -------------------------------------------------------------------
+def rename_worker_on_instance(instance_ip, pem_path):
+    log(f"Renaming worker_new → worker on {instance_ip}")
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect(instance_ip, username="ec2-user", key_filename=pem_path)
+    # Keep your exact operations
+    ssh.exec_command("docker rm -f worker || true")
+    ssh.exec_command("docker rename worker_new worker || true")
+    ssh.close()
+    log(f"[{instance_ip}] Worker container rollback finalized.")
 
-# -------------------------
-# Worker: SSH rename worker_new -> worker
-# -------------------------
-def _get_public_ips(instance_ids, aws_access_key, aws_secret_key, aws_region):
-    """Return mapping instance_id -> public_ip for provided instance_ids"""
+def rollback_worker(instance_ids, pem_path, aws_access_key, aws_secret_key, aws_region):
     if not instance_ids:
-        return {}
+        log("[worker] No instance IDs provided, skipping rollback.")
+        return
+    if not pem_path:
+        log("[worker] PEM_PATH not set, skipping worker rollback.")
+        return
+
     ec2 = boto3.client(
         "ec2",
         aws_access_key_id=aws_access_key,
         aws_secret_access_key=aws_secret_key,
         region_name=aws_region
     )
-    resp = ec2.describe_instances(InstanceIds=instance_ids)
-    mapping = {}
-    for r in resp.get("Reservations", []):
-        for i in r.get("Instances", []):
-            iid = i.get("InstanceId")
-            mapping[iid] = i.get("PublicIpAddress")  # may be None
-    return mapping
 
-def rename_worker_on_instance(public_ip, pem_path):
-    print(f"[worker] Connecting to {public_ip} to finalize worker rollback")
-    ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh.connect(public_ip, username="ec2-user", key_filename=pem_path, timeout=10)
+    # instance_ids is expected as a list
+    reservations = ec2.describe_instances(InstanceIds=instance_ids)["Reservations"]
+    for res in reservations:
+        for inst in res["Instances"]:
+            ip = inst.get("PublicIpAddress")
+            if ip:
+                try:
+                    rename_worker_on_instance(ip, pem_path)
+                except Exception as e:
+                    log(f"[worker] Error on {ip}: {e}")
+            else:
+                log(f"[worker] Instance {inst['InstanceId']} has no public IP, skipping.")
 
-    # remove old worker and rename worker_new -> worker
-    cmds = [
-        "docker rm -f worker || true",
-        "docker rename worker_new worker || true"
-    ]
-    for c in cmds:
-        stdin, stdout, stderr = ssh.exec_command(c)
-        out = stdout.read().decode().strip()
-        err = stderr.read().decode().strip()
-        if out:
-            print(f"[{public_ip}] STDOUT: {out}")
-        if err:
-            print(f"[{public_ip}] STDERR: {err}")
-    ssh.close()
-    print(f"[worker] Completed on {public_ip}")
+# -------------------------------------------------------------------
+# ALB helpers: target-type aware register, and create-or-update rule
+# -------------------------------------------------------------------
+def get_tg_description(tg_arn):
+    """Return target-group JSON from AWS CLI"""
+    out = run(["aws", "elbv2", "describe-target-groups", "--target-group-arn", tg_arn])
+    js = json.loads(out)
+    tgs = js.get("TargetGroups", [])
+    if not tgs:
+        raise RuntimeError(f"No target group found for {tg_arn}")
+    return tgs[0]
 
-def rollback_worker(instance_ids, pem_path, aws_access_key, aws_secret_key, aws_region):
+def get_target_type(tg_arn):
+    tg = get_tg_description(tg_arn)
+    tt = tg.get("TargetType", "instance")
+    log(f"[tg] {tg_arn} TargetType={tt}")
+    return tt
+
+def _resolve_private_ips_for_instances(instance_ids, aws_region):
+    """Return list of primary private IPs for provided instance_ids (preserve order where possible)."""
     if not instance_ids:
-        print("[worker] No instance ids provided; skipping worker rollback.")
-        return
-    if not pem_path:
-        print("[worker] PEM_PATH not set; skipping worker rollback.")
-        return
-    ids = [i for i in instance_ids.split(",") if i]
-    if not ids:
-        print("[worker] No valid instance ids; skipping worker rollback.")
-        return
-    mapping = _get_public_ips(ids, aws_access_key, aws_secret_key, aws_region)
-    for iid in ids:
-        public_ip = mapping.get(iid)
-        if public_ip:
-            try:
-                rename_worker_on_instance(public_ip, pem_path)
-            except Exception as e:
-                print(f"[worker] ERROR handling {iid}@{public_ip}: {e}")
+        return []
+    ec2 = boto3.client("ec2", region_name=aws_region)
+    resp = ec2.describe_instances(InstanceIds=instance_ids)
+    id_to_ip = {}
+    for r in resp.get("Reservations", []):
+        for inst in r.get("Instances", []):
+            iid = inst.get("InstanceId")
+            priv_ip = inst.get("PrivateIpAddress")
+            if not priv_ip:
+                # fallback to network interfaces
+                for iface in inst.get("NetworkInterfaces", []):
+                    for p in iface.get("PrivateIpAddresses", []):
+                        if p.get("Primary"):
+                            priv_ip = p.get("PrivateIpAddress")
+                            break
+                    if priv_ip:
+                        break
+            if priv_ip:
+                id_to_ip[iid] = priv_ip
+    ips = []
+    for iid in instance_ids:
+        if iid in id_to_ip:
+            ips.append(id_to_ip[iid])
         else:
-            print(f"[worker] Instance {iid} has no public IP; skipping.")
+            log(f"[resolve_ips] WARNING: private IP not found for instance {iid}")
+    return ips
 
-# -------------------------
-# Register targets into TG (simple)
-# -------------------------
-def register_targets_to_tg(tg_arn, instance_ids, port):
-    """Register the given instance IDs to TG using instance-id registration (simple)."""
-    if not tg_arn:
-        print("[register_targets] No TG ARN provided, skipping.")
+def register_targets(tg_arn, instance_ids, port, aws_region):
+    """
+    Register instance_ids to tg_arn on given port.
+    If TG target type is 'ip', resolve private IPs and register them.
+    instance_ids must be a list of instance IDs.
+    """
+    if not tg_arn or not instance_ids:
+        log("[register_targets] Nothing to do (tg_arn or instance_ids missing).")
         return
-    ids = [i for i in (instance_ids.split(",") if instance_ids else []) if i]
-    if not ids:
-        print("[register_targets] No instance ids provided, skipping.")
-        return
-    # Build targets string: Id=i-...,Port=PORT Id=i-...,Port=PORT ...
-    targets = " ".join([f"Id={i},Port={port}" for i in ids])
-    cmd = f"aws elbv2 register-targets --target-group-arn {tg_arn} --targets {targets}"
-    print(f"[register_targets] Running: {cmd}")
-    run_command(cmd)
-    # Short wait then describe-target-health once for visibility
+
+    tt = get_target_type(tg_arn)
+    if tt == "ip":
+        ips = _resolve_private_ips_for_instances(instance_ids, aws_region)
+        if not ips:
+            raise RuntimeError("[register_targets] No private IPs resolved for instances; cannot register to ip-type TG.")
+        targets = [f"Id={ip},Port={port}" for ip in ips]
+        ids_used = ips
+        log(f"[register_targets] Registering IPs {ips} -> {tg_arn}:{port}")
+    else:
+        targets = [f"Id={iid},Port={port}" for iid in instance_ids]
+        ids_used = instance_ids
+        log(f"[register_targets] Registering instance IDs {instance_ids} -> {tg_arn}:{port}")
+
+    run(["aws", "elbv2", "register-targets", "--target-group-arn", tg_arn, "--targets"] + targets)
+
+    # Brief pause, then describe-target-health for visibility
     time.sleep(2)
     try:
-        out = run_command(f"aws elbv2 describe-target-health --target-group-arn {tg_arn}")
-        print(f"[register_targets] describe-target-health for {tg_arn}:\n{out}")
+        out = run(["aws", "elbv2", "describe-target-health", "--target-group-arn", tg_arn])
+        log(f"[register_targets] describe-target-health for {tg_arn}:\n{out}")
     except Exception as e:
-        print(f"[register_targets] describe-target-health failed: {e}")
+        log(f"[register_targets] describe-target-health failed: {e}")
 
-# -------------------------
-# Helper: choose port based on TG name heuristic
-# -------------------------
-def choose_frontend_port_for_tg(tg_arn):
-    if not tg_arn:
-        return FRONTEND_BLUE_PORT
-    name = tg_arn.lower()
-    if "green" in name:
-        return FRONTEND_GREEN_PORT
-    if "blue" in name:
-        return FRONTEND_BLUE_PORT
-    # default fallback
-    return FRONTEND_BLUE_PORT
+def create_or_update_rule(listener_arn, path, target_group_arn, priority, service_name):
+    """
+    If a rule exists for `path` (path-pattern match) then modify it to forward to target_group_arn.
+    Otherwise create a new rule with given priority.
+    This mirrors your deploy_service() behavior.
+    """
+    if not target_group_arn:
+        log(f"[create_or_update_rule] Skipping ALB rule for {service_name} path '{path}': target group missing.")
+        return
+    log(f"[create_or_update_rule] Processing ALB rule for {service_name}: path='{path}' -> TG='{target_group_arn}'")
+    # Query for any rule whose path-pattern condition contains the path
+    # (mirror deploy script's query)
+    try:
+        rule_arn = run([
+            "aws", "elbv2", "describe-rules",
+            "--listener-arn", listener_arn,
+            "--query", f"Rules[?Conditions[?Field=='path-pattern' && contains(Values,'{path}')]].RuleArn",
+            "--output", "text"
+        ]) or ""
+    except Exception as e:
+        log(f"[create_or_update_rule] describe-rules failed: {e}")
+        rule_arn = ""
 
-def choose_backend_port_for_tg(tg_arn):
-    if not tg_arn:
-        return BACKEND_BLUE_PORT
-    name = tg_arn.lower()
-    if "green" in name:
-        return BACKEND_GREEN_PORT
-    if "blue" in name:
-        return BACKEND_BLUE_PORT
-    return BACKEND_BLUE_PORT
+    if not rule_arn or rule_arn == "None":
+        log(f"[create_or_update_rule] Creating new ALB rule for {service_name} path '{path}'")
+        run([
+            "aws", "elbv2", "create-rule",
+            "--listener-arn", listener_arn,
+            "--priority", str(priority),
+            "--conditions", f"Field=path-pattern,Values={path}",
+            "--actions", f"Type=forward,TargetGroupArn={target_group_arn}"
+        ])
+    else:
+        log(f"[create_or_update_rule] Modifying existing ALB rule {rule_arn} for path '{path}'")
+        run([
+            "aws", "elbv2", "modify-rule",
+            "--rule-arn", rule_arn,
+            "--conditions", f"Field=path-pattern,Values={path}",
+            "--actions", f"Type=forward,TargetGroupArn={target_group_arn}"
+        ])
 
-# -------------------------
-# Main rollback flow
-# -------------------------
+# -------------------------------------------------------------------
+# Component handler (keeps your original semantics)
+# -------------------------------------------------------------------
+def handle_component(name, status, first_deployment, rollback_fn=None):
+    log(f"--- Handling {name.upper()} ---")
+
+    if first_deployment.lower() == "true":
+        if status == "cleaned":
+            log(f"[{name}] First deployment detected. No rollback needed; already in baseline state.")
+        else:
+            log(f"[{name}] First deployment detected but deployment failed (status={status}). No rollback performed.")
+        return
+
+    if first_deployment.lower() == "false":
+        if status == "prepared":
+            log(f"[{name}] Rollback required (status=prepared).")
+            if rollback_fn:
+                rollback_fn()
+            log(f"[{name}] Rollback finalized.")
+        elif status == "cleaned":
+            log(f"[{name}] Rollback not needed. Already cleaned.")
+        elif not status:
+            log(f"[{name}] Skipping rollback. No status provided.")
+        else:
+            log(f"[{name}] Skipping rollback. Status={status}.")
+
+# -------------------------------------------------------------------
+# Main orchestration
+# -------------------------------------------------------------------
 def main():
-    import argparse
     p = argparse.ArgumentParser()
-    p.add_argument("--outputs-json", required=True)
+    p.add_argument("--infra-json", required=True)
+    p.add_argument("--deployment-json", required=False)
+    p.add_argument("--components", required=True, nargs="+")
     args = p.parse_args()
 
-    # infra json
-    with open(args.outputs_json) as fh:
-        infra = json.load(fh)
-    listener_arn = infra.get("alb_listener_arn", "")
+    with open(args.infra_json) as f:
+        infra = json.load(f)
 
-    # envs / creds
+    if args.deployment_json:
+        try:
+            with open(args.deployment_json) as f:
+                _ = json.load(f)
+            log("[info] Deployment.json loaded (not heavily used).")
+        except Exception as e:
+            log(f"[info] Failed to load deployment.json: {e}")
+
+    components = [c.strip().lower() for c in args.components]
+    if "all" in components:
+        components = ["worker", "backend", "frontend"]
+    log(f"[info] Components selected for rollback: {components}")
+
+    listener_arn = infra.get("alb_listener_arn")
     pem_path = os.path.expanduser(os.getenv("PEM_PATH", "")) or None
     aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
     aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
     aws_region = os.getenv("AWS_REGION")
 
-    # worker
-    worker_status = os.getenv("WORKER_STATUS", "").lower()
-    worker_instance_ids = os.getenv("WORKER_INSTANCE_IDS", "")
+    if not (aws_access_key and aws_secret_key and aws_region):
+        log("[error] Missing AWS credentials or region in environment.")
+        return
 
-    # backend
-    backend_status = os.getenv("BACKEND_STATUS", "").lower()
-    backend_inactive_tg = os.getenv("BACKEND_INACTIVE_TG", "")
-    backend_instance_ids = os.getenv("BACKEND_INSTANCE_IDS", "")
+    # Worker
+    if "worker" in components:
+        handle_component(
+            "worker",
+            os.getenv("WORKER_STATUS", ""),
+            os.getenv("WORKER_FIRST_DEPLOYMENT", "false"),
+            rollback_fn=lambda: rollback_worker(
+                [i for i in os.getenv("WORKER_INSTANCE_IDS", "").split(",") if i],
+                pem_path, aws_access_key, aws_secret_key, aws_region
+            )
+        )
+    else:
+        log("[worker] Not selected in components, skipping.")
 
-    # frontend (we'll still register targets by default; you said you'll handle frontend but we include it)
-    frontend_status = os.getenv("FRONTEND_STATUS", "").lower()
-    frontend_inactive_tg = os.getenv("FRONTEND_INACTIVE_TG", "")
-    frontend_instance_ids = os.getenv("FRONTEND_INSTANCE_IDS", "")
-
-    print("[rollback] Starting rollback metadata job")
-
-    # Worker rollback (rename worker_new -> worker) if prepared
-    try:
-        if worker_status == "prepared":
-            print("[rollback] Worker status=prepared -> performing worker rollback (rename).")
-            rollback_worker(worker_instance_ids, pem_path, aws_access_key, aws_secret_key, aws_region)
-        else:
-            print(f"[rollback] Worker status={worker_status} -> skipping worker rollback.")
-    except Exception as e:
-        print(f"[rollback] Worker rollback ERROR: {e}")
-
-    # Backend: create/update rules pointing to inactive TG, then register instances into that TG
-    try:
-        if backend_status == "prepared":
-            print("[rollback] Backend status=prepared -> creating/updating rules and registering targets")
+    # Backend: register targets to inactive TG first, then create/update rules
+    if "backend" in components:
+        def backend_rollback():
+            tg_inactive = os.getenv("BACKEND_INACTIVE_TG", "")
+            instance_ids = [i for i in os.getenv("BACKEND_INSTANCE_IDS", "").split(",") if i]
+            if not tg_inactive:
+                log("[backend] No BACKEND_INACTIVE_TG provided; skipping backend rollback.")
+                return
+            if not instance_ids:
+                log("[backend] No BACKEND_INSTANCE_IDS provided; skipping registration.")
+            # determine port from tg naming heuristic
+            port = BACKEND_GREEN_PORT if "green" in tg_inactive.lower() else BACKEND_BLUE_PORT
+            # register targets first
+            try:
+                register_targets(tg_inactive, instance_ids, port, aws_region)
+            except Exception as e:
+                log(f"[backend] register_targets failed: {e}")
+            # then ensure rules point to inactive TG (create or modify)
             backend_paths = ["/api/aws/*", "/api/azure/*", "/api/gcp/*"]
-            priority = 10
+            prio = 10
             for path in backend_paths:
-                create_or_update_rule(listener_arn, path, backend_inactive_tg, priority, "Backend")
-                priority += 1
-            # register instances to inactive TG
-            backend_port = choose_backend_port_for_tg(backend_inactive_tg)
-            print(f"[rollback] Registering backend instances to {backend_inactive_tg} on port {backend_port}")
-            register_targets_to_tg(backend_inactive_tg, backend_instance_ids, backend_port)
-        else:
-            print(f"[rollback] Backend status={backend_status} -> skipping backend rollback.")
-    except Exception as e:
-        print(f"[rollback] Backend rollback ERROR: {e}")
+                try:
+                    create_or_update_rule(listener_arn, path, tg_inactive, prio, "Backend")
+                except Exception as e:
+                    log(f"[backend] create_or_update_rule failed for path {path}: {e}")
+                prio += 1
 
-    # Frontend: (optional) create/update rules & register instances to inactive TG
-    try:
-        if frontend_status == "prepared":
-            print("[rollback] Frontend status=prepared -> creating/updating rules and registering targets")
+        handle_component("backend", os.getenv("BACKEND_STATUS", ""), os.getenv("BACKEND_FIRST_DEPLOYMENT", "false"), backend_rollback)
+    else:
+        log("[backend] Not selected in components, skipping.")
+
+    # Frontend: register targets to inactive TG first, then create/update rules
+    if "frontend" in components:
+        def frontend_rollback():
+            tg_inactive = os.getenv("FRONTEND_INACTIVE_TG", "")
+            instance_ids = [i for i in os.getenv("FRONTEND_INSTANCE_IDS", "").split(",") if i]
+            if not tg_inactive:
+                log("[frontend] No FRONTEND_INACTIVE_TG provided; skipping frontend rollback.")
+                return
+            if not instance_ids:
+                log("[frontend] No FRONTEND_INSTANCE_IDS provided; skipping registration.")
+            # determine port from tg naming heuristic
+            port = FRONTEND_GREEN_PORT if "green" in tg_inactive.lower() else FRONTEND_BLUE_PORT
+            # register targets first
+            try:
+                register_targets(tg_inactive, instance_ids, port, aws_region)
+            except Exception as e:
+                log(f"[frontend] register_targets failed: {e}")
+            # then create/update rules
             frontend_paths = ["/", "/favicon.ico", "/robots.txt", "/static/*"]
-            priority = 500
+            prio = 500
             for path in frontend_paths:
-                create_or_update_rule(listener_arn, path, frontend_inactive_tg, priority, "Frontend")
-                priority += 1
-            frontend_port = choose_frontend_port_for_tg(frontend_inactive_tg)
-            print(f"[rollback] Registering frontend instances to {frontend_inactive_tg} on port {frontend_port}")
-            register_targets_to_tg(frontend_inactive_tg, frontend_instance_ids, frontend_port)
-        else:
-            print(f"[rollback] Frontend status={frontend_status} -> skipping frontend rollback.")
-    except Exception as e:
-        print(f"[rollback] Frontend rollback ERROR: {e}")
+                try:
+                    create_or_update_rule(listener_arn, path, tg_inactive, prio, "Frontend")
+                except Exception as e:
+                    log(f"[frontend] create_or_update_rule failed for path {path}: {e}")
+                prio += 1
 
-    print("\n=== Rollback metadata script completed ===")
+        handle_component("frontend", os.getenv("FRONTEND_STATUS", ""), os.getenv("FRONTEND_FIRST_DEPLOYMENT", "false"), frontend_rollback)
+    else:
+        log("[frontend] Not selected in components, skipping.")
+
+    log("Rollback metadata job completed.")
 
 if __name__ == "__main__":
     main()
