@@ -84,7 +84,15 @@ def run_container(host: str, name: str, image: str):
         ssh_exec(host, f"echo {dockerhub_token} | docker login -u {dockerhub_user} --password-stdin")
 
     ssh_exec(host, f"docker pull {image} || true")
-    ssh_exec(host, f"docker run -d --restart unless-stopped --name {name} {image}")
+
+    # FIX: publish ports properly
+    if "green" in name:
+        port_map = "-p 3001:3000"
+    else:
+        port_map = "-p 3000:3000"
+
+    ssh_exec(host, f"docker run -d --restart unless-stopped {port_map} --name {name} {image}")
+
 
 
 # -------------------------------------------------------------------
