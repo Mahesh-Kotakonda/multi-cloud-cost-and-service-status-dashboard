@@ -11,7 +11,7 @@ function CloudSelector({ selectedCloud, setSelectedCloud }) {
   return (
     <div className="cloud-selector-wrapper">
     <p className="cloud-description">
-      Choose a provider to track its <strong>server status</strong> 
+      Choose a provider to track its <strong>server status </strong> 
       (e.g., AWS EC2, Azure VMs) and review <strong>account costs </strong> 
       for the <strong>current</strong> and <strong>last two months</strong>.
     </p>
@@ -39,6 +39,7 @@ function CloudSelector({ selectedCloud, setSelectedCloud }) {
 }
 
 export default CloudSelector;
+
 
 
 
