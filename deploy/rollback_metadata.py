@@ -72,17 +72,51 @@ def rollback_worker(instance_ids, pem_path, aws_access_key, aws_secret_key, aws_
                 log(f"[worker] Instance {inst['InstanceId']} has no public IP, skipping.")
 
 # -------------------------------------------------------------------
-# ALB helpers
+# ALB helpers (updated)
 # -------------------------------------------------------------------
 def deregister_targets(tg_arn: str, ids: list[str]):
     if not tg_arn or not ids:
+        log(f"[deregister_targets] Missing tg_arn or ids. tg_arn={tg_arn}, ids={ids}")
         return
     log(f"Deregistering {ids} from {tg_arn}")
     targets = [f"Id={i}" for i in ids if i]
-    run(["aws", "elbv2", "deregister-targets", "--target-group-arn", tg_arn, "--targets"] + targets)
+    try:
+        run(["aws", "elbv2", "deregister-targets", "--target-group-arn", tg_arn, "--targets"] + targets)
+    except Exception as e:
+        log(f"[deregister_targets] Warning: deregister-targets failed: {e}")
+
+def wait_for_targets_healthy(tg_arn: str, ids: list[str], port: str, timeout_seconds: int = 60):
+    if not tg_arn or not ids:
+        log("[wait_for_targets_healthy] Nothing to wait for.")
+        return False
+
+    log(f"[wait] Waiting for targets {ids} in {tg_arn} to become healthy (timeout={timeout_seconds}s)")
+    deadline = time.time() + timeout_seconds
+    last_states = {}
+    while time.time() < deadline:
+        try:
+            out = run(["aws", "elbv2", "describe-target-health", "--target-group-arn", tg_arn])
+            resp = json.loads(out)
+            th = resp.get("TargetHealthDescriptions", [])
+            for d in th:
+                tgt = d.get("Target", {})
+                tid = tgt.get("Id")
+                state = d.get("TargetHealth", {}).get("State", "unknown")
+                last_states[tid] = state
+            all_present = all(i in last_states for i in ids)
+            all_healthy = all(last_states.get(i) == "healthy" for i in ids if i in last_states)
+            if all_present and all_healthy:
+                log(f"[wait] All targets healthy: {last_states}")
+                return True
+        except Exception as e:
+            log(f"[wait] describe-target-health failed: {e}")
+        time.sleep(3)
+    log(f"[wait] Timeout reached. Last observed states: {last_states}")
+    return False
 
 def register_targets(tg_arn: str, ids: list[str], port: str):
     if not tg_arn or not ids:
+        log(f"[register_targets] Missing tg_arn or ids. tg_arn={tg_arn}, ids={ids}")
         return
     log(f"Registering {ids} into {tg_arn} on port {port}")
     if not port:
@@ -90,19 +124,39 @@ def register_targets(tg_arn: str, ids: list[str], port: str):
     targets = [f"Id={i},Port={port}" for i in ids if i]
     run(["aws", "elbv2", "register-targets", "--target-group-arn", tg_arn, "--targets"] + targets)
 
+    healthy = wait_for_targets_healthy(tg_arn, ids, port, timeout_seconds=60)
+    if not healthy:
+        log(f"[register_targets] WARNING: Targets registered but not healthy within timeout for TG {tg_arn}. "
+            "Check TG health checks, ports, and target type.")
+
 def delete_rules(listener_arn: str, tg_arn: str):
     if not listener_arn or not tg_arn:
+        log(f"[delete_rules] Missing listener_arn or tg_arn. listener_arn={listener_arn}, tg_arn={tg_arn}")
         return
+    log(f"[delete_rules] Looking for rules referencing TG {tg_arn} on listener {listener_arn}")
     rules_json = run(["aws", "elbv2", "describe-rules", "--listener-arn", listener_arn])
     rules = json.loads(rules_json).get("Rules", [])
     for r in rules:
-        for a in r.get("Actions", []):
-            fwd_cfg = a.get("ForwardConfig", {})
-            for tg in fwd_cfg.get("TargetGroups", []):
+        arn = r.get("RuleArn")
+        actions = r.get("Actions", [])
+        should_delete = False
+        for a in actions:
+            if a.get("TargetGroupArn") == tg_arn:
+                should_delete = True
+                break
+            fwd = a.get("ForwardConfig", {})
+            for tg in fwd.get("TargetGroups", []):
                 if tg.get("TargetGroupArn") == tg_arn:
-                    arn = r["RuleArn"]
-                    log(f"Deleting rule {arn} (TG={tg_arn})")
-                    run(["aws", "elbv2", "delete-rule", "--rule-arn", arn])
+                    should_delete = True
+                    break
+            if should_delete:
+                break
+        if should_delete and arn:
+            log(f"Deleting rule {arn} (references TG {tg_arn})")
+            try:
+                run(["aws", "elbv2", "delete-rule", "--rule-arn", arn])
+            except Exception as e:
+                log(f"[delete_rules] Failed to delete rule {arn}: {e}")
 
 def create_rule(listener_arn: str, tg_arn: str, path: str, priority: int):
     if not listener_arn or not tg_arn:
@@ -188,7 +242,6 @@ def main():
             inactive = os.getenv("BACKEND_INACTIVE_TG", "")
             ids = [i for i in os.getenv("BACKEND_INSTANCE_IDS", "").split(",") if i]
 
-            # choose port for inactive TG
             port = BACKEND_GREEN_PORT if "blue" in active.lower() else BACKEND_BLUE_PORT
 
             delete_rules(listener_arn, active)
@@ -210,7 +263,6 @@ def main():
             inactive = os.getenv("FRONTEND_INACTIVE_TG", "")
             ids = [i for i in os.getenv("FRONTEND_INSTANCE_IDS", "").split(",") if i]
 
-            # choose port for inactive TG
             port = FRONTEND_GREEN_PORT if "blue" in active.lower() else FRONTEND_BLUE_PORT
 
             delete_rules(listener_arn, active)
