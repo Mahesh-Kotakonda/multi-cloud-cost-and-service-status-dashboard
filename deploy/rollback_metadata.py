@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """
 Rollback metadata job (updated)
-- detects TG target type (instance/ip)
-- uses private IPs for ip-type TGs
-- deletes rules referencing TGs (handles both TargetGroupArn and ForwardConfig styles)
-- deregisters/registers targets and waits + logs describe-target-health details on failure
-- prints health-check configuration for TGs
+- Ensures listener rules are created/attached BEFORE registering targets
+- Detects TG target type (instance/ip) and registers correct identifiers
+- Waits and logs describe-target-health with reasons
 """
 
 import argparse
@@ -31,7 +29,6 @@ def log(msg: str):
     print(f"[rollback-metadata] {msg}", flush=True)
 
 def run(cmd: list[str]) -> str:
-    """Run a shell aws CLI command and log stdout/stderr. Raises on non-zero exit."""
     log(f"[run] START → {' '.join(cmd)}")
     start = time.time()
     res = subprocess.run(cmd, capture_output=True, text=True)
@@ -82,10 +79,9 @@ def rollback_worker(instance_ids, pem_path, aws_access_key, aws_secret_key, aws_
                 log(f"[worker] Instance {inst['InstanceId']} has no public IP, skipping.")
 
 # -------------------------------------------------------------------
-# ALB helpers (robust)
+# ALB helpers (robust, with create-or-modify rule BEFORE register)
 # -------------------------------------------------------------------
 def get_tg_description(tg_arn: str) -> dict:
-    """Return parsed target-group description (via aws cli)"""
     out = run(["aws", "elbv2", "describe-target-groups", "--target-group-arn", tg_arn])
     js = json.loads(out)
     tgs = js.get("TargetGroups", [])
@@ -109,23 +105,13 @@ def get_health_check_info(tg_arn: str) -> dict:
         "interval_seconds": tg.get("HealthCheckIntervalSeconds"),
         "timeout_seconds": tg.get("HealthCheckTimeoutSeconds"),
         "healthy_threshold": tg.get("HealthyThresholdCount"),
-        "unhealthy_threshold": tg.get("UnhealthyThresholdCount")
+        "unhealthy_threshold": tg.get("UnhealthyThresholdCount"),
+        "load_balancer_arns": tg.get("LoadBalancerArns", [])
     }
 
 def describe_target_health_verbose(tg_arn: str) -> dict:
     out = run(["aws", "elbv2", "describe-target-health", "--target-group-arn", tg_arn])
     return json.loads(out)
-
-def deregister_targets(tg_arn: str, ids: list[str], aws_region: str = None):
-    if not tg_arn or not ids:
-        log(f"[deregister_targets] skipping: tg_arn or ids empty. tg_arn={tg_arn}, ids={ids}")
-        return
-    log(f"[deregister_targets] Deregistering targets {ids} from {tg_arn}")
-    targets = [f"Id={i}" for i in ids if i]
-    try:
-        run(["aws", "elbv2", "deregister-targets", "--target-group-arn", tg_arn, "--targets"] + targets)
-    except Exception as e:
-        log(f"[deregister_targets] Warning: deregister failed: {e}")
 
 def delete_rules(listener_arn: str, tg_arn: str):
     if not listener_arn or not tg_arn:
@@ -139,11 +125,9 @@ def delete_rules(listener_arn: str, tg_arn: str):
         actions = r.get("Actions", [])
         should_delete = False
         for a in actions:
-            # direct TargetGroupArn
             if a.get("TargetGroupArn") == tg_arn:
                 should_delete = True
                 break
-            # ForwardConfig style
             fwd = a.get("ForwardConfig", {})
             for tg in fwd.get("TargetGroups", []):
                 if tg.get("TargetGroupArn") == tg_arn:
@@ -158,35 +142,60 @@ def delete_rules(listener_arn: str, tg_arn: str):
             except Exception as e:
                 log(f"[delete_rules] Failed to delete rule {arn}: {e}")
 
-def create_rule(listener_arn: str, tg_arn: str, path: str, priority: int):
+def find_rule_arn_for_path(listener_arn: str, path: str) -> str | None:
+    """Return rule ARN if listener already has a rule for path (exact path-pattern match)."""
+    if not listener_arn:
+        return None
+    out = run(["aws", "elbv2", "describe-rules", "--listener-arn", listener_arn])
+    rules = json.loads(out).get("Rules", [])
+    for r in rules:
+        for cond in r.get("Conditions", []):
+            if cond.get("Field") == "path-pattern":
+                vals = cond.get("Values", []) + cond.get("PathPatternConfig", {}).get("Values", [])
+                if path in vals:
+                    return r.get("RuleArn")
+    return None
+
+def ensure_rule_points_to_tg(listener_arn: str, path: str, tg_arn: str, priority: int):
+    """
+    If a rule for 'path' exists, modify it to forward to tg_arn; otherwise create a new rule.
+    This ensures the rule attaches the TG to the listener before we register targets.
+    """
     if not listener_arn or not tg_arn:
-        log(f"[create_rule] missing listener or tg (listener={listener_arn}, tg={tg_arn})")
+        log("[ensure_rule_points_to_tg] missing listener_arn or tg_arn, skipping")
         return
-    log(f"[create_rule] Creating rule: path={path}, tg={tg_arn}, priority={priority}")
-    run([
-        "aws", "elbv2", "create-rule",
-        "--listener-arn", listener_arn,
-        "--priority", str(priority),
-        "--conditions", f"Field=path-pattern,Values={path}",
-        "--actions", f"Type=forward,TargetGroupArn={tg_arn}"
-    ])
+    existing = find_rule_arn_for_path(listener_arn, path)
+    if existing:
+        log(f"[ensure_rule] Modifying existing rule {existing} to forward {path} -> {tg_arn}")
+        # modify-rule supports updating Actions/Conditions
+        run([
+            "aws", "elbv2", "modify-rule",
+            "--rule-arn", existing,
+            "--conditions", f"Field=path-pattern,Values={path}",
+            "--actions", f"Type=forward,TargetGroupArn={tg_arn}"
+        ])
+    else:
+        log(f"[ensure_rule] Creating new rule for {path} -> {tg_arn} with priority {priority}")
+        run([
+            "aws", "elbv2", "create-rule",
+            "--listener-arn", listener_arn,
+            "--priority", str(priority),
+            "--conditions", f"Field=path-pattern,Values={path}",
+            "--actions", f"Type=forward,TargetGroupArn={tg_arn}"
+        ])
 
 def _resolve_private_ips_for_instances(instance_ids: list[str], aws_region: str) -> list[str]:
-    """Return list of primary private IPs for the provided instances (in same order as instance_ids when possible)."""
     if not instance_ids:
         return []
     ec2 = boto3.client("ec2", region_name=aws_region)
     ips = []
-    # describe-instances may return instances in any order; map by id
     resp = ec2.describe_instances(InstanceIds=instance_ids)
     id_to_ip = {}
     for r in resp.get("Reservations", []):
         for inst in r.get("Instances", []):
             iid = inst.get("InstanceId")
-            # find primary private IPv4
             priv_ip = inst.get("PrivateIpAddress")
             if not priv_ip:
-                # try network interfaces
                 for iface in inst.get("NetworkInterfaces", []):
                     for p in iface.get("PrivateIpAddresses", []):
                         if p.get("Primary"):
@@ -196,13 +205,52 @@ def _resolve_private_ips_for_instances(instance_ids: list[str], aws_region: str)
                         break
             if priv_ip:
                 id_to_ip[iid] = priv_ip
-    # preserve order of instance_ids
     for iid in instance_ids:
         if iid in id_to_ip:
             ips.append(id_to_ip[iid])
         else:
             log(f"[resolve_ips] WARNING: couldn't find private IP for instance {iid}")
     return ips
+
+def deregister_targets(tg_arn: str, ids: list[str], aws_region: str = None):
+    if not tg_arn or not ids:
+        log(f"[deregister_targets] skipping: tg_arn or ids empty. tg_arn={tg_arn}, ids={ids}")
+        return
+    log(f"[deregister_targets] Deregistering targets {ids} from {tg_arn}")
+    targets = [f"Id={i}" for i in ids if i]
+    try:
+        run(["aws", "elbv2", "deregister-targets", "--target-group-arn", tg_arn, "--targets"] + targets)
+    except Exception as e:
+        log(f"[deregister_targets] Warning: deregister failed: {e}")
+
+def wait_for_targets_healthy_verbose(tg_arn: str, ids: list[str], timeout_seconds: int = 60):
+    log(f"[wait] Waiting up to {timeout_seconds}s for targets {ids} in {tg_arn} to be healthy")
+    deadline = time.time() + timeout_seconds
+    last_states = {}
+    while time.time() < deadline:
+        try:
+            out = run(["aws", "elbv2", "describe-target-health", "--target-group-arn", tg_arn])
+            desc = json.loads(out).get("TargetHealthDescriptions", [])
+            last_states = {}
+            for d in desc:
+                tgt = d.get("Target", {})
+                tid = tgt.get("Id")
+                th = d.get("TargetHealth", {})
+                state = th.get("State", "unknown")
+                reason = th.get("Reason")
+                description = th.get("Description")
+                last_states[tid] = {"state": state, "reason": reason, "description": description}
+            log(f"[wait] observed states: {last_states}")
+            all_present = all(i in last_states for i in ids)
+            all_healthy = all(last_states.get(i, {}).get("state") == "healthy" for i in ids if i in last_states)
+            if all_present and all_healthy:
+                log(f"[wait] All targets healthy for TG {tg_arn}")
+                return True
+        except Exception as e:
+            log(f"[wait] describe-target-health failed: {e}")
+        time.sleep(3)
+    log(f"[wait] Timeout, last observed states: {last_states}")
+    return False
 
 def register_targets(tg_arn: str, instance_ids: list[str], port: str, aws_region: str, wait_seconds: int = 60):
     if not tg_arn or not instance_ids:
@@ -224,7 +272,6 @@ def register_targets(tg_arn: str, instance_ids: list[str], port: str, aws_region
         ids_used = instance_ids
         log(f"[register_targets] Registering Instance IDs {instance_ids} -> {tg_arn}:{port}")
 
-    # register
     run(["aws", "elbv2", "register-targets", "--target-group-arn", tg_arn, "--targets"] + targets)
 
     # wait & verify health
@@ -233,37 +280,6 @@ def register_targets(tg_arn: str, instance_ids: list[str], port: str, aws_region
         log(f"[register_targets] WARNING: Targets did not become healthy within {wait_seconds}s for TG {tg_arn}")
         dump = describe_target_health_verbose(tg_arn)
         log(f"[register_targets] describe-target-health: {json.dumps(dump, indent=2)}")
-
-def wait_for_targets_healthy_verbose(tg_arn: str, ids: list[str], timeout_seconds: int = 60):
-    """Poll describe-target-health and return True if all provided ids appear and are healthy."""
-    log(f"[wait] Waiting up to {timeout_seconds}s for targets {ids} in {tg_arn} to be healthy")
-    deadline = time.time() + timeout_seconds
-    last_states = {}
-    while time.time() < deadline:
-        try:
-            out = run(["aws", "elbv2", "describe-target-health", "--target-group-arn", tg_arn])
-            desc = json.loads(out).get("TargetHealthDescriptions", [])
-            last_states = {}
-            for d in desc:
-                tgt = d.get("Target", {})
-                tid = tgt.get("Id")
-                th = d.get("TargetHealth", {})
-                state = th.get("State", "unknown")
-                reason = th.get("Reason")
-                description = th.get("Description")
-                last_states[tid] = {"state": state, "reason": reason, "description": description}
-            # check all ids present and healthy
-            all_present = all(i in last_states for i in ids)
-            all_healthy = all(last_states.get(i, {}).get("state") == "healthy" for i in ids if i in last_states)
-            log(f"[wait] observed states: {last_states}")
-            if all_present and all_healthy:
-                log(f"[wait] All targets healthy for TG {tg_arn}")
-                return True
-        except Exception as e:
-            log(f"[wait] describe-target-health failed: {e}")
-        time.sleep(3)
-    log(f"[wait] Timeout, last observed states: {last_states}")
-    return False
 
 # -------------------------------------------------------------------
 # Component handling
@@ -336,12 +352,6 @@ def main():
             active = os.getenv("BACKEND_ACTIVE_TG", "")
             inactive = os.getenv("BACKEND_INACTIVE_TG", "")
             ids = [i for i in os.getenv("BACKEND_INSTANCE_IDS", "").split(",") if i]
-            # determine port by active env name presence
-            if active:
-                port = BACKEND_GREEN_PORT if "blue" in active.lower() else BACKEND_BLUE_PORT
-            else:
-                port = BACKEND_BLUE_PORT
-            # diagnostics: log health-check config
             if active:
                 try:
                     hc = get_health_check_info(active)
@@ -355,15 +365,25 @@ def main():
                 except Exception as e:
                     log(f"[backend] failed to get health-check for inactive TG: {e}")
 
+            # Delete rules that point at the active TG first
             delete_rules(listener_arn, active)
-            deregister_targets(active, ids, aws_region)
-            register_targets(inactive, ids, port, aws_region)
 
+            # Create/modify rules to point to the INACTIVE TG BEFORE registering targets
             backend_paths = ["/api/aws/*", "/api/azure/*", "/api/gcp/*"]
             prio = 10
             for path in backend_paths:
-                create_rule(listener_arn, inactive, path, prio)
+                ensure_rule_points_to_tg(listener_arn, path, inactive, prio)
                 prio += 1
+
+            # brief sleep to let ALB digest rules
+            time.sleep(2)
+
+            # choose port for inactive TG
+            port = BACKEND_GREEN_PORT if "blue" in (active or "").lower() else BACKEND_BLUE_PORT
+
+            # deregister active, register inactive
+            deregister_targets(active, ids, aws_region)
+            register_targets(inactive, ids, port, aws_region)
 
         handle_component("backend", os.getenv("BACKEND_STATUS", ""), os.getenv("BACKEND_FIRST_DEPLOYMENT", "false"), backend_rollback)
 
@@ -387,18 +407,25 @@ def main():
                 except Exception as e:
                     log(f"[frontend] failed to get health-check for inactive TG: {e}")
 
-            # choose port for inactive TG by naming heuristic
-            port = FRONTEND_GREEN_PORT if "blue" in (active or "").lower() else FRONTEND_BLUE_PORT
-
+            # Delete rules referencing active TG
             delete_rules(listener_arn, active)
-            deregister_targets(active, ids, aws_region)
-            register_targets(inactive, ids, port, aws_region)
 
+            # Create or modify rules to point at the INACTIVE TG (ATTACH TG to listener) BEFORE registering targets
             frontend_paths = ["/", "/favicon.ico", "/robots.txt", "/static/*"]
             prio = 500
             for path in frontend_paths:
-                create_rule(listener_arn, inactive, path, prio)
+                ensure_rule_points_to_tg(listener_arn, path, inactive, prio)
                 prio += 1
+
+            # brief sleep so ALB picks up rules (makes TG become "in-use")
+            time.sleep(2)
+
+            # choose port for inactive TG
+            port = FRONTEND_GREEN_PORT if "blue" in (active or "").lower() else FRONTEND_BLUE_PORT
+
+            # deregister active TG targets and register instances to inactive TG
+            deregister_targets(active, ids, aws_region)
+            register_targets(inactive, ids, port, aws_region)
 
         handle_component("frontend", os.getenv("FRONTEND_STATUS", ""), os.getenv("FRONTEND_FIRST_DEPLOYMENT", "false"), frontend_rollback)
 
