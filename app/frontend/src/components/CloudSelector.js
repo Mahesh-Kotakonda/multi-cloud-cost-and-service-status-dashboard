@@ -13,7 +13,7 @@ function CloudSelector({ selectedCloud, setSelectedCloud }) {
       <p className="cloud-description">
         Choose a provider to track its <strong>server status</strong> 
         (EC2, VMs, etc.) and review <strong>account costs</strong> 
-        for the <strong>current</strong> and <strong>last two months</strong>.
+         for the <strong>current</strong> and <strong>last two months</strong>.
       </p>
 
       <div className="cloud-selector-container">
@@ -38,4 +38,5 @@ function CloudSelector({ selectedCloud, setSelectedCloud }) {
 }
 
 export default CloudSelector;
+
 
