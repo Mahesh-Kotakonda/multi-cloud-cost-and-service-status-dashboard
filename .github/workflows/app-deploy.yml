@@ -9,14 +9,15 @@ on:
         description: "Which components to deploy (all, worker, backend, frontend, or comma-separated list)"
         required: true
       worker_version:
-        description: "Version tag for worker (do not use 'latest')"
-        required: true
+        description: "Version tag for worker (cannot be empty or 'latest')"
+        required: false
       backend_version:
-        description: "Version tag for backend (do not use 'latest')"
-        required: true
+        description: "Version tag for backend (cannot be empty or 'latest')"
+        required: false
       frontend_version:
-        description: "Version tag for frontend (do not use 'latest')"
-        required: true
+        description: "Version tag for frontend (cannot be empty or 'latest')"
+        required: false
+
 
 
 concurrency:
