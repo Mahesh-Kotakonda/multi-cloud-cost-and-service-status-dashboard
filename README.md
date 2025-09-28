@@ -71,6 +71,7 @@ The system is built with **containers, pipelines, and infrastructure automation*
 
 ## 📚 Documentation
 
+- [Documentation Index](./docs/README.md)  
 - [Application](./docs/application/README.md)  
 - [Architecture](./docs/architecture/README.md)  
 - [CI/CD + DevSecOps](./docs/ci-cd/README.md)  
