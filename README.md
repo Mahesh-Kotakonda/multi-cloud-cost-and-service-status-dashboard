@@ -35,9 +35,7 @@ The system is built with **containers, pipelines, and infrastructure automation*
 - **Containers**
   - **Frontend (ReactJS)** – Web dashboard with cloud selector, cost view, and server status view.  
   - **Backend (Python)** – REST APIs to serve cost and server status metrics.  
-  - **Worker (Python)** – Connects to cloud accounts, collects data, and stores it in the database.  
-    - **AWS** → Live dynamic data  
-    - **Azure & GCP** → Dummy functions generating random but realistic data  
+  - **Worker (Python)** – Connects to cloud accounts, collects cost & service metrics, and stores them in the database.  
 
 - **Deployment Strategies**
   - **Blue-Green (frontend/backend)** → Zero-downtime container switching.  
