@@ -29,7 +29,7 @@ The application build workflow ensures that every code change is verified for qu
 6. **App Deployment** is triggered automatically.  
 
 📸 Screenshot (Positive Scenario):  
-![App Build Positive](./docs/ci-cd/app-build-positive.png)
+![App Build Positive](./app-build-positive.png)
 
 ---
 
@@ -41,7 +41,7 @@ The application build workflow ensures that every code change is verified for qu
 5. **App Deployment is not triggered**.  
 
 📸 Screenshot (Negative Scenario):  
-![App Build Negative](./docs/ci-cd/app-build-negative.png)
+![App Build Negative](./app-build-negative.png)
 
 ---
 
@@ -76,7 +76,7 @@ This workflow provisions infrastructure securely with **Terraform** and validate
 3. Terraform infrastructure resources are created successfully.  
 
 📸 Screenshot (Positive Scenario):  
-![Infra Creation Positive](./docs/ci-cd/infra-positive.png)
+![Infra Creation Positive](./infra-positive.png)
 
 ---
 
@@ -86,7 +86,7 @@ This workflow provisions infrastructure securely with **Terraform** and validate
 3. In either case, Terraform **does not proceed with apply**.  
 
 📸 Screenshot (Negative Scenario):  
-![Infra Creation Negative](./docs/ci-cd/infra-negative.png)
+![Infra Creation Negative](./infra-negative.png)
 
 ---
 
@@ -124,7 +124,7 @@ All four projects are tracked independently:
 - **Terraform Project**  
 
 📸 Screenshot:  
-![SonarQube Projects](./docs/ci-cd/sonar-projects.png)
+![SonarQube Projects](./sonar-projects.png)
 
 ---
 
@@ -132,16 +132,16 @@ All four projects are tracked independently:
 Detailed per-project analysis (bugs, vulnerabilities, code smells, new vs overall code):  
 
 - **Frontend Project**  
-  ![SonarQube Frontend](./docs/ci-cd/sonar-frontend.png)  
+  ![SonarQube Frontend](./sonar-frontend.png)  
 
 - **Backend Project**  
-  ![SonarQube Backend](./docs/ci-cd/sonar-backend.png)  
+  ![SonarQube Backend](./sonar-backend.png)  
 
 - **Worker Project**  
-  ![SonarQube Worker](./docs/ci-cd/sonar-worker.png)  
+  ![SonarQube Worker](./sonar-worker.png)  
 
 - **Terraform Project**  
-  ![SonarQube Terraform](./docs/ci-cd/sonar-terraform.png)  
+  ![SonarQube Terraform](./sonar-terraform.png)  
 
 ---
 
@@ -149,20 +149,20 @@ Detailed per-project analysis (bugs, vulnerabilities, code smells, new vs overal
 
 #### App Build
 - **FS Scans** (frontend, backend, worker)  
-  ![Trivy FS App](./docs/ci-cd/trivy-fs-app.png)  
+  ![Trivy FS App](./trivy-fs-app.png)  
 
 - **Config Scans** (frontend, backend, worker)  
-  ![Trivy Config App](./docs/ci-cd/trivy-config-app.png)  
+  ![Trivy Config App](./trivy-config-app.png)  
 
 - **Docker Image Scans** (frontend, backend, worker)  
-  ![Trivy Image App](./docs/ci-cd/trivy-image-app.png)  
+  ![Trivy Image App](./trivy-image-app.png)  
 
 #### Infra Creation
 - **FS Scan (Terraform)**  
-  ![Trivy FS Terraform](./docs/ci-cd/trivy-fs-terraform.png)  
+  ![Trivy FS Terraform](./trivy-fs-terraform.png)  
 
 - **Config Scan (Terraform)**  
-  ![Trivy Config Terraform](./docs/ci-cd/trivy-config-terraform.png)  
+  ![Trivy Config Terraform](./trivy-config-terraform.png)  
 
 ---
 
@@ -172,4 +172,5 @@ This CI/CD + DevSecOps setup ensures:
 - **Zero-downtime deployments** with Blue-Green + Rolling strategies  
 - **Automated rollback** with S3 JSON configs  
 - **Full traceability** with screenshots from SonarQube and Trivy scans  
+
 
