@@ -9,7 +9,7 @@ log = logging.getLogger("azure")
 # ----------------------------
 def store_dummy_monthly_cost(conn, cloud="Azure"):
     """
-    Dummy Azure Cost Data.
+    Dummy Azure Cost Data with total between $11 and $15.
     ⚠️ Replace with Azure Cost Management API in the future.
     """
     today = datetime.utcnow()
@@ -25,20 +25,32 @@ def store_dummy_monthly_cost(conn, cloud="Azure"):
 
     for month_start in months:
         month_str = month_start.strftime("%Y-%m")
-        total_amount = 0.0
+
+        # total budget between 11 and 15
+        total_amount = round(random.uniform(11.0, 15.0), 2)
+
+        # random weights to split across services
+        weights = [random.random() for _ in services]
+        total_weight = sum(weights)
+
         service_costs = {}
+        for s, w in zip(services, weights):
+            cost = (w / total_weight) * total_amount
+            service_costs[s] = round(cost, 2)
 
-        for s in services:
-            cost = round(random.uniform(20, 200), 2)
-            total_amount += cost
-            service_costs[s] = cost
+        # fix rounding diff on last service
+        diff = total_amount - sum(service_costs.values())
+        if abs(diff) >= 0.01:
+            last_service = services[-1]
+            service_costs[last_service] = round(service_costs[last_service] + diff, 2)
 
+        # build percentages
         service_costs_pct = {
-            s: (c, round((c / total_amount) * 100, 2))
-            for s, c in service_costs.items()
+            s: (c, round((c / total_amount) * 100, 2)) for s, c in service_costs.items()
         }
         service_costs_pct["TOTAL"] = (total_amount, 100.0)
 
+        # prepare rows
         rows = [
             (cloud, month_str, s, cost, pct, retrieved_at)
             for s, (cost, pct) in service_costs_pct.items()
@@ -56,9 +68,10 @@ def store_dummy_monthly_cost(conn, cloud="Azure"):
             rows,
         )
         conn.commit()
-        log.info(f"[{cloud}] Stored dummy cost data for {month_str}")
+        log.info(f"[{cloud}] Stored dummy cost data for {month_str}: total={total_amount}")
 
     cur.close()
+
 
 
 # ----------------------------
