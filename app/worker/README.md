@@ -37,7 +37,6 @@ It runs as an **independent container** and continuously updates the database us
 ## 🛠️ Tech Stack
 
 - **Python**  
-- **AWS SDK (boto3)** for AWS integration  
-- **Custom modules** for Azure & GCP dummy data  
-- **Database Client** (PostgreSQL/MySQL)  
--
+- **AWS SDK (boto3)** for AWS,Azure,Gcp integration   
+- **Database Client** (AWS RDS)  
+
