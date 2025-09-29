@@ -168,6 +168,14 @@ jobs:
   trivy-scan-sources-and-configs:
     needs: determine-services
     runs-on: self-hosted
+    outputs:
+      backend_fs_has_critical: ${{ steps.trivy_backend_fs.outputs.backend_fs_has_critical }}
+      backend_config_has_critical: ${{ steps.trivy_backend_config.outputs.backend_config_has_critical }}
+      worker_fs_has_critical: ${{ steps.trivy_worker_fs.outputs.worker_fs_has_critical }}
+      worker_config_has_critical: ${{ steps.trivy_worker_config.outputs.worker_config_has_critical }}
+      frontend_fs_has_critical: ${{ steps.trivy_frontend_fs.outputs.frontend_fs_has_critical }}
+      frontend_config_has_critical: ${{ steps.trivy_frontend_config.outputs.frontend_config_has_critical }}
+  
     steps:
       - uses: actions/checkout@v4
   
@@ -179,32 +187,102 @@ jobs:
           fi
           trivy --version
   
-      # Backend Scans
-      - name: Trivy FS Scan - Backend Source Code
+      # Backend FS scan (always runs when build_backend == true; will not stop the job)
+      - id: trivy_backend_fs
+        name: Trivy FS Scan - Backend Source Code
         if: needs.determine-services.outputs.build_backend == 'true'
-        run: trivy fs --exit-code 1 --severity HIGH,CRITICAL app/backend
+        run: |
+          set +e
+          trivy fs --exit-code 1 --severity HIGH,CRITICAL app/backend
+          rc=$?
+          if [ "$rc" -eq 0 ]; then
+            echo "backend_fs_has_critical=false" >> $GITHUB_OUTPUT
+          elif [ "$rc" -eq 1 ]; then
+            echo "backend_fs_has_critical=true" >> $GITHUB_OUTPUT
+          else
+            echo "backend_fs_has_critical=false" >> $GITHUB_OUTPUT
+          fi
   
-      - name: Trivy Config Scan - Backend Dockerfile
+      # Backend Dockerfile/config scan
+      - id: trivy_backend_config
+        name: Trivy Config Scan - Backend Dockerfile
         if: needs.determine-services.outputs.build_backend == 'true'
-        run: trivy config --exit-code 1 --severity HIGH,CRITICAL docker/backend
+        run: |
+          set +e
+          trivy config --exit-code 1 --severity HIGH,CRITICAL docker/backend
+          rc=$?
+          if [ "$rc" -eq 0 ]; then
+            echo "backend_config_has_critical=false" >> $GITHUB_OUTPUT
+          elif [ "$rc" -eq 1 ]; then
+            echo "backend_config_has_critical=true" >> $GITHUB_OUTPUT
+          else
+            echo "backend_config_has_critical=false" >> $GITHUB_OUTPUT
+          fi
   
-      # Worker Scans
-      - name: Trivy FS Scan - Worker Source Code
+      # Worker FS scan
+      - id: trivy_worker_fs
+        name: Trivy FS Scan - Worker Source Code
         if: needs.determine-services.outputs.build_worker == 'true'
-        run: trivy fs --exit-code 1 --severity HIGH,CRITICAL app/worker
+        run: |
+          set +e
+          trivy fs --exit-code 1 --severity HIGH,CRITICAL app/worker
+          rc=$?
+          if [ "$rc" -eq 0 ]; then
+            echo "worker_fs_has_critical=false" >> $GITHUB_OUTPUT
+          elif [ "$rc" -eq 1 ]; then
+            echo "worker_fs_has_critical=true" >> $GITHUB_OUTPUT
+          else
+            echo "worker_fs_has_critical=false" >> $GITHUB_OUTPUT
+          fi
   
-      - name: Trivy Config Scan - Worker Dockerfile
+      # Worker Dockerfile/config scan
+      - id: trivy_worker_config
+        name: Trivy Config Scan - Worker Dockerfile
         if: needs.determine-services.outputs.build_worker == 'true'
-        run: trivy config --exit-code 1 --severity HIGH,CRITICAL docker/worker
+        run: |
+          set +e
+          trivy config --exit-code 1 --severity HIGH,CRITICAL docker/worker
+          rc=$?
+          if [ "$rc" -eq 0 ]; then
+            echo "worker_config_has_critical=false" >> $GITHUB_OUTPUT
+          elif [ "$rc" -eq 1 ]; then
+            echo "worker_config_has_critical=true" >> $GITHUB_OUTPUT
+          else
+            echo "worker_config_has_critical=false" >> $GITHUB_OUTPUT
+          fi
   
-      # Frontend Scans
-      - name: Trivy FS Scan - Frontend Source Code
+      # Frontend FS scan
+      - id: trivy_frontend_fs
+        name: Trivy FS Scan - Frontend Source Code
         if: needs.determine-services.outputs.build_frontend == 'true'
-        run: trivy fs --exit-code 1 --severity HIGH,CRITICAL app/frontend
+        run: |
+          set +e
+          trivy fs --exit-code 1 --severity HIGH,CRITICAL app/frontend
+          rc=$?
+          if [ "$rc" -eq 0 ]; then
+            echo "frontend_fs_has_critical=false" >> $GITHUB_OUTPUT
+          elif [ "$rc" -eq 1 ]; then
+            echo "frontend_fs_has_critical=true" >> $GITHUB_OUTPUT
+          else
+            echo "frontend_fs_has_critical=false" >> $GITHUB_OUTPUT
+          fi
   
-      - name: Trivy Config Scan - Frontend Dockerfile
+      # Frontend Dockerfile/config scan
+      - id: trivy_frontend_config
+        name: Trivy Config Scan - Frontend Dockerfile
         if: needs.determine-services.outputs.build_frontend == 'true'
-        run: trivy config --exit-code 1 --severity HIGH,CRITICAL docker/frontend
+        run: |
+          set +e
+          trivy config --exit-code 1 --severity HIGH,CRITICAL docker/frontend
+          rc=$?
+          if [ "$rc" -eq 0 ]; then
+            echo "frontend_config_has_critical=false" >> $GITHUB_OUTPUT
+          elif [ "$rc" -eq 1 ]; then
+            echo "frontend_config_has_critical=true" >> $GITHUB_OUTPUT
+          else
+            echo "frontend_config_has_critical=false" >> $GITHUB_OUTPUT
+          fi
+
 
   # ---------------- DOCKER BUILD + IMAGE SCAN + PUSH ---------------- #
 
@@ -378,3 +456,4 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           event-type: trigger-deployment
           client-payload: ${{ steps.payload.outputs.payload }}
+
