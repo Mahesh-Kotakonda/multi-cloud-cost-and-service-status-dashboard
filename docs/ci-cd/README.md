@@ -22,7 +22,7 @@ This project uses **GitHub Actions workflows** for application and infrastructur
 6. **App Deployment** is triggered automatically.  
 
 📸 Screenshot (Positive Scenario):  
-![App Build Positive](./docs/ci-cd/app-build-positive.png)
+![App Build Positive](./app-build-positive.png)
 
 #### ❌ Negative Scenario
 1. **Worker container** fails SonarQube scan (skipped from build).  
@@ -32,7 +32,7 @@ This project uses **GitHub Actions workflows** for application and infrastructur
 5. **App Deployment is not triggered**.  
 
 📸 Screenshot (Negative Scenario):  
-![App Build Negative](./docs/ci-cd/app-build-negative.png)
+![App Build Negative](./app-build-negative.png)
 
 ---
 
@@ -73,3 +73,4 @@ This project uses **GitHub Actions workflows** for application and infrastructur
 - **FS & Config Scans** → Check filesystem and IaC misconfigurations.  
 - **Docker Image Scans** → Run after image build to detect CVEs inside container images.  
 - Ensures both application and infrastructure are secure before deployment.  
+
