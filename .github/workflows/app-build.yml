@@ -83,9 +83,9 @@ jobs:
             fi
           fi
 
-# ---------------- SONARQUBE SCAN JOBS ---------------- #
+  # ---------------- SONARQUBE SCAN JOBS ---------------- #
 
-  sonar-backend:
+  sonarqube-scan-backend-source:
     needs: determine-services
     if: needs.determine-services.outputs.build_backend == 'true'
     runs-on: self-hosted
@@ -110,7 +110,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
-  sonar-worker:
+  sonarqube-scan-worker-source:
     needs: determine-services
     if: needs.determine-services.outputs.build_worker == 'true'
     runs-on: self-hosted
@@ -135,7 +135,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
           
-  sonar-frontend:
+  sonarqube-scan-frontend-source:
     needs: determine-services
     if: needs.determine-services.outputs.build_frontend == 'true'
     runs-on: self-hosted
@@ -152,7 +152,7 @@ jobs:
             -Dsonar.projectName='Frontend Service' \
             -Dsonar.sources=app/frontend \
             -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
-            -Dsonar.token=${{ secrets.SONAR_TOKEN }} \
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }} \
             -Dsonar.scm.disabled=true \
             -Dsonar.coverage.jacoco.xmlReportPaths=none \
             -Dsonar.javascript.node.maxspace=512
@@ -163,9 +163,9 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
-# ---------------- CENTRALIZED FS & CONFIG SCAN ---------------- #
+  # ---------------- CENTRALIZED FS & CONFIG SCAN ---------------- #
 
-  scan-sources:
+  trivy-scan-sources-and-configs:
     needs: determine-services
     runs-on: self-hosted
     steps:
@@ -179,9 +179,7 @@ jobs:
           fi
           trivy --version
   
-      # ======================
       # Backend Scans
-      # ======================
       - name: Trivy FS Scan - Backend Source Code
         if: needs.determine-services.outputs.build_backend == 'true'
         run: trivy fs --exit-code 1 --severity HIGH,CRITICAL app/backend
@@ -190,9 +188,7 @@ jobs:
         if: needs.determine-services.outputs.build_backend == 'true'
         run: trivy config --exit-code 1 --severity HIGH,CRITICAL docker/backend
   
-      # ======================
       # Worker Scans
-      # ======================
       - name: Trivy FS Scan - Worker Source Code
         if: needs.determine-services.outputs.build_worker == 'true'
         run: trivy fs --exit-code 1 --severity HIGH,CRITICAL app/worker
@@ -201,9 +197,7 @@ jobs:
         if: needs.determine-services.outputs.build_worker == 'true'
         run: trivy config --exit-code 1 --severity HIGH,CRITICAL docker/worker
   
-      # ======================
       # Frontend Scans
-      # ======================
       - name: Trivy FS Scan - Frontend Source Code
         if: needs.determine-services.outputs.build_frontend == 'true'
         run: trivy fs --exit-code 1 --severity HIGH,CRITICAL app/frontend
@@ -212,13 +206,11 @@ jobs:
         if: needs.determine-services.outputs.build_frontend == 'true'
         run: trivy config --exit-code 1 --severity HIGH,CRITICAL docker/frontend
 
-# ---------------- DOCKER BUILD + IMAGE SCAN + PUSH ---------------- #
+  # ---------------- DOCKER BUILD + IMAGE SCAN + PUSH ---------------- #
 
   build-backend:
-    needs: [scan-sources, sonar-backend]
-    # needs: determine-services
-    if: needs.sonar-backend.result == 'success' && github.ref == 'refs/heads/main'   # OLD
-    # if: needs.determine-services.outputs.build_backend == 'true' && github.ref == 'refs/heads/main'  # NEW
+    needs: [trivy-scan-sources-and-configs, sonarqube-scan-backend-source]
+    if: needs.sonarqube-scan-backend-source.result == 'success' && github.ref == 'refs/heads/main'
     runs-on: self-hosted
     env:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -233,10 +225,10 @@ jobs:
                        -t "$DOCKERHUB_USERNAME/$IMAGE_REPO:backend-${VERSION}" \
                        -f docker/backend/Dockerfile .
 
-  scan-backend-image:
+  trivy-scan-backend-image:
     needs: build-backend
-    runs-on: self-hosted
     if: needs.build-backend.result == 'success'
+    runs-on: self-hosted
     steps:
       - name: Install Trivy
         run: |
@@ -245,14 +237,12 @@ jobs:
             sudo mv ./bin/trivy /usr/local/bin/
           fi
       - name: Trivy Image Scan (Backend)
-        run: trivy image --scanners vuln --exit-code 1 --severity HIGH,CRITICAL "${{ secrets.DOCKERHUB_USERNAME }}/multi-cloud-cost-and-service-status-dashboard-repo:backend-latest" || true
+        run: trivy image --scanners vuln --exit-code 1 --severity HIGH,CRITICAL "${{ secrets.DOCKERHUB_USERNAME }}/multi-cloud-cost-and-service-status-dashboard-repo:backend-latest"
 
   push-backend:
-    needs: scan-backend-image
-    # needs: build-backend
+    needs: trivy-scan-backend-image
+    if: needs.trivy-scan-backend-image.result == 'success'
     runs-on: self-hosted
-    if: needs.scan-backend-image.result == 'success'   # OLD
-    # if: needs.build-backend.result == 'success'          # NEW
     steps:
       - uses: docker/login-action@v3
         with:
@@ -263,13 +253,9 @@ jobs:
           docker push "${{ secrets.DOCKERHUB_USERNAME }}/multi-cloud-cost-and-service-status-dashboard-repo:backend-latest"
           docker push "${{ secrets.DOCKERHUB_USERNAME }}/multi-cloud-cost-and-service-status-dashboard-repo:backend-v${GITHUB_RUN_NUMBER}"
 
-# (Repeat same pattern for worker + frontend)
-
   build-worker:
-    needs: [scan-sources, sonar-worker]
-    # needs: determine-services
-    if: needs.sonar-worker.result == 'success' && github.ref == 'refs/heads/main'   # OLD
-    # if: needs.determine-services.outputs.build_worker == 'true' && github.ref == 'refs/heads/main'  # NEW
+    needs: [trivy-scan-sources-and-configs, sonarqube-scan-worker-source]
+    if: needs.sonarqube-scan-worker-source.result == 'success' && github.ref == 'refs/heads/main'
     runs-on: self-hosted
     env:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -284,10 +270,10 @@ jobs:
                        -t "$DOCKERHUB_USERNAME/$IMAGE_REPO:worker-${VERSION}" \
                        -f docker/worker/Dockerfile .
 
-  scan-worker-image:
+  trivy-scan-worker-image:
     needs: build-worker
-    runs-on: self-hosted
     if: needs.build-worker.result == 'success'
+    runs-on: self-hosted
     steps:
       - name: Install Trivy
         run: |
@@ -296,14 +282,12 @@ jobs:
             sudo mv ./bin/trivy /usr/local/bin/
           fi
       - name: Trivy Image Scan (Worker)
-        run: trivy image --scanners vuln --exit-code 1 --severity HIGH,CRITICAL "${{ secrets.DOCKERHUB_USERNAME }}/multi-cloud-cost-and-service-status-dashboard-repo:worker-latest" || true
+        run: trivy image --scanners vuln --exit-code 1 --severity HIGH,CRITICAL "${{ secrets.DOCKERHUB_USERNAME }}/multi-cloud-cost-and-service-status-dashboard-repo:worker-latest"
 
   push-worker:
-    needs: scan-worker-image
-    # needs: build-worker
+    needs: trivy-scan-worker-image
+    if: needs.trivy-scan-worker-image.result == 'success'
     runs-on: self-hosted
-    if: needs.scan-worker-image.result == 'success'   # OLD
-    # if: needs.build-worker.result == 'success'          # NEW
     steps:
       - uses: docker/login-action@v3
         with:
@@ -315,10 +299,8 @@ jobs:
           docker push "${{ secrets.DOCKERHUB_USERNAME }}/multi-cloud-cost-and-service-status-dashboard-repo:worker-v${GITHUB_RUN_NUMBER}"
 
   build-frontend:
-    needs: [scan-sources, sonar-frontend]
-    # needs: determine-services
-    if: needs.sonar-frontend.result == 'success' && github.ref == 'refs/heads/main'   # OLD
-    # if: needs.determine-services.outputs.build_frontend == 'true' && github.ref == 'refs/heads/main'  # NEW
+    needs: [trivy-scan-sources-and-configs, sonarqube-scan-frontend-source]
+    if: needs.sonarqube-scan-frontend-source.result == 'success' && github.ref == 'refs/heads/main'
     runs-on: self-hosted
     env:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -333,10 +315,10 @@ jobs:
                        -t "$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-${VERSION}" \
                        -f docker/frontend/Dockerfile .
 
-  scan-frontend-image:
+  trivy-scan-frontend-image:
     needs: build-frontend
-    runs-on: self-hosted
     if: needs.build-frontend.result == 'success'
+    runs-on: self-hosted
     steps:
       - name: Install Trivy
         run: |
@@ -345,14 +327,12 @@ jobs:
             sudo mv ./bin/trivy /usr/local/bin/
           fi
       - name: Trivy Image Scan (Frontend)
-        run: trivy image --scanners vuln --exit-code 1 --severity HIGH,CRITICAL "${{ secrets.DOCKERHUB_USERNAME }}/multi-cloud-cost-and-service-status-dashboard-repo:frontend-latest" || true
+        run: trivy image --scanners vuln --exit-code 1 --severity HIGH,CRITICAL "${{ secrets.DOCKERHUB_USERNAME }}/multi-cloud-cost-and-service-status-dashboard-repo:frontend-latest"
 
   push-frontend:
-    needs: scan-frontend-image
-    # needs: build-frontend
+    needs: trivy-scan-frontend-image
+    if: needs.trivy-scan-frontend-image.result == 'success'
     runs-on: self-hosted
-    if: needs.scan-frontend-image.result == 'success'   # OLD
-    # if: needs.build-frontend.result == 'success'          # NEW
     steps:
       - uses: docker/login-action@v3
         with:
@@ -363,12 +343,11 @@ jobs:
           docker push "${{ secrets.DOCKERHUB_USERNAME }}/multi-cloud-cost-and-service-status-dashboard-repo:frontend-latest"
           docker push "${{ secrets.DOCKERHUB_USERNAME }}/multi-cloud-cost-and-service-status-dashboard-repo:frontend-v${GITHUB_RUN_NUMBER}"
 
-# ---------------- DEPLOYMENT ---------------- #
+  # ---------------- DEPLOYMENT ---------------- #
 
   trigger-deployment:
     needs: [push-backend, push-worker, push-frontend]
     runs-on: self-hosted
-    # if: ${{ always() }}
     if: always()
     steps:
       - name: Debug results
@@ -389,7 +368,7 @@ jobs:
           [[ "${{ needs.push-frontend.result }}" == "success" ]] && images+=("\"frontend\":\"${DOCKERHUB_USERNAME}/multi-cloud-cost-and-service-status-dashboard-repo:frontend-v${GITHUB_RUN_NUMBER}\"")
           [[ ${#images[@]} -eq 0 ]] && echo "has_images=false" >> $GITHUB_OUTPUT && exit 0
           joined=$(IFS=,; echo "${images[*]}")
-          printf 'payload={"ref":"%s","run_number":"%s",%s}\n' "$GITHUB_REF" "$GITHUB_RUN_NUMBER" "$joined" >> $GITHUB_OUTPUT
+          echo "payload={\"ref\":\"$GITHUB_REF\",\"run_number\":\"$GITHUB_RUN_NUMBER\",$joined}" >> $GITHUB_OUTPUT
           echo "has_images=true" >> $GITHUB_OUTPUT
 
       - name: Trigger Deployment Workflow
@@ -399,8 +378,3 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           event-type: trigger-deployment
           client-payload: ${{ steps.payload.outputs.payload }}
-
-
-
-
-
