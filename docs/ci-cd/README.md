@@ -74,3 +74,37 @@ This project uses **GitHub Actions workflows** for application and infrastructur
 - **Docker Image Scans** → Run after image build to detect CVEs inside container images.  
 - Ensures both application and infrastructure are secure before deployment.  
 
+---
+
+## 📸 Scan Results
+
+To provide visibility, here are actual screenshots from the pipeline scans:
+
+### 🔹 SonarQube Project Dashboards
+Each project is analyzed independently in **SonarQube**:  
+
+- **Frontend Project**  
+  ![SonarQube Frontend](./sonar-frontend.png)  
+
+- **Backend Project**  
+  ![SonarQube Backend](./sonar-backend.png)  
+
+- **Worker Project**  
+  ![SonarQube Worker](./sonar-worker.png)  
+
+- **Terraform Project**  
+  ![SonarQube Terraform](./sonar-terraform.png)  
+
+---
+
+### 🔹 Trivy Scans
+- **Filesystem Scan**  
+  ![Trivy FS Scan](./trivy-fs-scan.png)
+
+- **Config Scan**  
+  ![Trivy Config Scan](./trivy-config-scan.png)
+
+- **Docker Image Scan**  
+  ![Trivy Image Scan](./trivy-image-scan.png)
+
+---
