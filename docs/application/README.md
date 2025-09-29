@@ -53,9 +53,9 @@ It consists of three main components — **frontend, backend, and worker** — s
 
 ## 📦 Learn More
 
-- [Frontend (ReactJS)](../../frontend/README.md)  
-- [Backend (Python APIs)](../../backend/README.md)  
-- [Worker (Cloud Data Fetcher)](../../worker/README.md)  
+- [Frontend (ReactJS)](../../app/frontend/README.md)  
+- [Backend (Python APIs)](../../app/backend/README.md)  
+- [Worker (Cloud Data Fetcher)](../../app/worker/README.md)  
 - [Terraform (Infrastructure Setup)](../../terraform/README.md)  
 
 ---
@@ -64,4 +64,5 @@ It consists of three main components — **frontend, backend, and worker** — s
 
 Main dashboard (cloud selector, cost metrics, server status):  
 ![Dashboard Screenshot](../../frontend/public/dashboard.png)
+
 
