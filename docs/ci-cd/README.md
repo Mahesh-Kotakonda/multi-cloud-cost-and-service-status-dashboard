@@ -8,9 +8,33 @@ This project uses **GitHub Actions workflows** for application and infrastructur
 
 ### 1. **App Build**
 - Triggered on code changes.  
+- Runs **SonarQube** (static code analysis) and **Trivy FS/config scans** (IaC & filesystem vulnerabilities).  
 - Builds **frontend, backend, and worker** Docker images.  
-- Pushes images to the container registry.  
-- Runs **SonarQube** (code quality) and **Trivy** (image vulnerability scan).  
+- Runs a **3rd security scan on built Docker images (Trivy)**.  
+- If all scans pass → pushes images to the container registry and triggers **App Deployment**.  
+
+#### ✅ Positive Scenario
+1. **SonarQube** scans (frontend, backend, worker) pass.  
+2. **Trivy FS & config scans** succeed.  
+3. **Docker images** for frontend, backend, worker are built.  
+4. **Trivy Docker image scans** pass.  
+5. Images are **pushed to registry**.  
+6. **App Deployment** is triggered automatically.  
+
+📸 Screenshot (Positive Scenario):  
+![App Build Positive](./docs/ci-cd/app-build-positive.png)
+
+#### ❌ Negative Scenario
+1. **Worker container** fails SonarQube scan (skipped from build).  
+2. **Frontend & backend** pass SonarQube + Trivy FS/config scans → their builds succeed.  
+3. **Docker image scan (3rd scan)** fails for one of the built images.  
+4. As a result, the **image publish step fails**.  
+5. **App Deployment is not triggered**.  
+
+📸 Screenshot (Negative Scenario):  
+![App Build Negative](./docs/ci-cd/app-build-negative.png)
+
+---
 
 ### 2. **App Deploy**
 - Deploys the built containers to EC2.  
@@ -46,6 +70,6 @@ This project uses **GitHub Actions workflows** for application and infrastructur
 
 ### 🔹 Trivy
 - Runs in both **App Build** and **Infra Creation** workflows.  
-- Scans **Docker images** for vulnerabilities.  
-- Scans **Terraform modules** for misconfigurations and known CVEs.  
+- **FS & Config Scans** → Check filesystem and IaC misconfigurations.  
+- **Docker Image Scans** → Run after image build to detect CVEs inside container images.  
 - Ensures both application and infrastructure are secure before deployment.  
