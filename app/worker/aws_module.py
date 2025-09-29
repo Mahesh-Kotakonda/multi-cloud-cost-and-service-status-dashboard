@@ -22,9 +22,10 @@ ce = boto3.client("ce", region_name=AWS_REGION, config=boto_cfg)
 # ----------------------------
 # AWS Monthly Cost (dummy + real)
 # ----------------------------
+
 def store_dummy_monthly_cost(conn, cloud="AWS"):
     """
-    Dummy cost generator for AWS (avoids Cost Explorer API charges).
+    Dummy cost generator for AWS with total < $10.
     ⚠️ Replace with fetch_monthly_cost + store_monthly_cost for real-time.
     """
     today = datetime.utcnow()
@@ -40,24 +41,39 @@ def store_dummy_monthly_cost(conn, cloud="AWS"):
     for month_start in months:
         month_str = month_start.strftime("%Y-%m")
         services = ["EC2", "S3", "RDS", "Lambda", "DynamoDB"]
+
+        # Generate random weights for services
+        weights = [random.random() for _ in services]
+        total_weight = sum(weights)
+
+        # Fix total monthly budget under 10 (e.g., 9.xx)
+        total_amount = round(random.uniform(8.5, 9.99), 2)
+
+        # Allocate costs proportionally to weights
         service_costs = {}
-        total_amount = 0.0
+        for s, w in zip(services, weights):
+            cost = (w / total_weight) * total_amount
+            service_costs[s] = round(cost, 2)
 
-        for s in services:
-            cost = round(random.uniform(10, 100), 2)
-            total_amount += cost
-            service_costs[s] = cost
+        # Ensure rounding doesn’t break total — adjust last service
+        diff = total_amount - sum(service_costs.values())
+        if abs(diff) >= 0.01:
+            last_service = services[-1]
+            service_costs[last_service] = round(service_costs[last_service] + diff, 2)
 
+        # Calculate percentages
         service_costs_pct = {
             s: (c, round((c / total_amount) * 100, 2)) for s, c in service_costs.items()
         }
         service_costs_pct["TOTAL"] = (total_amount, 100.0)
 
+        # Prepare rows
         rows = [
             (cloud, month_str, s, cost, pct, retrieved_at)
             for s, (cost, pct) in service_costs_pct.items()
         ]
 
+        # Insert into DB
         cur.executemany(
             """
             INSERT INTO cloud_cost_monthly (cloud, month_year, service, total_amount, pct_of_total, retrieved_at)
@@ -70,9 +86,10 @@ def store_dummy_monthly_cost(conn, cloud="AWS"):
             rows,
         )
         conn.commit()
-        log.info(f"[{cloud}] Stored dummy costs for {month_str}")
+        log.info(f"[{cloud}] Stored dummy costs for {month_str}: total={total_amount}")
 
     cur.close()
+
 
 
 def fetch_monthly_cost(ce_client, start_date, end_date):
