@@ -124,7 +124,8 @@ All four projects are tracked independently:
 - **Terraform Project**  
 
 📸 Screenshot:  
-![SonarQube Projects](./sonar-projects.png)
+![SonarQube Projects](./sonar-projects_1.png)
+![SonarQube Projects](./sonar-projects_2.png)
 
 ---
 
@@ -190,6 +191,7 @@ This CI/CD + DevSecOps setup ensures:
 - **Zero-downtime deployments** with Blue-Green + Rolling strategies  
 - **Automated rollback** with S3 JSON configs  
 - **Full traceability** with screenshots from SonarQube and Trivy scans  
+
 
 
 
