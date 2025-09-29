@@ -148,14 +148,32 @@ Detailed per-project analysis (bugs, vulnerabilities, code smells, new vs overal
 ### 🔹 Trivy Scan Proofs
 
 #### App Build
-- **FS Scans** (frontend, backend, worker)  
-  ![Trivy FS App](./trivy-fs-app.png)  
+- **FS Scans** (frontend)  
+  ![Trivy FS App](./frontend_trivy-fs-app.png)  
 
-- **Config Scans** (frontend, backend, worker)  
-  ![Trivy Config App](./trivy-config-app.png)  
+- **Config Scans** (frontend)  
+  ![Trivy Config App](./frontend_trivy-config-app.png)  
 
-- **Docker Image Scans** (frontend, backend, worker)  
-  ![Trivy Image App](./trivy-image-app.png)  
+- **Docker Image Scans** (frontend)  
+  ![Trivy Image App](./frontend_trivy-image-app.png)
+  
+- **FS Scans** (backend)  
+  ![Trivy FS App](./backend_trivy-fs-app.png)  
+
+- **Config Scans** (backend)  
+  ![Trivy Config App](./backend_trivy-config-app.png)  
+
+- **Docker Image Scans** (backend)  
+  ![Trivy Image App](./backend_trivy-image-app.png)
+  
+- **FS Scans** (worker)  
+  ![Trivy FS App](./worker_trivy-fs-app.png)  
+
+- **Config Scans** (worker)  
+  ![Trivy Config App](./worker_trivy-config-app.png)  
+
+- **Docker Image Scans** (worker)  
+  ![Trivy Image App](./worker_trivy-image-app.png) 
 
 #### Infra Creation
 - **FS Scan (Terraform)**  
@@ -172,5 +190,6 @@ This CI/CD + DevSecOps setup ensures:
 - **Zero-downtime deployments** with Blue-Green + Rolling strategies  
 - **Automated rollback** with S3 JSON configs  
 - **Full traceability** with screenshots from SonarQube and Trivy scans  
+
 
 
