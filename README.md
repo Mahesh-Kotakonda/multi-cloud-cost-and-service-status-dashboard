@@ -83,5 +83,4 @@ The system is built with **containers, pipelines, and infrastructure automation*
 
 Main dashboard view (cloud selector, cost & server status):  
 ![Dashboard Screenshot](./docs/application
-/multi-cloud-and-service-status-dashboard.png
-)
+/multi-cloud-and-service-status-dashboard.png)
