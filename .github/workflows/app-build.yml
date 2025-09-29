@@ -83,118 +83,118 @@ jobs:
             fi
           fi
 
-# # ---------------- SONARQUBE SCAN JOBS ---------------- #
+# ---------------- SONARQUBE SCAN JOBS ---------------- #
 
-#   sonar-backend:
-#     needs: determine-services
-#     if: needs.determine-services.outputs.build_backend == 'true'
-#     runs-on: self-hosted
-#     steps:
-#       - uses: actions/checkout@v4
-#       - name: Add SonarScanner to PATH
-#         run: echo "/opt/sonar-scanner/bin" >> $GITHUB_PATH
-#       - name: Verify SonarScanner CLI
-#         run: sonar-scanner --version
-#       - name: Run SonarQube Scan (Backend)
-#         run: |
-#           sonar-scanner \
-#             -Dsonar.projectKey=backend-service \
-#             -Dsonar.projectName='Backend Service' \
-#             -Dsonar.sources=app/backend \
-#             -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
-#             -Dsonar.login=${{ secrets.SONAR_TOKEN }}
-#       - name: Check SonarQube Quality Gate
-#         id: sonar-quality-gate-backend
-#         uses: sonarsource/sonarqube-quality-gate-action@v1.1.0
-#         env:
-#           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-#           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+  sonar-backend:
+    needs: determine-services
+    if: needs.determine-services.outputs.build_backend == 'true'
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add SonarScanner to PATH
+        run: echo "/opt/sonar-scanner/bin" >> $GITHUB_PATH
+      - name: Verify SonarScanner CLI
+        run: sonar-scanner --version
+      - name: Run SonarQube Scan (Backend)
+        run: |
+          sonar-scanner \
+            -Dsonar.projectKey=backend-service \
+            -Dsonar.projectName='Backend Service' \
+            -Dsonar.sources=app/backend \
+            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+      - name: Check SonarQube Quality Gate
+        id: sonar-quality-gate-backend
+        uses: sonarsource/sonarqube-quality-gate-action@v1.1.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
-#   sonar-worker:
-#     needs: determine-services
-#     if: needs.determine-services.outputs.build_worker == 'true'
-#     runs-on: self-hosted
-#     steps:
-#       - uses: actions/checkout@v4
-#       - name: Add SonarScanner to PATH
-#         run: echo "/opt/sonar-scanner/bin" >> $GITHUB_PATH
-#       - name: Verify SonarScanner CLI
-#         run: sonar-scanner --version
-#       - name: Run SonarQube Scan (Worker)
-#         run: |
-#           sonar-scanner \
-#             -Dsonar.projectKey=worker-service \
-#             -Dsonar.projectName='Worker Service' \
-#             -Dsonar.sources=app/worker \
-#             -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
-#             -Dsonar.login=${{ secrets.SONAR_TOKEN }}
-#       - name: Check SonarQube Quality Gate
-#         id: sonar-quality-gate-worker
-#         uses: sonarsource/sonarqube-quality-gate-action@v1.1.0
-#         env:
-#           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-#           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+  sonar-worker:
+    needs: determine-services
+    if: needs.determine-services.outputs.build_worker == 'true'
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add SonarScanner to PATH
+        run: echo "/opt/sonar-scanner/bin" >> $GITHUB_PATH
+      - name: Verify SonarScanner CLI
+        run: sonar-scanner --version
+      - name: Run SonarQube Scan (Worker)
+        run: |
+          sonar-scanner \
+            -Dsonar.projectKey=worker-service \
+            -Dsonar.projectName='Worker Service' \
+            -Dsonar.sources=app/worker \
+            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+      - name: Check SonarQube Quality Gate
+        id: sonar-quality-gate-worker
+        uses: sonarsource/sonarqube-quality-gate-action@v1.1.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
           
-#   sonar-frontend:
-#     needs: determine-services
-#     if: needs.determine-services.outputs.build_frontend == 'true'
-#     runs-on: self-hosted
-#     steps:
-#       - uses: actions/checkout@v4
-#       - name: Add SonarScanner to PATH
-#         run: echo "/opt/sonar-scanner/bin" >> $GITHUB_PATH
-#       - name: Verify SonarScanner CLI
-#         run: sonar-scanner --version
-#       - name: Run SonarQube Scan (Frontend - Optimized)
-#         run: |
-#           sonar-scanner \
-#             -Dsonar.projectKey=frontend-service \
-#             -Dsonar.projectName='Frontend Service' \
-#             -Dsonar.sources=app/frontend \
-#             -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
-#             -Dsonar.token=${{ secrets.SONAR_TOKEN }} \
-#             -Dsonar.scm.disabled=true \
-#             -Dsonar.coverage.jacoco.xmlReportPaths=none \
-#             -Dsonar.javascript.node.maxspace=512
-#       - name: Check SonarQube Quality Gate
-#         id: sonar-quality-gate-frontend
-#         uses: sonarsource/sonarqube-quality-gate-action@v1.1.0
-#         env:
-#           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-#           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+  sonar-frontend:
+    needs: determine-services
+    if: needs.determine-services.outputs.build_frontend == 'true'
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add SonarScanner to PATH
+        run: echo "/opt/sonar-scanner/bin" >> $GITHUB_PATH
+      - name: Verify SonarScanner CLI
+        run: sonar-scanner --version
+      - name: Run SonarQube Scan (Frontend - Optimized)
+        run: |
+          sonar-scanner \
+            -Dsonar.projectKey=frontend-service \
+            -Dsonar.projectName='Frontend Service' \
+            -Dsonar.sources=app/frontend \
+            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
+            -Dsonar.token=${{ secrets.SONAR_TOKEN }} \
+            -Dsonar.scm.disabled=true \
+            -Dsonar.coverage.jacoco.xmlReportPaths=none \
+            -Dsonar.javascript.node.maxspace=512
+      - name: Check SonarQube Quality Gate
+        id: sonar-quality-gate-frontend
+        uses: sonarsource/sonarqube-quality-gate-action@v1.1.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
-# # ---------------- CENTRALIZED FS & CONFIG SCAN ---------------- #
+# ---------------- CENTRALIZED FS & CONFIG SCAN ---------------- #
 
-#   scan-sources:
-#     needs: determine-services
-#     runs-on: self-hosted
-#     steps:
-#       - uses: actions/checkout@v4
-#       - name: Install Trivy
-#         run: |
-#           if ! command -v trivy &> /dev/null; then
-#             curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh
-#             sudo mv ./bin/trivy /usr/local/bin/
-#           fi
-#           trivy --version
-#       - name: Trivy FS Scan (All Sources)
-#         run: |
-#           [[ "${{ needs.determine-services.outputs.build_backend }}" == "true" ]] && trivy fs --exit-code 1 --severity HIGH,CRITICAL app/backend || true
-#           [[ "${{ needs.determine-services.outputs.build_worker }}" == "true" ]] && trivy fs --exit-code 1 --severity HIGH,CRITICAL app/worker || true
-#           [[ "${{ needs.determine-services.outputs.build_frontend }}" == "true" ]] && trivy fs --exit-code 1 --severity HIGH,CRITICAL app/frontend || true
-#       - name: Trivy Config Scan (All Dockerfiles)
-#         run: |
-#           [[ "${{ needs.determine-services.outputs.build_backend }}" == "true" ]] && trivy config --exit-code 1 --severity HIGH,CRITICAL docker/backend || true
-#           [[ "${{ needs.determine-services.outputs.build_worker }}" == "true" ]] && trivy config --exit-code 1 --severity HIGH,CRITICAL docker/worker || true
-#           [[ "${{ needs.determine-services.outputs.build_frontend }}" == "true" ]] && trivy config --exit-code 1 --severity HIGH,CRITICAL docker/frontend || true
+  scan-sources:
+    needs: determine-services
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Trivy
+        run: |
+          if ! command -v trivy &> /dev/null; then
+            curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh
+            sudo mv ./bin/trivy /usr/local/bin/
+          fi
+          trivy --version
+      - name: Trivy FS Scan (All Sources)
+        run: |
+          [[ "${{ needs.determine-services.outputs.build_backend }}" == "true" ]] && trivy fs --exit-code 1 --severity HIGH,CRITICAL app/backend || true
+          [[ "${{ needs.determine-services.outputs.build_worker }}" == "true" ]] && trivy fs --exit-code 1 --severity HIGH,CRITICAL app/worker || true
+          [[ "${{ needs.determine-services.outputs.build_frontend }}" == "true" ]] && trivy fs --exit-code 1 --severity HIGH,CRITICAL app/frontend || true
+      - name: Trivy Config Scan (All Dockerfiles)
+        run: |
+          [[ "${{ needs.determine-services.outputs.build_backend }}" == "true" ]] && trivy config --exit-code 1 --severity HIGH,CRITICAL docker/backend || true
+          [[ "${{ needs.determine-services.outputs.build_worker }}" == "true" ]] && trivy config --exit-code 1 --severity HIGH,CRITICAL docker/worker || true
+          [[ "${{ needs.determine-services.outputs.build_frontend }}" == "true" ]] && trivy config --exit-code 1 --severity HIGH,CRITICAL docker/frontend || true
 
 # ---------------- DOCKER BUILD + IMAGE SCAN + PUSH ---------------- #
 
   build-backend:
-    # needs: [scan-sources, sonar-backend]
-    needs: determine-services
-    # if: needs.sonar-backend.result == 'success' && github.ref == 'refs/heads/main'   # OLD
-    if: needs.determine-services.outputs.build_backend == 'true' && github.ref == 'refs/heads/main'  # NEW
+    needs: [scan-sources, sonar-backend]
+    # needs: determine-services
+    if: needs.sonar-backend.result == 'success' && github.ref == 'refs/heads/main'   # OLD
+    # if: needs.determine-services.outputs.build_backend == 'true' && github.ref == 'refs/heads/main'  # NEW
     runs-on: self-hosted
     env:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -209,26 +209,26 @@ jobs:
                        -t "$DOCKERHUB_USERNAME/$IMAGE_REPO:backend-${VERSION}" \
                        -f docker/backend/Dockerfile .
 
-  # scan-backend-image:
-  #   needs: build-backend
-  #   runs-on: self-hosted
-  #   if: needs.build-backend.result == 'success'
-  #   steps:
-  #     - name: Install Trivy
-  #       run: |
-  #         if ! command -v trivy &> /dev/null; then
-  #           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh
-  #           sudo mv ./bin/trivy /usr/local/bin/
-  #         fi
-  #     - name: Trivy Image Scan (Backend)
-  #       run: trivy image --scanners vuln --exit-code 1 --severity HIGH,CRITICAL "${{ secrets.DOCKERHUB_USERNAME }}/multi-cloud-cost-and-service-status-dashboard-repo:backend-latest" || true
-
-  push-backend:
-    # needs: scan-backend-image
+  scan-backend-image:
     needs: build-backend
     runs-on: self-hosted
-    # if: needs.scan-backend-image.result == 'success'   # OLD
-    if: needs.build-backend.result == 'success'          # NEW
+    if: needs.build-backend.result == 'success'
+    steps:
+      - name: Install Trivy
+        run: |
+          if ! command -v trivy &> /dev/null; then
+            curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh
+            sudo mv ./bin/trivy /usr/local/bin/
+          fi
+      - name: Trivy Image Scan (Backend)
+        run: trivy image --scanners vuln --exit-code 1 --severity HIGH,CRITICAL "${{ secrets.DOCKERHUB_USERNAME }}/multi-cloud-cost-and-service-status-dashboard-repo:backend-latest" || true
+
+  push-backend:
+    needs: scan-backend-image
+    # needs: build-backend
+    runs-on: self-hosted
+    if: needs.scan-backend-image.result == 'success'   # OLD
+    # if: needs.build-backend.result == 'success'          # NEW
     steps:
       - uses: docker/login-action@v3
         with:
@@ -242,10 +242,10 @@ jobs:
 # (Repeat same pattern for worker + frontend)
 
   build-worker:
-    # needs: [scan-sources, sonar-worker]
-    needs: determine-services
-    # if: needs.sonar-worker.result == 'success' && github.ref == 'refs/heads/main'   # OLD
-    if: needs.determine-services.outputs.build_worker == 'true' && github.ref == 'refs/heads/main'  # NEW
+    needs: [scan-sources, sonar-worker]
+    # needs: determine-services
+    if: needs.sonar-worker.result == 'success' && github.ref == 'refs/heads/main'   # OLD
+    # if: needs.determine-services.outputs.build_worker == 'true' && github.ref == 'refs/heads/main'  # NEW
     runs-on: self-hosted
     env:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -260,26 +260,26 @@ jobs:
                        -t "$DOCKERHUB_USERNAME/$IMAGE_REPO:worker-${VERSION}" \
                        -f docker/worker/Dockerfile .
 
-  # scan-worker-image:
-  #   needs: build-worker
-  #   runs-on: self-hosted
-  #   if: needs.build-worker.result == 'success'
-  #   steps:
-  #     - name: Install Trivy
-  #       run: |
-  #         if ! command -v trivy &> /dev/null; then
-  #           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh
-  #           sudo mv ./bin/trivy /usr/local/bin/
-  #         fi
-  #     - name: Trivy Image Scan (Worker)
-  #       run: trivy image --scanners vuln --exit-code 1 --severity HIGH,CRITICAL "${{ secrets.DOCKERHUB_USERNAME }}/multi-cloud-cost-and-service-status-dashboard-repo:worker-latest" || true
-
-  push-worker:
-    # needs: scan-worker-image
+  scan-worker-image:
     needs: build-worker
     runs-on: self-hosted
-    # if: needs.scan-worker-image.result == 'success'   # OLD
-    if: needs.build-worker.result == 'success'          # NEW
+    if: needs.build-worker.result == 'success'
+    steps:
+      - name: Install Trivy
+        run: |
+          if ! command -v trivy &> /dev/null; then
+            curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh
+            sudo mv ./bin/trivy /usr/local/bin/
+          fi
+      - name: Trivy Image Scan (Worker)
+        run: trivy image --scanners vuln --exit-code 1 --severity HIGH,CRITICAL "${{ secrets.DOCKERHUB_USERNAME }}/multi-cloud-cost-and-service-status-dashboard-repo:worker-latest" || true
+
+  push-worker:
+    needs: scan-worker-image
+    # needs: build-worker
+    runs-on: self-hosted
+    if: needs.scan-worker-image.result == 'success'   # OLD
+    # if: needs.build-worker.result == 'success'          # NEW
     steps:
       - uses: docker/login-action@v3
         with:
@@ -291,10 +291,10 @@ jobs:
           docker push "${{ secrets.DOCKERHUB_USERNAME }}/multi-cloud-cost-and-service-status-dashboard-repo:worker-v${GITHUB_RUN_NUMBER}"
 
   build-frontend:
-    # needs: [scan-sources, sonar-frontend]
-    needs: determine-services
-    # if: needs.sonar-frontend.result == 'success' && github.ref == 'refs/heads/main'   # OLD
-    if: needs.determine-services.outputs.build_frontend == 'true' && github.ref == 'refs/heads/main'  # NEW
+    needs: [scan-sources, sonar-frontend]
+    # needs: determine-services
+    if: needs.sonar-frontend.result == 'success' && github.ref == 'refs/heads/main'   # OLD
+    # if: needs.determine-services.outputs.build_frontend == 'true' && github.ref == 'refs/heads/main'  # NEW
     runs-on: self-hosted
     env:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -309,26 +309,26 @@ jobs:
                        -t "$DOCKERHUB_USERNAME/$IMAGE_REPO:frontend-${VERSION}" \
                        -f docker/frontend/Dockerfile .
 
-  # scan-frontend-image:
-  #   needs: build-frontend
-  #   runs-on: self-hosted
-  #   if: needs.build-frontend.result == 'success'
-  #   steps:
-  #     - name: Install Trivy
-  #       run: |
-  #         if ! command -v trivy &> /dev/null; then
-  #           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh
-  #           sudo mv ./bin/trivy /usr/local/bin/
-  #         fi
-  #     - name: Trivy Image Scan (Frontend)
-  #       run: trivy image --scanners vuln --exit-code 1 --severity HIGH,CRITICAL "${{ secrets.DOCKERHUB_USERNAME }}/multi-cloud-cost-and-service-status-dashboard-repo:frontend-latest" || true
-
-  push-frontend:
-    # needs: scan-frontend-image
+  scan-frontend-image:
     needs: build-frontend
     runs-on: self-hosted
-    # if: needs.scan-frontend-image.result == 'success'   # OLD
-    if: needs.build-frontend.result == 'success'          # NEW
+    if: needs.build-frontend.result == 'success'
+    steps:
+      - name: Install Trivy
+        run: |
+          if ! command -v trivy &> /dev/null; then
+            curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh
+            sudo mv ./bin/trivy /usr/local/bin/
+          fi
+      - name: Trivy Image Scan (Frontend)
+        run: trivy image --scanners vuln --exit-code 1 --severity HIGH,CRITICAL "${{ secrets.DOCKERHUB_USERNAME }}/multi-cloud-cost-and-service-status-dashboard-repo:frontend-latest" || true
+
+  push-frontend:
+    needs: scan-frontend-image
+    needs: build-frontend
+    runs-on: self-hosted
+    if: needs.scan-frontend-image.result == 'success'   # OLD
+    # if: needs.build-frontend.result == 'success'          # NEW
     steps:
       - uses: docker/login-action@v3
         with:
@@ -375,5 +375,6 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           event-type: trigger-deployment
           client-payload: ${{ steps.payload.outputs.payload }}
+
 
 
