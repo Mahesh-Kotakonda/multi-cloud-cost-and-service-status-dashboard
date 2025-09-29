@@ -1,6 +1,7 @@
 # ⚙️ CI/CD + DevSecOps
 
-This project uses **GitHub Actions workflows** for application and infrastructure automation, along with **DevSecOps tools** for code quality and security scanning.
+This project uses **GitHub Actions workflows** for application and infrastructure automation, along with **DevSecOps tools** for code quality and security scanning.  
+It provides **end-to-end traceability** of application and infrastructure changes, with gates for **security, quality, and compliance**.
 
 ---
 
@@ -21,46 +22,49 @@ The application build workflow ensures that every code change is verified for qu
 ---
 
 #### ✅ Positive Scenario
-1. All **SonarQube scans** (frontend, backend, worker) pass.  
-2. All **Trivy FS & Config scans** succeed.  
-3. **Docker images** are built successfully.  
-4. **Trivy image scans** pass for all images.  
-5. Images are pushed to registry.  
-6. **App Deployment** is triggered automatically.  
+When all checks pass, the pipeline successfully builds, scans, and pushes Docker images.
 
-📸 Screenshot (Positive Scenario):  
-![App Build Positive](./app-build-positive.png)
+📸 **Screenshot: App Build (Positive Case)**  
+This shows the pipeline flow when all SonarQube and Trivy scans pass, followed by a successful Docker build and push.  
+![App Build Positive](app-build-positive.png)
 
 ---
 
 #### ❌ Negative Scenario
-1. **Worker container** fails SonarQube scan → build for worker is skipped.  
-2. **Frontend & backend** pass SonarQube + Trivy FS/Config → they proceed to build.  
-3. During **Trivy image scan**, one of the images fails.  
-4. As a result, the **image push job fails**.  
-5. **App Deployment is not triggered**.  
+If one or more checks fail, the pipeline stops and deployment is blocked.  
 
-📸 Screenshot (Negative Scenario):  
-![App Build Negative](./app-build-negative.png)
+📸 **Screenshot: App Build (Negative Case)**  
+Here, the worker container fails SonarQube scan, and a later Trivy image scan fails for one image. The pipeline blocks publishing images, preventing deployment.  
+![App Build Negative](app-build-negative.png)
 
 ---
 
 ### 2. **App Deploy**
-- Deploys the built containers to **EC2 instances**.  
+This workflow deploys containers onto **EC2 instances** using deployment strategies.  
+
 - **Frontend & Backend** → Blue-Green deployment (zero downtime).  
 - **Worker** → Rolling deployment strategy.  
+
+📸 **Screenshot: App Deploy Workflow**  
+This screenshot shows the App Deploy pipeline in GitHub Actions, where containers are deployed using Blue-Green and Rolling strategies.  
+![App Deploy](app-deploy.png)
 
 ---
 
 ### 3. **App Rollback**
-- Triggered manually if a deployment fails.  
-- Uses **S3 JSON configs** to identify the last stable version.  
+This workflow restores the last stable deployment if a release fails.  
+
+- Reads **JSON configs from S3** to identify the last stable version.  
 - Removes failing containers and restores the previous image/config.  
+
+📸 **Screenshot: App Rollback Workflow**  
+This screenshot shows a rollback workflow execution, restoring services to the last stable state using stored configurations.  
+![App Rollback](app-rollback.png)
 
 ---
 
 ### 4. **Infra Creation**
-This workflow provisions infrastructure securely with **Terraform** and validates its quality before applying.
+This workflow provisions infrastructure securely with **Terraform** and validates it before applying.
 
 **Steps in sequence:**
 1. **SonarQube Scan** → static code analysis of Terraform project  
@@ -71,127 +75,134 @@ This workflow provisions infrastructure securely with **Terraform** and validate
 ---
 
 #### ✅ Positive Scenario
-1. **SonarQube** scan for Terraform passes.  
-2. **Trivy FS & Config scans** succeed.  
-3. Terraform infrastructure resources are created successfully.  
-
-📸 Screenshot (Positive Scenario):  
-![Infra Creation Positive](./infra-positive.png)
+📸 **Screenshot: Infra Creation (Positive Case)**  
+This screenshot shows the Terraform workflow passing SonarQube, FS, and Config scans successfully, then applying infrastructure resources.  
+![Infra Creation Positive](infra-positive.png)
 
 ---
 
 #### ❌ Negative Scenario
-1. **SonarQube scan** for Terraform fails → deployment blocked.  
-2. Or, **Trivy FS/Config scan** finds misconfigurations.  
-3. In either case, Terraform **does not proceed with apply**.  
-
-📸 Screenshot (Negative Scenario):  
-![Infra Creation Negative](./infra-negative.png)
+📸 **Screenshot: Infra Creation (Negative Case)**  
+Here, the Terraform project fails SonarQube analysis, or Trivy finds IaC misconfigurations, which blocks Terraform Apply.  
+![Infra Creation Negative](infra-negative.png)
 
 ---
 
 ### 5. **Infra Destroy**
-- Safely tears down all resources created by Terraform.  
-- No scans are executed in this workflow.  
+This workflow safely tears down all resources created by Terraform.  
+
+📸 **Screenshot: Infra Destroy Workflow**  
+This screenshot shows the pipeline execution for tearing down Terraform-managed infrastructure.  
+![Infra Destroy](infra-destroy.png)
 
 ---
 
 ## 🛡️ DevSecOps Integration
 
 ### 🔹 SonarQube
-- Runs in both **App Build** and **Infra Creation** workflows.  
-- Performs **static code analysis** on:
-  - Application code (Python, ReactJS)  
-  - Terraform IaC files  
-- Detects **bugs, vulnerabilities, code smells, maintainability issues, and IaC misconfigurations**.  
+SonarQube is integrated into both **App Build** and **Infra Creation** workflows:  
+- **Application Code** → Python (backend, worker) + ReactJS (frontend)  
+- **Infrastructure Code** → Terraform  
+
+It detects:  
+- Bugs  
+- Vulnerabilities  
+- Code smells  
+- Maintainability issues  
+- IaC misconfigurations  
+
+---
 
 ### 🔹 Trivy
-- Integrated into both workflows:  
-  - **FS Scans** → filesystem-level vulnerabilities (apps + Terraform)  
-  - **Config Scans** → detect IaC misconfigurations (apps + Terraform)  
-  - **Image Scans** → container CVEs after Docker build  
-- Ensures **end-to-end security** before deployment.  
+Trivy provides multiple security scans:  
+- **FS Scans** → filesystem-level vulnerabilities in application projects and Terraform code  
+- **Config Scans** → detect misconfigurations in application config files and IaC modules  
+- **Image Scans** → scan built Docker images for CVEs before pushing  
+
+These checks ensure **end-to-end application + infrastructure security**.  
 
 ---
 
 ## 📸 Scan Results
 
 ### 🔹 SonarQube Portal Overview
-All four projects are tracked independently:  
-- **Frontend Project**  
-- **Backend Project**  
-- **Worker Project**  
-- **Terraform Project**  
-
-📸 Screenshot:  
-![SonarQube Projects](./sonar-projects_1.png)
-![SonarQube Projects](./sonar-projects_2.png)
+📸 **Screenshot: SonarQube Project List**  
+This view shows all four projects tracked in the SonarQube portal. Each project is scanned independently for quality gates.  
+![SonarQube Projects](sonar-projects_1.png)  
+![SonarQube Projects](sonar-projects_2.png)
 
 ---
 
 ### 🔹 SonarQube Project Dashboards
-Detailed per-project analysis (bugs, vulnerabilities, code smells, new vs overall code):  
+Each project has its own dashboard for deeper insights into code quality.  
 
 - **Frontend Project**  
-  ![SonarQube Frontend](./sonar-frontend.png)  
+  📸 This dashboard shows bugs, vulnerabilities, and code smells in the ReactJS frontend project.  
+  ![SonarQube Frontend](sonar-frontend.png)  
 
 - **Backend Project**  
-  ![SonarQube Backend](./sonar-backend.png)  
+  📸 This dashboard shows quality analysis of the Python backend services.  
+  ![SonarQube Backend](sonar-backend.png)  
 
 - **Worker Project**  
-  ![SonarQube Worker](./sonar-worker.png)  
+  📸 This dashboard shows analysis of the worker service that handles multi-cloud metrics.  
+  ![SonarQube Worker](sonar-worker.png)  
 
 - **Terraform Project**  
-  ![SonarQube Terraform](./sonar-terraform.png)  
+  📸 This dashboard shows analysis of Terraform IaC for infrastructure provisioning.  
+  ![SonarQube Terraform](sonar-terraform.png)  
 
 ---
 
 ### 🔹 Trivy Scan Proofs
 
 #### App Build
-- **FS Scans** (frontend)  
-  ![Trivy FS App](./frontend_trivy-fs-app.png)  
+Each application component undergoes **FS, Config, and Image scans**.  
 
-- **Config Scans** (frontend)  
-  ![Trivy Config App](./frontend_trivy-config-app.png)  
+- **Frontend FS Scan** → Checks ReactJS filesystem for vulnerabilities  
+  ![Trivy FS Frontend](frontend_trivy-fs-app.png)  
 
-- **Docker Image Scans** (frontend)  
-  ![Trivy Image App](./frontend_trivy-image-app.png)
-  
-- **FS Scans** (backend)  
-  ![Trivy FS App](./backend_trivy-fs-app.png)  
+- **Frontend Config Scan** → Validates config files for misconfigurations  
+  ![Trivy Config Frontend](frontend_trivy-config-app.png)  
 
-- **Config Scans** (backend)  
-  ![Trivy Config App](./backend_trivy-config-app.png)  
+- **Frontend Docker Image Scan** → Detects CVEs in the final image  
+  ![Trivy Image Frontend](frontend_trivy-image-app.png)  
 
-- **Docker Image Scans** (backend)  
-  ![Trivy Image App](./backend_trivy-image-app.png)
-  
-- **FS Scans** (worker)  
-  ![Trivy FS App](./worker_trivy-fs-app.png)  
+- **Backend FS Scan**  
+  ![Trivy FS Backend](backend_trivy-fs-app.png)  
 
-- **Config Scans** (worker)  
-  ![Trivy Config App](./worker_trivy-config-app.png)  
+- **Backend Config Scan**  
+  ![Trivy Config Backend](backend_trivy-config-app.png)  
 
-- **Docker Image Scans** (worker)  
-  ![Trivy Image App](./worker_trivy-image-app.png) 
+- **Backend Docker Image Scan**  
+  ![Trivy Image Backend](backend_trivy-image-app.png)  
+
+- **Worker FS Scan**  
+  ![Trivy FS Worker](worker_trivy-fs-app.png)  
+
+- **Worker Config Scan**  
+  ![Trivy Config Worker](worker_trivy-config-app.png)  
+
+- **Worker Docker Image Scan**  
+  ![Trivy Image Worker](worker_trivy-image-app.png)  
+
+---
 
 #### Infra Creation
-- **FS Scan (Terraform)**  
-  ![Trivy FS Terraform](./trivy-fs-terraform.png)  
+Terraform project scans before provisioning resources.  
 
-- **Config Scan (Terraform)**  
-  ![Trivy Config Terraform](./trivy-config-terraform.png)  
+- **FS Scan (Terraform)** → Detects issues in Terraform modules  
+  ![Trivy FS Terraform](trivy-fs-terraform.png)  
+
+- **Config Scan (Terraform)** → Validates IaC security posture  
+  ![Trivy Config Terraform](trivy-config-terraform.png)  
 
 ---
 
 ## ✅ Summary
-This CI/CD + DevSecOps setup ensures:  
-- **Quality & Security Gates** at every stage  
+This CI/CD + DevSecOps pipeline ensures:  
+- **Security and Quality Gates** at every stage  
 - **Zero-downtime deployments** with Blue-Green + Rolling strategies  
 - **Automated rollback** with S3 JSON configs  
-- **Full traceability** with screenshots from SonarQube and Trivy scans  
-
-
-
-
+- **Infrastructure compliance** with SonarQube + Trivy scans  
+- **Full transparency** with screenshots proving pipeline execution and security checks  
