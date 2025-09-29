@@ -1,4 +1,4 @@
-name: Infrastructure Creation
+name: Infrastructure_Creation
 
 on:
   pull_request:
@@ -15,65 +15,73 @@ on:
 
 jobs:
   # ---------------- SONARQUBE SCAN ---------------- #
-  # Uncomment this job in future when SonarQube server is available
-  # sonar-terraform:
-  #   runs-on: self-hosted
-  #   steps:
-  #     - name: Checkout repository
-  #       uses: actions/checkout@v4
-  #
-  #     - name: Add SonarScanner to PATH
-  #       run: echo "/opt/sonar-scanner/bin" >> $GITHUB_PATH
-  #
-  #     - name: Verify SonarScanner CLI
-  #       run: sonar-scanner --version
-  #
-  #     - name: Run SonarQube Scan (Terraform)
-  #       run: |
-  #         sonar-scanner \
-  #           -Dsonar.projectKey=terraform-infra \
-  #           -Dsonar.projectName='Terraform Infrastructure' \
-  #           -Dsonar.sources=infra/terraform \
-  #           -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
-  #           -Dsonar.login=${{ secrets.SONAR_TOKEN }}
-  #
-  #     - name: Check SonarQube Quality Gate
-  #       id: sonar-quality-gate
-  #       uses: sonarsource/sonarqube-quality-gate-action@v1.1.0
-  #       env:
-  #         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-  #         SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+  SonarQube_Terraform_Scan:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
+      - name: Add SonarScanner to PATH
+        run: echo "/opt/sonar-scanner/bin" >> $GITHUB_PATH
 
-  # ---------------- TRIVY SCAN ---------------- #
-  # Uncomment this job in future when you want Trivy scan
-  # trivy-scan:
-  #   runs-on: self-hosted
-  #   needs: sonar-terraform
-  #   steps:
-  #     - name: Checkout repository
-  #       uses: actions/checkout@v4
-  #
-  #     - name: Install Trivy
-  #       run: |
-  #         if ! command -v trivy &> /dev/null; then
-  #           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh
-  #           sudo mv ./bin/trivy /usr/local/bin/
-  #         fi
-  #         trivy --version
-  #
-  #     - name: Trivy FS Scan (Terraform Source)
-  #       run: trivy fs --exit-code 1 --severity HIGH,CRITICAL infra/terraform
-  #
-  #     - name: Trivy Config Scan (Terraform Config)
-  #       run: trivy config --exit-code 1 --severity HIGH,CRITICAL infra/terraform
+      - name: Verify SonarScanner CLI
+        run: sonar-scanner --version
 
+      - name: Run SonarQube Scan (Terraform)
+        run: |
+          sonar-scanner \
+            -Dsonar.projectKey=terraform-infra \
+            -Dsonar.projectName='Terraform Infrastructure' \
+            -Dsonar.sources=infra/terraform \
+            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+
+      - name: Check SonarQube Quality Gate
+        id: sonar_quality_gate
+        uses: sonarsource/sonarqube-quality-gate-action@v1.1.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+  # ---------------- TRIVY SCANS ---------------- #
+  Trivy_File_System_Scan:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Trivy
+        run: |
+          if ! command -v trivy &> /dev/null; then
+            curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh
+            sudo mv ./bin/trivy /usr/local/bin/
+          fi
+          trivy --version
+
+      - name: Trivy FS Scan (Terraform Source)
+        run: trivy fs --exit-code 1 --severity HIGH,CRITICAL infra/terraform
+
+  Trivy_Configuration_Scan:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Trivy
+        run: |
+          if ! command -v trivy &> /dev/null; then
+            curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh
+            sudo mv ./bin/trivy /usr/local/bin/
+          fi
+          trivy --version
+
+      - name: Trivy Config Scan (Terraform Config)
+        run: trivy config --exit-code 1 --severity HIGH,CRITICAL infra/terraform
 
   # ---------------- TERRAFORM JOB ---------------- #
-  terraform:
+  Terraform_Deploy:
     runs-on: self-hosted
-    # When security jobs are enabled again, you can add: needs: [trivy-scan]
-    needs: []
+    needs: [SonarQube_Terraform_Scan, Trivy_File_System_Scan, Trivy_Configuration_Scan]
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -114,4 +122,3 @@ jobs:
         if: (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && github.actor == 'Mahesh-Kotakonda'
         working-directory: infra/terraform
         run: terraform apply -auto-approve tfplan
-
