@@ -170,6 +170,7 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
+  
       - name: Install Trivy
         run: |
           if ! command -v trivy &> /dev/null; then
@@ -177,16 +178,39 @@ jobs:
             sudo mv ./bin/trivy /usr/local/bin/
           fi
           trivy --version
-      - name: Trivy FS Scan (All Sources)
-        run: |
-          [[ "${{ needs.determine-services.outputs.build_backend }}" == "true" ]] && trivy fs --exit-code 1 --severity HIGH,CRITICAL app/backend || true
-          [[ "${{ needs.determine-services.outputs.build_worker }}" == "true" ]] && trivy fs --exit-code 1 --severity HIGH,CRITICAL app/worker || true
-          [[ "${{ needs.determine-services.outputs.build_frontend }}" == "true" ]] && trivy fs --exit-code 1 --severity HIGH,CRITICAL app/frontend || true
-      - name: Trivy Config Scan (All Dockerfiles)
-        run: |
-          [[ "${{ needs.determine-services.outputs.build_backend }}" == "true" ]] && trivy config --exit-code 1 --severity HIGH,CRITICAL docker/backend || true
-          [[ "${{ needs.determine-services.outputs.build_worker }}" == "true" ]] && trivy config --exit-code 1 --severity HIGH,CRITICAL docker/worker || true
-          [[ "${{ needs.determine-services.outputs.build_frontend }}" == "true" ]] && trivy config --exit-code 1 --severity HIGH,CRITICAL docker/frontend || true
+  
+      # ======================
+      # Backend Scans
+      # ======================
+      - name: Trivy FS Scan - Backend Source Code
+        if: needs.determine-services.outputs.build_backend == 'true'
+        run: trivy fs --exit-code 1 --severity HIGH,CRITICAL app/backend
+  
+      - name: Trivy Config Scan - Backend Dockerfile
+        if: needs.determine-services.outputs.build_backend == 'true'
+        run: trivy config --exit-code 1 --severity HIGH,CRITICAL docker/backend
+  
+      # ======================
+      # Worker Scans
+      # ======================
+      - name: Trivy FS Scan - Worker Source Code
+        if: needs.determine-services.outputs.build_worker == 'true'
+        run: trivy fs --exit-code 1 --severity HIGH,CRITICAL app/worker
+  
+      - name: Trivy Config Scan - Worker Dockerfile
+        if: needs.determine-services.outputs.build_worker == 'true'
+        run: trivy config --exit-code 1 --severity HIGH,CRITICAL docker/worker
+  
+      # ======================
+      # Frontend Scans
+      # ======================
+      - name: Trivy FS Scan - Frontend Source Code
+        if: needs.determine-services.outputs.build_frontend == 'true'
+        run: trivy fs --exit-code 1 --severity HIGH,CRITICAL app/frontend
+  
+      - name: Trivy Config Scan - Frontend Dockerfile
+        if: needs.determine-services.outputs.build_frontend == 'true'
+        run: trivy config --exit-code 1 --severity HIGH,CRITICAL docker/frontend
 
 # ---------------- DOCKER BUILD + IMAGE SCAN + PUSH ---------------- #
 
@@ -375,6 +399,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           event-type: trigger-deployment
           client-payload: ${{ steps.payload.outputs.payload }}
+
 
 
 
